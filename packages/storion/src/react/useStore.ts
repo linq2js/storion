@@ -121,7 +121,7 @@ export function useStore<T extends object>(
     // Note: subscription only fires when value actually changes (store handles equality)
     for (const [key, dep] of currentKeys) {
       if (!prevSubscriptions.has(key)) {
-        const instance = container.getById(dep.storeId);
+        const instance = container.get(dep.storeId);
         if (instance) {
           const unsub = instance.subscribe(dep.propKey as any, forceUpdate);
           prevSubscriptions.set(key, unsub);

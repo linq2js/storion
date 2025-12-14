@@ -146,7 +146,7 @@ describe("hooks", () => {
       });
 
       // Can use storeId to get instance from container
-      expect(stores.getById(instance.id)).toBe(instance);
+      expect(stores.get(instance.id)).toBe(instance);
     });
   });
 
@@ -206,7 +206,7 @@ describe("hooks", () => {
       });
 
       // Can use storeId to get instance from container
-      expect(stores.getById(instance.id)).toBe(instance);
+      expect(stores.get(instance.id)).toBe(instance);
     });
 
     it("should be called even when value does not change", () => {

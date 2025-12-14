@@ -10,6 +10,7 @@ import type {
   StoreSpec,
   StoreOptions,
   StoreInstance,
+  StoreResolver,
   SetupContext,
   PropertyConfig,
   DispatchEvent,
@@ -136,22 +137,16 @@ export function store<TState extends StateBase, TActions extends ActionsBase>(
 ): StoreSpec<TState, TActions> {
   return {
     name: options.name,
-    __storion__: true,
-    _options: options,
-  } as StoreSpec<TState, TActions>;
+    options,
+  };
 }
 
 // =============================================================================
 // Store Instance Factory
 // =============================================================================
 
-/**
- * Resolver function to get other store instances.
- * Provided by container to create instances.
- */
-export type StoreResolver = <S extends StateBase, A extends ActionsBase>(
-  spec: StoreSpec<S, A>
-) => StoreInstance<S, A>;
+/** Re-export StoreResolver from types */
+export type { StoreResolver };
 
 /** Property change event payload */
 interface PropertyChangeEvent {
@@ -180,7 +175,7 @@ export function createStoreInstance<
   resolver: StoreResolver,
   instanceOptions: CreateStoreInstanceOptions = {}
 ): StoreInstance<TState, TActions> {
-  const options = spec._options;
+  const options = spec.options;
   const storeId = generateStoreId(options.name);
 
   // State
@@ -224,6 +219,7 @@ export function createStoreInstance<
   // ==========================================================================
 
   const changeEmitter = emitter<void>();
+  const disposeEmitter = emitter<void>();
   const propertyEmitters = new Map<
     keyof TState,
     Emitter<PropertyChangeEvent>
@@ -310,6 +306,7 @@ export function createStoreInstance<
   const mutableState = createMutableStateProxy(
     rawState,
     storeId,
+    resolver,
     getEquality,
     handlePropertyChange
   );
@@ -318,6 +315,7 @@ export function createStoreInstance<
   const readonlyState = createReadonlyStateProxy(
     rawState,
     storeId,
+    resolver,
     getEquality
   );
 
@@ -368,9 +366,18 @@ export function createStoreInstance<
     get<S extends StateBase, A extends ActionsBase>(
       depSpec: StoreSpec<S, A>
     ): readonly [Readonly<S>, A] {
+      // Prevent dynamic store creation outside setup phase
+      if (!isSetupPhase) {
+        throw new Error(
+          `get() can only be called during setup phase. ` +
+            `Do not call get() inside actions or async callbacks. ` +
+            `Declare all dependencies at the top of your setup function.`
+        );
+      }
+
       // Check lifetime compatibility:
       // A keepAlive store cannot depend on an autoDispose store
-      const depLifetime = depSpec._options.lifetime ?? "keepAlive";
+      const depLifetime = depSpec.options.lifetime ?? "keepAlive";
 
       if (currentLifetime === "keepAlive" && depLifetime === "autoDispose") {
         const currentName = options.name ?? "unknown";
@@ -384,7 +391,7 @@ export function createStoreInstance<
       }
 
       // Get full instance from resolver
-      const instance = resolver(depSpec);
+      const instance = resolver.get(depSpec);
       // Return tuple [readonlyState, actions]
       return [instance.state, instance.actions] as const;
     },
@@ -488,6 +495,7 @@ export function createStoreInstance<
       return readonlyState as Readonly<TState>;
     },
 
+    onDispose: disposeEmitter.on,
     actions: wrappedActions,
 
     subscribe(
@@ -542,6 +550,9 @@ export function createStoreInstance<
 
       // Clear property effects
       propertyEffects.clear();
+
+      // Notify disposal listeners
+      disposeEmitter.emit();
     },
 
     get disposed() {

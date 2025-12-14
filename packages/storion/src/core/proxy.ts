@@ -2,6 +2,7 @@
  * Proxy utilities for state access and dependency tracking.
  */
 
+import type { StoreResolver } from "../types";
 import { trackRead, trackWrite } from "./tracking";
 
 // =============================================================================
@@ -11,6 +12,9 @@ import { trackRead, trackWrite } from "./tracking";
 export interface StateProxyOptions {
   /** Unique store ID for tracking */
   storeId: string;
+
+  /** Store resolver for hooks */
+  resolver: StoreResolver;
 
   /** Whether the proxy allows writes */
   mutable: boolean;
@@ -29,6 +33,9 @@ export interface StateProxyOptions {
 export interface TrackingProxyOptions {
   /** Unique store ID for tracking */
   storeId: string;
+
+  /** Store resolver for hooks */
+  resolver: StoreResolver;
 
   /** Callback when a property is accessed */
   onAccess?: (storeId: string, propKey: string, value: unknown) => void;
@@ -49,7 +56,7 @@ export function createStateProxy<T extends Record<string, unknown>>(
   rawState: T,
   options: StateProxyOptions
 ): T {
-  const { storeId, mutable, getEquality, onPropertyChange } = options;
+  const { storeId, resolver, mutable, getEquality, onPropertyChange } = options;
 
   const proxy = new Proxy(rawState, {
     get(target, prop) {
@@ -58,7 +65,7 @@ export function createStateProxy<T extends Record<string, unknown>>(
       const value = target[prop as keyof T];
 
       // Track read for reactive effects
-      trackRead(storeId, prop, value);
+      trackRead(storeId, prop, value, resolver);
 
       return value;
     },
@@ -106,7 +113,7 @@ export function createStateProxy<T extends Record<string, unknown>>(
       const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
       if (descriptor) {
         const value = target[prop as keyof T];
-        trackRead(storeId, prop, value);
+        trackRead(storeId, prop, value, resolver);
       }
       return descriptor;
     },
@@ -122,10 +129,12 @@ export function createStateProxy<T extends Record<string, unknown>>(
 export function createReadonlyStateProxy<T extends Record<string, unknown>>(
   rawState: T,
   storeId: string,
+  resolver: StoreResolver,
   getEquality: (key: string) => (a: unknown, b: unknown) => boolean
 ): Readonly<T> {
   return createStateProxy(rawState, {
     storeId,
+    resolver,
     mutable: false,
     getEquality,
   }) as Readonly<T>;
@@ -138,11 +147,13 @@ export function createReadonlyStateProxy<T extends Record<string, unknown>>(
 export function createMutableStateProxy<T extends Record<string, unknown>>(
   rawState: T,
   storeId: string,
+  resolver: StoreResolver,
   getEquality: (key: string) => (a: unknown, b: unknown) => boolean,
   onPropertyChange: (key: string, oldValue: unknown, newValue: unknown) => void
 ): T {
   return createStateProxy(rawState, {
     storeId,
+    resolver,
     mutable: true,
     getEquality,
     onPropertyChange,
@@ -156,7 +167,7 @@ export function createMutableStateProxy<T extends Record<string, unknown>>(
 /**
  * Creates a tracking proxy for React's useStore hook.
  *
- * This proxy intercepts property reads and calls onAccess callback.
+ * This proxy intercepts property reads and calls trackRead.
  * Respects `untrack()` when combined with hooks.
  *
  * @param state - The readonly state object
@@ -167,7 +178,7 @@ export function createTrackingProxy<T extends Record<string, unknown>>(
   state: Readonly<T>,
   options: TrackingProxyOptions
 ): Readonly<T> {
-  const { storeId, onAccess } = options;
+  const { storeId, resolver, onAccess } = options;
 
   return new Proxy(state as T, {
     get(target, prop) {
@@ -175,7 +186,10 @@ export function createTrackingProxy<T extends Record<string, unknown>>(
 
       const value = target[prop as keyof T];
 
-      // Record this access for subscription
+      // Track read via hooks
+      trackRead(storeId, prop, value, resolver);
+
+      // Also call legacy onAccess callback
       onAccess?.(storeId, prop, value);
 
       return value;
@@ -195,6 +209,7 @@ export function createTrackingProxy<T extends Record<string, unknown>>(
       const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
       if (descriptor) {
         const value = target[prop as keyof T];
+        trackRead(storeId, prop, value, resolver);
         onAccess?.(storeId, prop, value);
       }
       return descriptor;

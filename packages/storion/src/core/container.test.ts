@@ -11,7 +11,6 @@ describe("container()", () => {
     const stores = container();
 
     expect(stores).toHaveProperty("get");
-    expect(stores).toHaveProperty("getById");
     expect(stores).toHaveProperty("has");
     expect(stores).toHaveProperty("clear");
     expect(stores).toHaveProperty("dispose");
@@ -62,7 +61,7 @@ describe("container.get()", () => {
   });
 });
 
-describe("container.getById()", () => {
+describe("container.get(id)", () => {
   it("should return instance by id", () => {
     const counter = store({
       state: { count: 0 },
@@ -72,7 +71,7 @@ describe("container.getById()", () => {
     const stores = container();
     const instance = stores.get(counter);
 
-    const foundInstance = stores.getById(instance.id);
+    const foundInstance = stores.get(instance.id);
 
     expect(foundInstance).toBe(instance);
   });
@@ -80,7 +79,7 @@ describe("container.getById()", () => {
   it("should return undefined for unknown id", () => {
     const stores = container();
 
-    const foundInstance = stores.getById("unknown-id");
+    const foundInstance = stores.get("unknown-id");
 
     expect(foundInstance).toBeUndefined();
   });
@@ -127,7 +126,7 @@ describe("container.dispose()", () => {
 
     expect(result).toBe(true);
     expect(stores.has(counter)).toBe(false);
-    expect(stores.getById(instance.id)).toBeUndefined();
+    expect(stores.get(instance.id)).toBeUndefined();
   });
 
   it("should return false if store does not exist", () => {
@@ -167,8 +166,8 @@ describe("container.clear()", () => {
 
     expect(stores.has(counter1)).toBe(false);
     expect(stores.has(counter2)).toBe(false);
-    expect(stores.getById(instance1.id)).toBeUndefined();
-    expect(stores.getById(instance2.id)).toBeUndefined();
+    expect(stores.get(instance1.id)).toBeUndefined();
+    expect(stores.get(instance2.id)).toBeUndefined();
   });
 
   it("should dispose in reverse creation order", () => {
@@ -575,5 +574,164 @@ describe("autoDispose lifetime", () => {
     expect(disposeListener).toHaveBeenCalledWith(instance);
 
     vi.useRealTimers();
+  });
+});
+
+describe("container middleware", () => {
+  it("should call middleware during store creation", () => {
+    const middlewareFn = vi.fn((spec, next) => next(spec));
+
+    const counter = store({
+      name: "counter",
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container({ middleware: [middlewareFn] });
+    stores.get(counter);
+
+    expect(middlewareFn).toHaveBeenCalledTimes(1);
+    expect(middlewareFn).toHaveBeenCalledWith(counter, expect.any(Function));
+  });
+
+  it("should not call middleware for cached instances", () => {
+    const middlewareFn = vi.fn((spec, next) => next(spec));
+
+    const counter = store({
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container({ middleware: [middlewareFn] });
+    stores.get(counter);
+    stores.get(counter);
+    stores.get(counter);
+
+    expect(middlewareFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("should execute middleware in order", () => {
+    const order: string[] = [];
+
+    const middleware1 = vi.fn((spec, next) => {
+      order.push("m1:before");
+      const instance = next(spec);
+      order.push("m1:after");
+      return instance;
+    });
+
+    const middleware2 = vi.fn((spec, next) => {
+      order.push("m2:before");
+      const instance = next(spec);
+      order.push("m2:after");
+      return instance;
+    });
+
+    const counter = store({
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container({ middleware: [middleware1, middleware2] });
+    stores.get(counter);
+
+    expect(order).toEqual(["m1:before", "m2:before", "m2:after", "m1:after"]);
+  });
+
+  it("should allow middleware to modify instance", () => {
+    const middleware = vi.fn((spec, next) => {
+      const instance = next(spec);
+      // Add custom property for testing
+      (instance as any).customProp = "added-by-middleware";
+      return instance;
+    });
+
+    const counter = store({
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container({ middleware: [middleware] });
+    const instance = stores.get(counter);
+
+    expect((instance as any).customProp).toBe("added-by-middleware");
+  });
+
+  it("should allow logging middleware pattern", () => {
+    const logs: string[] = [];
+
+    const loggingMiddleware = vi.fn((spec, next) => {
+      logs.push(`Creating: ${spec.name}`);
+      const instance = next(spec);
+      logs.push(`Created: ${instance.id}`);
+      return instance;
+    });
+
+    const counter = store({
+      name: "myCounter",
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container({ middleware: [loggingMiddleware] });
+    stores.get(counter);
+
+    expect(logs[0]).toBe("Creating: myCounter");
+    expect(logs[1]).toMatch(/^Created: /);
+  });
+
+  it("should allow middleware to intercept and return early", () => {
+    const mockInstance = {
+      id: "mock-id",
+      state: { count: 999 },
+      actions: {},
+      subscribe: vi.fn(),
+      dispose: vi.fn(),
+      disposed: false,
+    };
+
+    const interceptMiddleware = vi.fn((_spec, _next) => {
+      // Return mock instead of calling next
+      return mockInstance as any;
+    });
+
+    const counter = store({
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container({ middleware: [interceptMiddleware] });
+    const instance = stores.get(counter);
+
+    expect(instance.state.count).toBe(999);
+    expect(instance.id).toBe("mock-id");
+  });
+
+  it("should work with multiple stores", () => {
+    const createdStores: string[] = [];
+
+    const trackingMiddleware = vi.fn((spec, next) => {
+      createdStores.push(spec.name ?? "unnamed");
+      return next(spec);
+    });
+
+    const storeA = store({
+      name: "storeA",
+      state: { value: "a" },
+      setup: () => ({}),
+    });
+
+    const storeB = store({
+      name: "storeB",
+      state: { value: "b" },
+      setup: () => ({}),
+    });
+
+    const stores = container({ middleware: [trackingMiddleware] });
+    stores.get(storeA);
+    stores.get(storeB);
+
+    expect(createdStores).toEqual(["storeA", "storeB"]);
+    expect(trackingMiddleware).toHaveBeenCalledTimes(2);
   });
 });

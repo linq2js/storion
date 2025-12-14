@@ -19,9 +19,9 @@ describe("store()", () => {
       }),
     });
 
-    expect(counter).toHaveProperty("__storion__", true);
     expect(counter).toHaveProperty("name", "counter");
-    expect(counter).toHaveProperty("_options");
+    expect(counter).toHaveProperty("options");
+    expect(counter.options.state).toEqual({ count: 0 });
   });
 
   it("should create a store without name", () => {
@@ -30,8 +30,8 @@ describe("store()", () => {
       setup: () => ({}),
     });
 
-    expect(counter.__storion__).toBe(true);
     expect(counter.name).toBeUndefined();
+    expect(counter.options).toBeDefined();
   });
 });
 
@@ -337,7 +337,7 @@ describe("dependencies via get()", () => {
       },
     });
 
-    (storeA._options as any).setup = ({ get }: any) => {
+    (storeA.options as any).setup = ({ get }: any) => {
       get(storeB);
       return {};
     };
@@ -416,6 +416,35 @@ describe("dependencies via get()", () => {
 
     // Should not throw
     expect(() => stores.get(storeB)).not.toThrow();
+  });
+
+  it("should throw when get() is called outside setup phase (in action)", () => {
+    const dependency = store({
+      name: "dependency",
+      state: { value: 0 },
+      setup: () => ({}),
+    });
+
+    let capturedGet: any;
+
+    const main = store({
+      name: "main",
+      state: { value: 0 },
+      setup: ({ get }) => {
+        capturedGet = get; // Capture the get function
+        return {
+          tryGetLater: () => {
+            // This should throw - calling get() in action
+            capturedGet(dependency);
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(main);
+
+    expect(() => instance.actions.tryGetLater()).toThrow(/setup phase/i);
   });
 
   it("should allow keepAlive store to depend on keepAlive store", () => {

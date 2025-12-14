@@ -5,6 +5,8 @@
  * selector tracking are implemented by consumers via withHooks().
  */
 
+import type { StoreResolver } from "../types";
+
 // =============================================================================
 // Hooks
 // =============================================================================
@@ -13,19 +15,21 @@
  * Hook event for property read.
  */
 export interface ReadEvent {
-  /** Store ID (use container.getById() to get full instance) */
+  /** Store ID (use container.get(id) to get full instance) */
   storeId: string;
   /** Property name */
   prop: string;
   /** Value read */
   value: unknown;
+  /** Store resolver - use to get instance and subscribe */
+  resolver: StoreResolver;
 }
 
 /**
  * Hook event for property write.
  */
 export interface WriteEvent {
-  /** Store ID (use container.getById() to get full instance) */
+  /** Store ID (use container.get(id) to get full instance) */
   storeId: string;
   /** Property name */
   prop: string;
@@ -47,11 +51,21 @@ export interface Hooks {
   onWrite?: (event: WriteEvent) => void;
 
   scheduleNotification: (notify: () => void, key?: unknown) => void;
+
+  /**
+   * Schedule a function to run an effect.
+   * @param runEffect - Function to run effect and return dispose effect function
+   */
+  scheduleEffect(runEffect: () => VoidFunction): void;
 }
 
 let globalHooks: Hooks = {
   scheduleNotification(notify) {
     notify();
+  },
+  scheduleEffect(runEffect) {
+    // in global scope, so we run effect immediately and no need dispose
+    runEffect();
   },
 };
 
@@ -135,8 +149,13 @@ export function withHooks<T>(
  * Track a property read.
  * Called by state proxies when a property is accessed.
  */
-export function trackRead(storeId: string, prop: string, value: unknown): void {
-  globalHooks.onRead?.({ storeId, prop, value });
+export function trackRead(
+  storeId: string,
+  prop: string,
+  value: unknown,
+  resolver: StoreResolver
+): void {
+  globalHooks.onRead?.({ storeId, prop, value, resolver });
 }
 
 /**

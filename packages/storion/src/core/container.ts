@@ -10,20 +10,20 @@ import type {
   StoreSpec,
   StoreInstance,
   StoreContainer,
+  StoreResolver,
   ContainerOptions,
+  StoreMiddleware,
 } from "../types";
 
-import {
-  createStoreInstance,
-  StoreResolver,
-  CreateStoreInstanceOptions,
-} from "./store";
+import { createStoreInstance, CreateStoreInstanceOptions } from "./store";
 import { emitter } from "../emitter";
 
 /**
  * Create a store container.
  */
-export function container(_options: ContainerOptions = {}): StoreContainer {
+export function container(options: ContainerOptions = {}): StoreContainer {
+  const { middleware = [] } = options;
+
   // Instance cache: spec → instance
   const instancesBySpec = new Map<
     StoreSpec<any, any>,
@@ -48,14 +48,73 @@ export function container(_options: ContainerOptions = {}): StoreContainer {
   // ==========================================================================
 
   /**
-   * Resolver function passed to store instances.
+   * Resolver object passed to store instances.
    * Allows stores to get other stores via get().
    */
-  const resolver: StoreResolver = <S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>
-  ): StoreInstance<S, A> => {
-    return containerApi.get(spec);
+  const resolver: StoreResolver = {
+    get<S extends StateBase, A extends ActionsBase>(
+      specOrId: StoreSpec<S, A> | string
+    ): any {
+      if (typeof specOrId === "string") {
+        return instancesById.get(specOrId);
+      }
+      return containerApi.get(specOrId);
+    },
+    has(spec) {
+      return instancesBySpec.has(spec);
+    },
   };
+
+  // ==========================================================================
+  // Create Instance (core logic)
+  // ==========================================================================
+
+  function createInstance<S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>
+  ): StoreInstance<S, A> {
+    // Prepare instance options for autoDispose
+    const instanceOptions: CreateStoreInstanceOptions = {};
+
+    if (spec.options.lifetime === "autoDispose") {
+      // When refCount drops to 0, auto-dispose this store
+      instanceOptions.onZeroRefs = () => {
+        containerApi.dispose(spec);
+      };
+    }
+
+    // Create instance
+    return createStoreInstance(spec, resolver, instanceOptions);
+  }
+
+  // ==========================================================================
+  // Middleware Chain
+  // ==========================================================================
+
+  /**
+   * Build middleware chain: each middleware wraps the next.
+   * Final function in chain is the actual createInstance.
+   */
+  function buildMiddlewareChain(): <S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>
+  ) => StoreInstance<S, A> {
+    // Start with the core create function
+    let chain: StoreMiddleware = (_spec, next) => next(_spec);
+
+    // Wrap in reverse order so first middleware runs first
+    for (let i = middleware.length - 1; i >= 0; i--) {
+      const currentMiddleware = middleware[i];
+      const nextInChain = chain;
+      chain = (spec, next) =>
+        currentMiddleware(spec, (s) => nextInChain(s, next));
+    }
+
+    // Return function that starts the chain
+    return <S extends StateBase, A extends ActionsBase>(
+      spec: StoreSpec<S, A>
+    ) => chain(spec, createInstance as any) as StoreInstance<S, A>;
+  }
+
+  const createWithMiddleware = buildMiddlewareChain();
 
   // ==========================================================================
   // Get Instance
@@ -82,23 +141,23 @@ export function container(_options: ContainerOptions = {}): StoreContainer {
     creating.add(spec);
 
     try {
-      // Prepare instance options for autoDispose
-      const instanceOptions: CreateStoreInstanceOptions = {};
-
-      if (spec._options.lifetime === "autoDispose") {
-        // When refCount drops to 0, auto-dispose this store
-        instanceOptions.onZeroRefs = () => {
-          containerApi.dispose(spec);
-        };
-      }
-
-      // Create instance
-      instance = createStoreInstance(spec, resolver, instanceOptions);
+      // Create instance through middleware chain
+      instance = createWithMiddleware(spec);
 
       // Cache instance
       instancesBySpec.set(spec, instance);
       instancesById.set(instance.id, instance);
       creationOrder.push(spec);
+
+      // Clean up container when instance is disposed directly
+      instance.onDispose?.(() => {
+        instancesBySpec.delete(spec);
+        instancesById.delete(instance!.id);
+        const index = creationOrder.indexOf(spec);
+        if (index !== -1) {
+          creationOrder.splice(index, 1);
+        }
+      });
 
       // Notify listeners via emitter
       createEmitter.emit(instance);
@@ -116,13 +175,12 @@ export function container(_options: ContainerOptions = {}): StoreContainer {
 
   const containerApi: StoreContainer = {
     get<S extends StateBase, A extends ActionsBase>(
-      spec: StoreSpec<S, A>
-    ): StoreInstance<S, A> {
-      return getOrCreateInstance(spec);
-    },
-
-    getById(id: string) {
-      return instancesById.get(id);
+      specOrId: StoreSpec<S, A> | string
+    ): any {
+      if (typeof specOrId === "string") {
+        return instancesById.get(specOrId);
+      }
+      return getOrCreateInstance(specOrId);
     },
 
     has(spec) {

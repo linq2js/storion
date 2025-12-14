@@ -83,17 +83,8 @@ export interface StoreSpec<
   /** Store name for debugging */
   readonly name?: string;
 
-  /** @internal Marker to identify store specs */
-  readonly __storion__: true;
-
-  /** @internal Options for creating instances */
-  readonly _options: StoreOptions<TState, TActions>;
-
-  /** @internal Phantom type for state */
-  readonly _state?: TState;
-
-  /** @internal Phantom type for actions */
-  readonly _actions?: TActions;
+  /** Store options (state, setup, lifetime, etc.) */
+  readonly options: StoreOptions<TState, TActions>;
 }
 
 // =============================================================================
@@ -231,6 +222,11 @@ export interface StoreInstance<
     listener: (event: { next: TState[K]; prev: TState[K] }) => void
   ): VoidFunction;
 
+  /**
+   * Subscribe to store disposal events.
+   */
+  onDispose(listener: () => void): VoidFunction;
+
   /** Dispose the instance and clean up resources */
   dispose(): void;
 
@@ -243,6 +239,36 @@ export interface StoreInstance<
 // =============================================================================
 
 /**
+ * Middleware function for intercepting store creation.
+ *
+ * Middleware can:
+ * - Modify the spec before creation
+ * - Call next() to get the instance
+ * - Wrap or modify the instance after creation
+ *
+ * @example
+ * // Logging middleware
+ * const loggingMiddleware: StoreMiddleware = (spec, next) => {
+ *   console.log(`Creating store: ${spec.name}`);
+ *   const instance = next(spec);
+ *   console.log(`Created store: ${instance.id}`);
+ *   return instance;
+ * };
+ *
+ * @example
+ * // Wrap actions with error boundary
+ * const errorBoundaryMiddleware: StoreMiddleware = (spec, next) => {
+ *   const instance = next(spec);
+ *   // Wrap actions here if needed
+ *   return instance;
+ * };
+ */
+export type StoreMiddleware = <S extends StateBase, A extends ActionsBase>(
+  spec: StoreSpec<S, A>,
+  next: (spec: StoreSpec<S, A>) => StoreInstance<S, A>
+) => StoreInstance<S, A>;
+
+/**
  * Container options.
  */
 export interface ContainerOptions {
@@ -251,6 +277,33 @@ export interface ContainerOptions {
 
   /** Default equality for stores */
   defaultEquality?: Equality;
+
+  /** Middleware chain for intercepting store creation */
+  middleware?: StoreMiddleware[];
+}
+
+/**
+ * Resolver interface to get store instances.
+ * StoreContainer implements this interface.
+ */
+export interface StoreResolver {
+  /**
+   * Get a store instance by spec.
+   * First call creates instance, subsequent calls return cached.
+   */
+  get<S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>
+  ): StoreInstance<S, A>;
+
+  /**
+   * Get a store instance by its unique ID.
+   */
+  get(id: string): StoreInstance<any, any> | undefined;
+
+  /**
+   * Check if a store instance exists.
+   */
+  has(spec: StoreSpec<any, any>): boolean;
 }
 
 /**
@@ -262,31 +315,7 @@ export interface ContainerOptions {
  * - Resolving dependencies between stores
  * - Managing lifetime and disposal
  */
-export interface StoreContainer {
-  /**
-   * Get a store instance.
-   * First call creates instance, subsequent calls return cached.
-   *
-   * @param spec - Store specification
-   * @returns Full store instance with id, state, actions, subscribe, dispose
-   */
-  get<S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>
-  ): StoreInstance<S, A>;
-
-  /**
-   * Get a store instance by its unique ID.
-   *
-   * @param id - Store instance ID
-   * @returns Store instance or undefined if not found
-   */
-  getById(id: string): StoreInstance<any, any> | undefined;
-
-  /**
-   * Check if a store instance exists.
-   */
-  has(spec: StoreSpec<any, any>): boolean;
-
+export interface StoreContainer extends StoreResolver {
   /**
    * Dispose all cached instances.
    */
