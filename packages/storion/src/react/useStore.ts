@@ -56,8 +56,8 @@ export function useStore<T extends object>(
   refs.trackedDeps.clear();
 
   // Create selector context (no tracking proxy needed - hooks handle it)
-  const selectorContext: SelectorContext = useMemo(
-    () => ({
+  const selectorContext: SelectorContext = useMemo(() => {
+    const ctx: SelectorContext = {
       get<S extends StateBase, A extends ActionsBase>(
         spec: StoreSpec<S, A>
       ): readonly [Readonly<S>, A] {
@@ -66,9 +66,15 @@ export function useStore<T extends object>(
         // Return state directly - hooks will track reads
         return [instance.state, instance.actions] as const;
       },
-    }),
-    [container]
-  );
+      use<TResult, TArgs extends unknown[]>(
+        mixin: (context: SelectorContext, ...args: TArgs) => TResult,
+        ...args: TArgs
+      ): TResult {
+        return mixin(ctx, ...args);
+      },
+    };
+    return ctx;
+  }, [container]);
 
   // Run selector with hooks to track dependencies
   const result = withHooks(

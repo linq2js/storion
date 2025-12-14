@@ -88,8 +88,41 @@ export interface StoreSpec<
 }
 
 // =============================================================================
-// Property Config
+// Mixins
 // =============================================================================
+
+/**
+ * A reusable mixin for store setup.
+ * Receives the same StoreContext and can return actions or other values.
+ *
+ * @example
+ * const counterMixin: StoreMixin<{ count: number }, CounterActions> =
+ *   ({ state }) => ({
+ *     increment: () => { state.count++; },
+ *     decrement: () => { state.count--; },
+ *   });
+ */
+export type StoreMixin<
+  TState extends StateBase,
+  TResult,
+  TArgs extends unknown[] = []
+> = (context: StoreContext<TState>, ...args: TArgs) => TResult;
+
+/**
+ * A reusable mixin for selectors.
+ * Receives the SelectorContext and can compose selector logic.
+ *
+ * @example
+ * const sumMixin: SelectorMixin<number, [StoreSpec<any, any>[]]> =
+ *   ({ get }, specs) => specs.reduce((sum, spec) => {
+ *     const [state] = get(spec);
+ *     return sum + (state.count ?? 0);
+ *   }, 0);
+ */
+export type SelectorMixin<TResult, TArgs extends unknown[] = []> = (
+  context: SelectorContext,
+  ...args: TArgs
+) => TResult;
 
 // =============================================================================
 // Setup Context
@@ -155,12 +188,21 @@ export interface StoreContext<TState extends StateBase> {
    * Triggers change notifications for all modified properties.
    */
   reset(): void;
-}
 
-/**
- * @deprecated Use StoreContext instead
- */
-export type SetupContext<TState extends StateBase> = StoreContext<TState>;
+  /**
+   * Use a mixin to compose reusable logic.
+   * Mixins receive the same context and can return actions or values.
+   * Only callable during setup phase.
+   *
+   * @example
+   * const counter = ctx.use(counterMixin);
+   * const multiplier = ctx.use(multiplyMixin, 2);
+   */
+  use<TResult, TArgs extends unknown[]>(
+    mixin: StoreMixin<TState, TResult, TArgs>,
+    ...args: TArgs
+  ): TResult;
+}
 
 // =============================================================================
 // Store Options
@@ -421,6 +463,18 @@ export interface SelectorContext {
   get<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): readonly [Readonly<S>, A];
+
+  /**
+   * Use a mixin to compose reusable selector logic.
+   * Mixins receive the same context and can return computed values.
+   *
+   * @example
+   * const total = ctx.use(sumMixin, [store1, store2]);
+   */
+  use<TResult, TArgs extends unknown[]>(
+    mixin: SelectorMixin<TResult, TArgs>,
+    ...args: TArgs
+  ): TResult;
 }
 
 /**

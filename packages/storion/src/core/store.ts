@@ -511,6 +511,19 @@ export function createStoreInstance<
     reset() {
       instance.reset();
     },
+
+    use<TResult, TArgs extends unknown[]>(
+      mixin: (context: StoreContext<TState>, ...args: TArgs) => TResult,
+      ...args: TArgs
+    ): TResult {
+      if (!isSetupPhase) {
+        throw new Error(
+          `use() can only be called during setup phase. ` +
+            `Do not call use() inside actions or async callbacks.`
+        );
+      }
+      return mixin(setupContext, ...args);
+    },
   };
 
   // ==========================================================================

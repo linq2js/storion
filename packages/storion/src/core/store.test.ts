@@ -1500,3 +1500,158 @@ describe("reset()", () => {
     expect(isDirtyFromAction).toBe(true);
   });
 });
+
+describe("StoreContext.use()", () => {
+  it("should use a mixin to compose actions", () => {
+    type CounterState = { count: number };
+    type CounterActions = {
+      increment: () => void;
+      decrement: () => void;
+    };
+
+    const counterMixin = (
+      ctx: import("../types").StoreContext<CounterState>
+    ): CounterActions => ({
+      increment: () => {
+        ctx.state.count++;
+      },
+      decrement: () => {
+        ctx.state.count--;
+      },
+    });
+
+    const myStore = store({
+      state: { count: 0 },
+      setup: (ctx) => ctx.use(counterMixin),
+    });
+
+    const stores = container();
+    const instance = stores.get(myStore);
+
+    expect(instance.state.count).toBe(0);
+    instance.actions.increment();
+    expect(instance.state.count).toBe(1);
+    instance.actions.decrement();
+    expect(instance.state.count).toBe(0);
+  });
+
+  it("should pass additional arguments to mixin", () => {
+    type CounterState = { count: number };
+
+    const multiplyMixin = (
+      ctx: import("../types").StoreContext<CounterState>,
+      factor: number
+    ) => ({
+      multiply: () => {
+        ctx.state.count *= factor;
+      },
+    });
+
+    const myStore = store({
+      state: { count: 5 },
+      setup: (ctx) => ctx.use(multiplyMixin, 3),
+    });
+
+    const stores = container();
+    const instance = stores.get(myStore);
+
+    instance.actions.multiply();
+    expect(instance.state.count).toBe(15);
+  });
+
+  it("should compose multiple mixins", () => {
+    type AppState = { count: number; name: string };
+
+    const counterMixin = (ctx: import("../types").StoreContext<AppState>) => ({
+      increment: () => {
+        ctx.state.count++;
+      },
+    });
+
+    const nameMixin = (ctx: import("../types").StoreContext<AppState>) => ({
+      setName: (name: string) => {
+        ctx.state.name = name;
+      },
+    });
+
+    const myStore = store({
+      state: { count: 0, name: "initial" },
+      setup: (ctx) => ({
+        ...ctx.use(counterMixin),
+        ...ctx.use(nameMixin),
+        reset: () => {
+          ctx.reset();
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(myStore);
+
+    instance.actions.increment();
+    instance.actions.setName("updated");
+    expect(instance.state.count).toBe(1);
+    expect(instance.state.name).toBe("updated");
+
+    instance.actions.reset();
+    expect(instance.state.count).toBe(0);
+    expect(instance.state.name).toBe("initial");
+  });
+
+  it("should allow mixin to access get() for dependencies", () => {
+    const counter = store({
+      state: { count: 0 },
+      setup: ({ state }) => ({
+        increment: () => {
+          state.count++;
+        },
+      }),
+    });
+
+    const syncMixin = (
+      ctx: import("../types").StoreContext<{ synced: number }>,
+      counterSpec: typeof counter
+    ) => {
+      const [counterState] = ctx.get(counterSpec);
+      effect(() => {
+        ctx.state.synced = counterState.count;
+      });
+      return {};
+    };
+
+    const syncedStore = store({
+      state: { synced: 0 },
+      setup: (ctx) => ctx.use(syncMixin, counter),
+    });
+
+    const stores = container();
+    const syncedInstance = stores.get(syncedStore);
+    const counterInstance = stores.get(counter);
+
+    expect(syncedInstance.state.synced).toBe(0);
+    counterInstance.actions.increment();
+    expect(syncedInstance.state.synced).toBe(1);
+  });
+
+  it("should throw when use() is called outside setup phase", () => {
+    let capturedCtx: import("../types").StoreContext<{ count: number }>;
+
+    const myStore = store({
+      state: { count: 0 },
+      setup: (ctx) => {
+        capturedCtx = ctx;
+        return {
+          badAction: () => {
+            // Attempt to call use() inside action
+            capturedCtx.use(() => ({}));
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(myStore);
+
+    expect(() => instance.actions.badAction()).toThrow(/setup phase/i);
+  });
+});

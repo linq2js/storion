@@ -11,6 +11,7 @@ import { useStore } from "./useStore";
 import { store } from "../core/store";
 import { container } from "../core/container";
 import { untrack } from "../core/tracking";
+import { SelectorContext, StoreSpec } from "../types";
 
 describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
   // Helper to create wrapper with container
@@ -581,6 +582,111 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       }).toThrow(/useStore selector must be synchronous/);
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe("SelectorContext.use()", () => {
+    it("should use a mixin to compose selector logic", () => {
+      const counter = store({
+        state: { count: 5 },
+        setup: () => ({}),
+      });
+
+      const doubledMixin = (
+        ctx: SelectorContext,
+        counterSpec: typeof counter
+      ) => {
+        const [state] = ctx.get(counterSpec);
+        return state.count * 2;
+      };
+
+      const stores = container();
+      stores.get(counter);
+
+      const { result } = renderHook(
+        () =>
+          useStore((ctx) => {
+            const doubled = ctx.use(doubledMixin, counter);
+            return { doubled };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.doubled).toBe(10);
+    });
+
+    it("should compose multiple selector mixins", () => {
+      const store1 = store({
+        state: { value: 10 },
+        setup: () => ({}),
+      });
+
+      const store2 = store({
+        state: { value: 20 },
+        setup: () => ({}),
+      });
+
+      const sumMixin = (
+        ctx: SelectorContext,
+        specs: StoreSpec<{ value: number }>[]
+      ) => {
+        return specs.reduce((sum, spec) => {
+          const [state] = ctx.get(spec);
+          return sum + state.value;
+        }, 0);
+      };
+
+      const stores = container();
+      stores.get(store1);
+      stores.get(store2);
+
+      const { result } = renderHook(
+        () =>
+          useStore((ctx) => {
+            const total = ctx.use(sumMixin, [store1, store2]);
+            return { total };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.total).toBe(30);
+    });
+
+    it("should track dependencies through mixin", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const countMixin = (ctx: SelectorContext, spec: typeof counter) => {
+        const [state] = ctx.get(spec);
+        return state.count;
+      };
+
+      const stores = container();
+      const counterInstance = stores.get(counter);
+
+      const { result, rerender } = renderHook(
+        () =>
+          useStore((ctx) => {
+            const count = ctx.use(countMixin, counter);
+            return { count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+
+      act(() => {
+        counterInstance.actions.increment();
+      });
+      rerender();
+
+      expect(result.current.count).toBe(1);
     });
   });
 });
