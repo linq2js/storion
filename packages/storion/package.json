@@ -1,0 +1,83 @@
+{
+  "name": "storion",
+  "version": "0.1.0",
+  "description": "Storion - A type-safe store specification library",
+  "type": "module",
+  "main": "./dist/storion.js",
+  "module": "./dist/storion.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/storion.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "tsc && vite build",
+    "build:check": "tsc --noEmit",
+    "build:watch": "tsc && vite build --watch",
+    "watch": "pnpm run build:watch",
+    "test": "vitest --no-watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage --no-watch",
+    "dry": "npm pack --dry-run",
+    "preversion": "pnpm test && pnpm run build",
+    "version:patch": "npm version patch -m \"chore: bump version to %s\"",
+    "version:minor": "npm version minor -m \"chore: bump version to %s\"",
+    "version:major": "npm version major -m \"chore: bump version to %s\"",
+    "prepublishOnly": "pnpm run build"
+  },
+  "keywords": [
+    "state",
+    "management",
+    "store",
+    "reactive",
+    "react",
+    "dependency-injection",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.45",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "^1.1.0",
+    "@vitest/ui": "^1.1.0",
+    "@types/lodash": "^4.17.21",
+    "jsdom": "^22.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "terser": "^5.36.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8",
+    "vite-plugin-dts": "^3.6.4",
+    "vitest": "^1.1.0"
+  }
+}

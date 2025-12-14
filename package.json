@@ -1,0 +1,20 @@
+{
+  "name": "storion-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter storion build",
+    "build:all": "pnpm -r build",
+    "build:check": "pnpm -r build:check",
+    "test": "pnpm --filter storion test",
+    "dev": "pnpm --filter storion dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  },
+  "packageManager": "pnpm@9.7.0"
+}

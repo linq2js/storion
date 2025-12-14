@@ -1,0 +1,533 @@
+/**
+ * Tests for useStore hook.
+ */
+
+import React from "react";
+import { describe, it, expect, vi } from "vitest";
+import { act } from "@testing-library/react";
+import { wrappers } from "./strictMode";
+import { StoreProvider } from "./context";
+import { useStore } from "./useStore";
+import { store } from "../core/store";
+import { container } from "../core/container";
+import { untrack } from "../core/tracking";
+
+describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
+  // Helper to create wrapper with container
+  const createWrapper = (stores: ReturnType<typeof container>) => {
+    return ({ children }: { children: React.ReactNode }) => (
+      <StoreProvider container={stores}>{children}</StoreProvider>
+    );
+  };
+
+  describe("basic usage", () => {
+    it("should select state from store", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state] = get(counter);
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+    });
+
+    it("should select actions from store", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state, actions] = get(counter);
+            return {
+              count: state.count,
+              increment: () => actions.increment(),
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(typeof result.current.increment).toBe("function");
+    });
+
+    it("should access multiple stores", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const user = store({
+        state: { name: "Alice" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [counterState] = get(counter);
+            const [userState] = get(user);
+            return {
+              count: counterState.count,
+              name: userState.name,
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+      expect(result.current.name).toBe("Alice");
+    });
+  });
+
+  describe("subscription optimization", () => {
+    it("should not re-subscribe when tracked keys are the same", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(counter);
+
+      // Spy on subscribe
+      const subscribeSpy = vi.spyOn(instance, "subscribe");
+
+      const { rerender } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state] = get(counter);
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Get initial call count (may vary in StrictMode)
+      const initialCalls = subscribeSpy.mock.calls.length;
+      expect(initialCalls).toBeGreaterThan(0);
+
+      // Re-render without changing tracked keys
+      rerender();
+      rerender();
+      rerender();
+
+      // Should not have any new subscriptions (same token)
+      expect(subscribeSpy).toHaveBeenCalledTimes(initialCalls);
+
+      subscribeSpy.mockRestore();
+    });
+
+    it("should subscribe to new props when tracked keys change", () => {
+      const user = store({
+        state: { name: "Alice", age: 30, city: "NYC" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(user);
+      const subscribeSpy = vi.spyOn(instance, "subscribe");
+
+      let trackCity = false;
+
+      const { rerender } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state] = get(user);
+            const result: Record<string, unknown> = { name: state.name };
+            if (trackCity) {
+              result.city = state.city;
+            }
+            return result;
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Initial: only 'name' tracked
+      expect(subscribeSpy).toHaveBeenCalledWith("name", expect.any(Function));
+
+      // Now track 'city' too
+      subscribeSpy.mockClear();
+      trackCity = true;
+      rerender();
+
+      // Should subscribe to 'city' (may also re-sub to 'name' in StrictMode cleanup)
+      expect(subscribeSpy).toHaveBeenCalledWith("city", expect.any(Function));
+
+      subscribeSpy.mockRestore();
+    });
+  });
+
+  describe("stable functions", () => {
+    it("should return stable function references", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const { result, rerender } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state, actions] = get(counter);
+            return {
+              count: state.count,
+              increment: () => actions.increment(),
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      const firstIncrement = result.current.increment;
+
+      rerender();
+
+      // Function reference should be stable
+      expect(result.current.increment).toBe(firstIncrement);
+    });
+
+    it("should call the latest selector function", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(counter);
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state, storeActions] = get(counter);
+            return {
+              count: state.count,
+              increment: () => storeActions.increment(),
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Call increment through stable function
+      act(() => {
+        result.current.increment();
+      });
+
+      // State should be updated
+      expect(instance.state.count).toBe(1);
+    });
+  });
+
+  describe("conditional access", () => {
+    it("should support conditional store access", () => {
+      const user = store({
+        state: { name: "Alice" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      let enabled = false;
+
+      const { result, rerender } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            if (!enabled) {
+              return { data: null };
+            }
+            const [state] = get(user);
+            return { data: state.name };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.data).toBeNull();
+
+      enabled = true;
+      rerender();
+
+      expect(result.current.data).toBe("Alice");
+    });
+  });
+
+  describe("store-level equality", () => {
+    it("should use store config equality for property updates", () => {
+      const user = store({
+        state: { profile: { name: "Alice", age: 30 } },
+        setup: ({ config }) => {
+          // Configure deep equality for profile
+          config("profile", { equality: "deep" });
+          return {};
+        },
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state] = get(user);
+            return { profile: state.profile };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.profile).toEqual({ name: "Alice", age: 30 });
+    });
+  });
+
+  describe("untrack in selectors", () => {
+    it("should not subscribe to properties accessed inside untrack()", () => {
+      const renderCount = vi.fn();
+
+      const counter = store({
+        state: { tracked: 0, untracked: 0 },
+        setup: ({ state }) => ({
+          incrementTracked: () => {
+            state.tracked++;
+          },
+          incrementUntracked: () => {
+            state.untracked++;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () => {
+          renderCount();
+          return useStore(({ get }) => {
+            const [state, actions] = get(counter);
+            return {
+              // This IS tracked
+              tracked: state.tracked,
+              // This is NOT tracked
+              untracked: untrack(() => state.untracked),
+              incrementTracked: actions.incrementTracked,
+              incrementUntracked: actions.incrementUntracked,
+            };
+          });
+        },
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Initial render
+      expect(result.current.tracked).toBe(0);
+      expect(result.current.untracked).toBe(0);
+      renderCount.mockClear();
+
+      // Change tracked value - should re-render
+      act(() => {
+        result.current.incrementTracked();
+      });
+      expect(result.current.tracked).toBe(1);
+      expect(renderCount).toHaveBeenCalled();
+      renderCount.mockClear();
+
+      // Change untracked value - should NOT re-render
+      act(() => {
+        result.current.incrementUntracked();
+      });
+      expect(renderCount).not.toHaveBeenCalled();
+
+      // Value is stale until next render
+      expect(result.current.untracked).toBe(0); // Still 0 (stale)
+
+      // After triggering re-render via tracked change, untracked updates
+      act(() => {
+        result.current.incrementTracked();
+      });
+      expect(result.current.tracked).toBe(2);
+      expect(result.current.untracked).toBe(1); // Now updated
+    });
+
+    it("should work with nested untrack calls", () => {
+      const counter = store({
+        state: { a: 1, b: 2, c: 3 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state] = get(counter);
+            return {
+              tracked: state.a,
+              untracked: untrack(() => {
+                // Nested access - none should be tracked
+                return state.b + state.c;
+              }),
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.tracked).toBe(1);
+      expect(result.current.untracked).toBe(5);
+    });
+  });
+
+  describe("component integration", () => {
+    it("should work in React components", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      function Counter() {
+        const { count, increment } = useStore(({ get }) => {
+          const [state, actions] = get(counter);
+          return {
+            count: state.count,
+            increment: () => actions.increment(),
+          };
+        });
+
+        return (
+          <div>
+            <span data-testid="count">{count}</span>
+            <button onClick={increment}>Increment</button>
+          </div>
+        );
+      }
+
+      const { getByTestId, getByText } = render(
+        <StoreProvider container={stores}>
+          <Counter />
+        </StoreProvider>
+      );
+
+      expect(getByTestId("count").textContent).toBe("0");
+
+      act(() => {
+        getByText("Increment").click();
+      });
+
+      // Note: Component won't automatically re-render without subscription
+      // This tests the action invocation works correctly
+      const instance = stores.get(counter);
+      expect(instance.state.count).toBe(1);
+    });
+  });
+
+  describe("array results", () => {
+    it("should preserve array structure in result", () => {
+      const counter = store({
+        state: { count: 5 },
+        setup: () => ({
+          increment() {},
+        }),
+      });
+
+      const stores = container();
+
+      const { result: hookResult } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state, actions] = get(counter);
+            return [state.count, actions.increment] as const;
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(Array.isArray(hookResult.current)).toBe(true);
+      expect(hookResult.current[0]).toBe(5);
+      expect(typeof hookResult.current[1]).toBe("function");
+    });
+
+    it("should support tuple-like [state, actions] pattern", () => {
+      const counter = store({
+        state: { count: 0, name: "test" },
+        setup: () => ({
+          increment() {},
+          setName() {},
+        }),
+      });
+
+      const stores = container();
+
+      const { result: hookResult } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state, actions] = get(counter);
+            return [
+              { count: state.count, name: state.name },
+              { increment: actions.increment, setName: actions.setName },
+            ] as const;
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(Array.isArray(hookResult.current)).toBe(true);
+      expect(hookResult.current[0]).toEqual({ count: 0, name: "test" });
+      expect(typeof hookResult.current[1].increment).toBe("function");
+    });
+  });
+
+  describe("error handling", () => {
+    it("should throw when used outside provider", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      expect(() => {
+        renderHook(() =>
+          useStore(({ get }) => {
+            const [state] = get(counter);
+            return { count: state.count };
+          })
+        );
+      }).toThrow("useContainer must be used within a StoreProvider");
+
+      consoleSpy.mockRestore();
+    });
+  });
+});
