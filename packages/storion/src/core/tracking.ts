@@ -91,6 +91,22 @@ export function getHooks(): Hooks {
 }
 
 /**
+ * Check if onRead hook is active.
+ * Used by proxies to skip trackRead overhead when not needed.
+ */
+export function hasReadHook(): boolean {
+  return globalHooks.onRead !== undefined;
+}
+
+/**
+ * Check if onWrite hook is active.
+ * Used by proxies to skip trackWrite overhead when not needed.
+ */
+export function hasWriteHook(): boolean {
+  return globalHooks.onWrite !== undefined;
+}
+
+/**
  * Execute function with modified hooks (scoped).
  *
  * Hooks are restored after function completes, even if it throws.

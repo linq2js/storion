@@ -2,7 +2,7 @@
  * Storion store implementations for benchmarks
  */
 
-import { store, container } from "storion";
+import { store, container, effect } from "storion";
 
 // Simple counter store
 export function createStorionCounter() {
@@ -70,7 +70,7 @@ export function createStorionDerived() {
   const derivedSpec = store({
     name: "derived",
     state: { sum: 0, product: 0 },
-    setup: ({ state, get, effect }) => {
+    setup: ({ state, get }) => {
       const [base] = get(baseSpec);
 
       effect(() => {

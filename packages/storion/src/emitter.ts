@@ -50,6 +50,15 @@ export interface Emitter<T = void> {
   emit(payload: T): void;
 
   /**
+   * Emit an event to all registered listeners in LIFO (reverse) order.
+   * Useful for cleanup scenarios where resources should be released
+   * in reverse order of acquisition.
+   *
+   * @param payload - The value to pass to all listeners
+   */
+  emitLifo(payload: T): void;
+
+  /**
    * Remove all registered listeners.
    */
   clear(): void;
@@ -61,6 +70,15 @@ export interface Emitter<T = void> {
    * @param payload - The value to pass to all listeners
    */
   emitAndClear(payload: T): void;
+
+  /**
+   * Emit an event to all listeners in LIFO (reverse) order, then clear.
+   * Useful for cleanup scenarios where resources should be released
+   * in reverse order of acquisition.
+   *
+   * @param payload - The value to pass to all listeners
+   */
+  emitAndClearLifo(payload: T): void;
 
   /**
    * Emit to all listeners, clear, and "settle" the emitter.
@@ -135,7 +153,7 @@ export function emitter<T = void>(
   const noop = () => {};
 
   // Internal emit - always executes (doesn't check isSettled)
-  const doEmit = (payload: T, clear: boolean) => {
+  const doEmit = (payload: T, clear: boolean, lifo: boolean = false) => {
     // Create snapshot - necessary because Set.forEach includes items added during iteration
     const copy = Array.from(listeners);
     if (clear) {
@@ -143,8 +161,16 @@ export function emitter<T = void>(
     }
     // Use traditional for loop for maximum performance in this hot path
     const len = copy.length;
-    for (let i = 0; i < len; i++) {
-      copy[i](payload);
+    if (lifo) {
+      // LIFO: iterate in reverse order (last registered first)
+      for (let i = len - 1; i >= 0; i--) {
+        copy[i](payload);
+      }
+    } else {
+      // FIFO: normal order (first registered first)
+      for (let i = 0; i < len; i++) {
+        copy[i](payload);
+      }
     }
   };
 
@@ -231,6 +257,10 @@ export function emitter<T = void>(
       if (isSettled) return;
       doEmit(payload, false);
     },
+    emitLifo(payload: T): void {
+      if (isSettled) return;
+      doEmit(payload, false, true);
+    },
     /**
      * Removes all registered listeners.
      *
@@ -251,6 +281,11 @@ export function emitter<T = void>(
     emitAndClear(payload: T): void {
       if (isSettled) return;
       doEmit(payload, true);
+    },
+
+    emitAndClearLifo(payload: T): void {
+      if (isSettled) return;
+      doEmit(payload, true, true);
     },
 
     /**

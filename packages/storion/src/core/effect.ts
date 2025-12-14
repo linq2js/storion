@@ -6,6 +6,8 @@
  */
 
 import type { StoreResolver } from "../types";
+import type { Emitter } from "../emitter";
+import { emitter } from "../emitter";
 import { withHooks, getHooks, scheduleNotification } from "./tracking";
 
 // =============================================================================
@@ -151,7 +153,8 @@ function createEffectContext(
   nth: number,
   isStale: () => boolean
 ): EffectContext {
-  const cleanups: VoidFunction[] = [];
+  // Lazy initialization - only create when actually used
+  let cleanupEmitter: Emitter | null = null;
   let abortController: AbortController | null = null;
 
   const runCleanups = () => {
@@ -161,14 +164,9 @@ function createEffectContext(
       abortController = null;
     }
 
-    // Run cleanups in LIFO order
-    while (cleanups.length > 0) {
-      const cleanup = cleanups.pop()!;
-      try {
-        cleanup();
-      } catch (e) {
-        console.error("Effect cleanup error:", e);
-      }
+    // Run cleanups in LIFO order - errors throw naturally
+    if (cleanupEmitter && cleanupEmitter.size > 0) {
+      cleanupEmitter.emitAndClearLifo();
     }
   };
 
@@ -184,14 +182,11 @@ function createEffectContext(
     },
 
     onCleanup(listener: VoidFunction): VoidFunction {
-      cleanups.push(listener);
-      // Return unregister function
-      return () => {
-        const index = cleanups.indexOf(listener);
-        if (index !== -1) {
-          cleanups.splice(index, 1);
-        }
-      };
+      // Lazy init emitter
+      if (!cleanupEmitter) {
+        cleanupEmitter = emitter();
+      }
+      return cleanupEmitter.on(listener);
     },
 
     safe<T>(promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)): any {
@@ -310,7 +305,7 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
 export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
   let currentContext: (EffectContext & { _runCleanups: () => void }) | null =
     null;
-  let subscriptions: VoidFunction[] = [];
+  let subscriptionEmitter: Emitter | null = null; // Lazy - holds unsubscribe functions
   let isRunning = false;
   let isDisposed = false;
   let runGeneration = 0; // Track effect generations for staleness
@@ -322,7 +317,22 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
     string,
     { storeId: string; prop: string; resolver: StoreResolver }
   >();
-  let prevSubscriptions: VoidFunction[] = [];
+  let prevSubscriptionEmitter: Emitter | null = null;
+
+  // Lazy getter for subscription emitter
+  const getSubscriptionEmitter = () => {
+    if (!subscriptionEmitter) {
+      subscriptionEmitter = emitter();
+    }
+    return subscriptionEmitter;
+  };
+
+  // Unsubscribe all and clear
+  const clearSubscriptions = () => {
+    if (subscriptionEmitter && subscriptionEmitter.size > 0) {
+      subscriptionEmitter.emitAndClear();
+    }
+  };
 
   const runEffect = (runOptions?: RunEffectOptions): VoidFunction => {
     const errorStrategy = resolveErrorStrategy(options, runOptions);
@@ -343,17 +353,13 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       currentContext?._runCleanups();
       currentContext = null;
 
-      // Unsubscribe all
-      for (const unsub of subscriptions) {
-        unsub();
-      }
-      subscriptions = [];
+      // Unsubscribe all current subscriptions
+      clearSubscriptions();
 
       // Also cleanup previous subscriptions (keepAlive)
-      for (const unsub of prevSubscriptions) {
-        unsub();
+      if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
+        prevSubscriptionEmitter.emitAndClear();
       }
-      prevSubscriptions = [];
     };
 
     // Track dependencies and written props
@@ -362,6 +368,18 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       { storeId: string; prop: string; resolver: StoreResolver }
     >();
     const writtenProps = new Set<string>();
+
+    // Check if dependencies changed (by comparing keys)
+    const areDepsChanged = (
+      prev: Map<string, unknown>,
+      next: Map<string, unknown>
+    ): boolean => {
+      if (prev.size !== next.size) return true;
+      for (const key of next.keys()) {
+        if (!prev.has(key)) return true;
+      }
+      return false;
+    };
 
     const subscribeToTrackedDeps = () => {
       // Subscribe to tracked dependencies (excluding written props)
@@ -383,7 +401,8 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
             // Re-run effect when dependency changes
             scheduleNotification(executeEffect, fn);
           });
-          subscriptions.push(unsub);
+          // Store unsubscribe function in emitter
+          getSubscriptionEmitter().on(unsub);
         }
       }
     };
@@ -397,15 +416,21 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       if (errorStrategy === "keepAlive") {
         console.error("Effect error (keepAlive):", error);
 
-        // If we have previous subscriptions, restore them
-        if (prevSubscriptions.length > 0) {
+        // If we have previous subscriptions, restore them (swap emitters back)
+        if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
           trackedDeps = new Map(prevTrackedDeps);
-          subscriptions = [...prevSubscriptions];
+          // Swap: restore prev emitter as current, discard new one
+          subscriptionEmitter = prevSubscriptionEmitter;
+          prevSubscriptionEmitter = null;
           return;
         }
 
         // First run failed - subscribe to whatever deps were tracked before error
         // This keeps the effect reactive so it can retry when deps change
+        // Update trackedDeps from newTrackedDeps before subscribing
+        if (newTrackedDeps && newTrackedDeps.size > 0) {
+          trackedDeps = newTrackedDeps;
+        }
         subscribeToTrackedDeps();
         return;
       }
@@ -438,6 +463,42 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       }
     };
 
+    // Pre-allocate hooks object to avoid creating new object on each run
+    let cachedHooks: import("./tracking").Hooks | null = null;
+    let newTrackedDeps: Map<
+      string,
+      { storeId: string; prop: string; resolver: StoreResolver }
+    > | null = null;
+
+    const getTrackingHooks = (
+      current: import("./tracking").Hooks
+    ): import("./tracking").Hooks => {
+      if (!cachedHooks) {
+        cachedHooks = {
+          ...current,
+          onRead: (event) => {
+            current.onRead?.(event);
+            const key = `${event.storeId}.${event.prop}`;
+            if (!newTrackedDeps!.has(key)) {
+              newTrackedDeps!.set(key, {
+                storeId: event.storeId,
+                prop: event.prop,
+                resolver: event.resolver,
+              });
+            }
+          },
+          onWrite: (event) => {
+            current.onWrite?.(event);
+            const key = `${event.storeId}.${event.prop}`;
+            writtenProps.add(key);
+          },
+          scheduleNotification: current.scheduleNotification,
+          scheduleEffect: current.scheduleEffect,
+        };
+      }
+      return cachedHooks;
+    };
+
     const executeEffect = () => {
       if (isDisposed || isRunning) return;
       isRunning = true;
@@ -450,78 +511,86 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
         currentContext?._runCleanups();
         currentContext = null;
 
-        // Save current state before clearing (for keepAlive)
-        if (subscriptions.length > 0) {
+        // Save current emitter to prev for keepAlive recovery (swap, don't clear)
+        if (subscriptionEmitter && subscriptionEmitter.size > 0) {
           prevTrackedDeps = new Map(trackedDeps);
-          prevSubscriptions = [...subscriptions];
+          prevSubscriptionEmitter = subscriptionEmitter;
+          subscriptionEmitter = null; // Will be lazily created if needed
         }
 
-        // Unsubscribe previous
-        for (const unsub of subscriptions) {
-          unsub();
-        }
-        subscriptions = [];
-        trackedDeps.clear();
+        // Reset tracked deps for this run (using new map to compare after)
+        newTrackedDeps = new Map();
         writtenProps.clear();
 
-        // Create new context for this run
-        // nth is 1-indexed (first run = 1), using currentGeneration as the value
+        // Create context LAZILY - only when effect actually accesses ctx properties
+        // This avoids creating AbortController and cleanup arrays for simple effects
         const isStale = () => isDisposed || runGeneration !== currentGeneration;
-        currentContext = createEffectContext(
-          currentGeneration,
-          isStale
-        ) as EffectContext & {
-          _runCleanups: () => void;
+        let lazyContext: (EffectContext & { _runCleanups: () => void }) | null =
+          null;
+        const getOrCreateContext = () => {
+          if (!lazyContext) {
+            lazyContext = createEffectContext(
+              currentGeneration,
+              isStale
+            ) as EffectContext & {
+              _runCleanups: () => void;
+            };
+          }
+          return lazyContext;
         };
 
-        // Run effect with tracking
-        withHooks(
-          (current) => ({
-            ...current,
-            onRead: (event) => {
-              current.onRead?.(event); // Call existing hooks (devtools)
-              const key = `${event.storeId}.${event.prop}`;
-              if (!trackedDeps.has(key)) {
-                trackedDeps.set(key, {
-                  storeId: event.storeId,
-                  prop: event.prop,
-                  resolver: event.resolver,
-                });
-              }
-            },
-            onWrite: (event) => {
-              current.onWrite?.(event); // Call existing hooks
-              const key = `${event.storeId}.${event.prop}`;
-              // Track written props to skip subscribing to them
-              // This allows patterns like: state.count += state.by
-              // Effect will re-run on `by` change, not `count` change
-              writtenProps.add(key);
-            },
-          }),
-          () => {
-            const result: unknown = fn(currentContext!);
+        // Proxy that lazily creates context on first property access
+        const lazyContextProxy = new Proxy({} as EffectContext, {
+          get(_, prop) {
+            return getOrCreateContext()[prop as keyof EffectContext];
+          },
+        });
 
-            // Prevent async effects - they cause tracking issues
-            if (
-              result !== null &&
-              result !== undefined &&
-              typeof (result as PromiseLike<unknown>).then === "function"
-            ) {
-              throw new Error(
-                "Effect function must be synchronous. " +
-                  "Use ctx.safe(promise) for async operations instead of returning a Promise."
-              );
-            }
+        // Run effect with tracking (using pre-allocated hooks)
+        withHooks(getTrackingHooks, () => {
+          const result: unknown = fn(lazyContextProxy);
+
+          // Prevent async effects - they cause tracking issues
+          if (
+            result !== null &&
+            result !== undefined &&
+            typeof (result as PromiseLike<unknown>).then === "function"
+          ) {
+            throw new Error(
+              "Effect function must be synchronous. " +
+                "Use ctx.safe(promise) for async operations instead of returning a Promise."
+            );
           }
-        );
+        });
 
-        // Success - reset retry count and subscribe
+        // Store lazy context for cleanup on next run (only if it was actually created)
+        currentContext = lazyContext;
+
+        // Success - reset retry count
         retryCount = 0;
-        subscribeToTrackedDeps();
+
+        // Check if dependencies changed - only recreate subscriptions if they did
+        const depsChanged = areDepsChanged(trackedDeps, newTrackedDeps!);
+
+        if (depsChanged) {
+          // Unsubscribe previous (call all unsubscribes via emitter)
+          if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
+            prevSubscriptionEmitter.emitAndClear();
+          }
+
+          // Update tracked deps and subscribe to new ones
+          trackedDeps = newTrackedDeps!;
+          subscribeToTrackedDeps();
+        } else {
+          // Deps unchanged - restore prev subscriptions, discard new empty emitter
+          if (prevSubscriptionEmitter) {
+            subscriptionEmitter = prevSubscriptionEmitter;
+          }
+        }
 
         // Clear previous state after successful run
         prevTrackedDeps.clear();
-        prevSubscriptions = [];
+        prevSubscriptionEmitter = null;
       } catch (error) {
         handleError(error);
       } finally {

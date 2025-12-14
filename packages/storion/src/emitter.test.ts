@@ -52,6 +52,59 @@ describe("emitter", () => {
       expect(callOrder).toEqual(["first", "second", "third"]);
     });
 
+    it("should call listeners in LIFO order with emitLifo", () => {
+      const eventEmitter = emitter<string>();
+      const callOrder: string[] = [];
+
+      eventEmitter.on(() => callOrder.push("first"));
+      eventEmitter.on(() => callOrder.push("second"));
+      eventEmitter.on(() => callOrder.push("third"));
+
+      eventEmitter.emitLifo("test");
+
+      expect(callOrder).toEqual(["third", "second", "first"]);
+    });
+
+    it("should call listeners in LIFO order and clear with emitAndClearLifo", () => {
+      const eventEmitter = emitter<string>();
+      const callOrder: string[] = [];
+
+      eventEmitter.on(() => callOrder.push("first"));
+      eventEmitter.on(() => callOrder.push("second"));
+      eventEmitter.on(() => callOrder.push("third"));
+
+      eventEmitter.emitAndClearLifo("test");
+
+      expect(callOrder).toEqual(["third", "second", "first"]);
+      expect(eventEmitter.size).toBe(0);
+    });
+
+    it("should not call listeners with emitLifo after settle", () => {
+      const eventEmitter = emitter<string>();
+      const listener = vi.fn();
+
+      eventEmitter.on(listener);
+      eventEmitter.settle("settled");
+
+      listener.mockClear();
+      eventEmitter.emitLifo("ignored");
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("should not call listeners with emitAndClearLifo after settle", () => {
+      const eventEmitter = emitter<string>();
+      const listener = vi.fn();
+
+      eventEmitter.on(listener);
+      eventEmitter.settle("settled");
+
+      listener.mockClear();
+      eventEmitter.emitAndClearLifo("ignored");
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it("should prevent duplicate listeners (same function added twice)", () => {
       const eventEmitter = emitter<string>();
       const listener = vi.fn();

@@ -22,6 +22,8 @@ import {
   scheduleNotification,
   trackRead,
   trackWrite,
+  hasReadHook,
+  hasWriteHook,
 } from "./tracking";
 import { resolveEquality } from "./equality";
 import { generateStoreId } from "./proxy";
@@ -348,13 +350,19 @@ export function createStoreInstance<
     get(_, prop) {
       if (typeof prop !== "string") return undefined;
       const value = currentState[prop as keyof TState];
-      trackRead(storeId, prop, value, localResolver);
+      // Only call trackRead if there's an active hook (perf optimization)
+      if (hasReadHook()) {
+        trackRead(storeId, prop, value, localResolver);
+      }
       return value;
     },
     set(_, prop, value) {
       if (typeof prop !== "string") return false;
       const oldValue = currentState[prop as keyof TState];
-      trackWrite(storeId, prop, value, oldValue);
+      // Only call trackWrite if there's an active hook (perf optimization)
+      if (hasWriteHook()) {
+        trackWrite(storeId, prop, value, oldValue);
+      }
       const equality = getEquality(prop);
       if (equality(oldValue, value)) return true;
       // Immutable update - create new state object
@@ -383,7 +391,10 @@ export function createStoreInstance<
     get(_, prop) {
       if (typeof prop !== "string") return undefined;
       const value = currentState[prop as keyof TState];
-      trackRead(storeId, prop, value, localResolver);
+      // Only call trackRead if there's an active hook (perf optimization)
+      if (hasReadHook()) {
+        trackRead(storeId, prop, value, localResolver);
+      }
       return value;
     },
     set(_, prop) {

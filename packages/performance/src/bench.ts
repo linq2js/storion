@@ -79,9 +79,14 @@ async function main() {
   // RxJS
   const rxjsCounter = createRxJSCounter();
   results.push(
-    await benchmark("Simple State Update", "RxJS", () => rxjsCounter.increment(), {
-      iterations: ITERATIONS,
-    })
+    await benchmark(
+      "Simple State Update",
+      "RxJS",
+      () => rxjsCounter.increment(),
+      {
+        iterations: ITERATIONS,
+      }
+    )
   );
 
   // ==========================================================================
@@ -99,7 +104,10 @@ async function main() {
       "Large State Update (100 props)",
       "Storion",
       () => {
-        storionLarge.actions.update(`prop${storionKey++ % LARGE_STATE_SIZE}`, storionKey);
+        storionLarge.actions.update(
+          `prop${storionKey++ % LARGE_STATE_SIZE}`,
+          storionKey
+        );
       },
       { iterations: ITERATIONS }
     )
@@ -121,7 +129,8 @@ async function main() {
   );
 
   // Redux
-  const { store: reduxLarge, actions: largeActions } = createReduxLargeState(LARGE_STATE_SIZE);
+  const { store: reduxLarge, actions: largeActions } =
+    createReduxLargeState(LARGE_STATE_SIZE);
   let reduxKey = 0;
   results.push(
     await benchmark(
@@ -187,7 +196,8 @@ async function main() {
   );
 
   // Redux
-  const { store: reduxBatch, actions: batchActions } = createReduxLargeState(LARGE_STATE_SIZE);
+  const { store: reduxBatch, actions: batchActions } =
+    createReduxLargeState(LARGE_STATE_SIZE);
   results.push(
     await benchmark(
       "Batch Update (10 props)",
@@ -230,7 +240,8 @@ async function main() {
   );
 
   // Zustand
-  const { base: zustandBase, derived: zustandDerivedStore } = createZustandDerived();
+  const { base: zustandBase, derived: zustandDerivedStore } =
+    createZustandDerived();
   let zustandDerivedVal = 0;
   results.push(
     await benchmark(
@@ -245,7 +256,11 @@ async function main() {
   );
 
   // Redux (selectors compute on access)
-  const { store: reduxDerived, actions: derivedActions, selectSum } = createReduxDerived();
+  const {
+    store: reduxDerived,
+    actions: derivedActions,
+    selectSum,
+  } = createReduxDerived();
   let reduxDerivedVal = 0;
   results.push(
     await benchmark(
@@ -308,8 +323,11 @@ async function main() {
   cleanupZustand();
 
   // Redux
-  const { store: reduxSubscribed, actions: subActions, cleanup: cleanupRedux } =
-    createReduxWithSubscribers(SUBSCRIBER_COUNT);
+  const {
+    store: reduxSubscribed,
+    actions: subActions,
+    cleanup: cleanupRedux,
+  } = createReduxWithSubscribers(SUBSCRIBER_COUNT);
   results.push(
     await benchmark(
       `Update with ${SUBSCRIBER_COUNT} Subscribers`,
@@ -399,4 +417,3 @@ async function main() {
 }
 
 main().catch(console.error);
-
