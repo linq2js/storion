@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { store } from "./store";
 import { container } from "./container";
-import { batch } from "./tracking";
+import { batch, effect, untrack } from "./tracking";
 
 describe("store()", () => {
   it("should create a store spec", () => {
@@ -128,7 +128,7 @@ describe("effects", () => {
 
     const counter = store({
       state: { count: 0 },
-      setup: ({ effect }) => {
+      setup: () => {
         effect(effectFn);
         return {};
       },
@@ -145,7 +145,7 @@ describe("effects", () => {
 
     const counter = store({
       state: { count: 0, doubled: 0 },
-      setup: ({ state, effect }) => {
+      setup: ({ state }) => {
         effect(() => {
           effectFn();
           state.doubled = state.count * 2;
@@ -175,7 +175,7 @@ describe("effects", () => {
 
     const counter = store({
       state: { count: 0 },
-      setup: ({ state, effect }) => {
+      setup: ({ state }) => {
         effect((ctx) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-expressions
           state.count; // Track dependency
@@ -207,7 +207,7 @@ describe("effects", () => {
 
     const counter = store({
       state: { count: 0 },
-      setup: ({ effect }) => {
+      setup: () => {
         effect((ctx) => {
           ctx.onCleanup(cleanup);
         });
@@ -230,7 +230,7 @@ describe("effects", () => {
     // Should NOT cause infinite loop - only subscribes to non-written props
     const counter = store({
       state: { count: 0, by: 5 },
-      setup: ({ state, effect }) => {
+      setup: ({ state }) => {
         effect(() => {
           // Read count and by, write count
           state.count = state.count + state.by;
@@ -261,7 +261,7 @@ describe("effects", () => {
 
     const counter = store({
       state: { count: 0, trigger: 0 },
-      setup: ({ state, effect }) => {
+      setup: ({ state }) => {
         effect(() => {
           runCount++;
           // eslint-disable-next-line @typescript-eslint/no-unused-expressions
@@ -296,55 +296,6 @@ describe("effects", () => {
 
     errorSpy.mockRestore();
   });
-
-  it("should throw when effect() is called in action", () => {
-    let capturedEffect: any;
-
-    const counter = store({
-      state: { count: 0 },
-      setup: ({ state, effect }) => {
-        capturedEffect = effect;
-        return {
-          badAction: () => {
-            // Attempt to call effect() inside action - should throw
-            capturedEffect(() => {
-              state.count++;
-            });
-          },
-        };
-      },
-    });
-
-    const stores = container();
-    const instance = stores.get(counter);
-
-    expect(() => instance.actions.badAction()).toThrow(/setup phase/i);
-  });
-
-  it("should throw when effect() is called in async code", async () => {
-    let capturedEffect: any;
-
-    const counter = store({
-      state: { count: 0 },
-      setup: ({ state, effect }) => {
-        capturedEffect = effect;
-        return {
-          asyncAction: async () => {
-            await Promise.resolve();
-            // Attempt to call effect() after await - should throw
-            capturedEffect(() => {
-              state.count++;
-            });
-          },
-        };
-      },
-    });
-
-    const stores = container();
-    const instance = stores.get(counter);
-
-    await expect(instance.actions.asyncAction()).rejects.toThrow(/setup phase/i);
-  });
 });
 
 describe("dependencies via get()", () => {
@@ -360,7 +311,7 @@ describe("dependencies via get()", () => {
 
     const doubler = store({
       state: { doubled: 0 },
-      setup: ({ state, get, effect }) => {
+      setup: ({ state, get }) => {
         const [counterState] = get(counter);
 
         effect(() => {
@@ -562,7 +513,7 @@ describe("untrack()", () => {
 
     const counter = store({
       state: { count: 0, untracked: 0, result: 0 },
-      setup: ({ state, effect, untrack }) => {
+      setup: ({ state }) => {
         effect(() => {
           effectFn();
           const untrackedValue = untrack(() => state.untracked);
@@ -861,7 +812,7 @@ describe("StoreContext.update()", () => {
 
     const counter = store({
       state: { count: 0, multiplier: 2 },
-      setup: ({ update, effect }) => {
+      setup: ({ update }) => {
         effect(() => {
           listener(counter);
         });
@@ -890,7 +841,7 @@ describe("StoreContext.update()", () => {
 
     const counter = store({
       state: { count: 0 },
-      setup: ({ state, update, effect }) => {
+      setup: ({ state, update }) => {
         effect(() => {
           listener(state.count);
         });
@@ -917,7 +868,7 @@ describe("StoreContext.update()", () => {
 
     const counter = store({
       state: { count: 5 },
-      setup: ({ state, update, effect }) => {
+      setup: ({ state, update }) => {
         effect(() => {
           listener(state.count);
         });
@@ -1035,19 +986,17 @@ describe("StoreContext.update()", () => {
         profile: { name: "John", email: "john@test.com" },
         age: 25,
       },
-      setup: ({ config, update }) => {
-        config("profile", { equality: "deep" });
-        return {
-          updateBoth: () => {
-            update((draft) => {
-              // Change age
-              draft.age = 26;
-              // "Change" profile but with same values (deep-equal)
-              draft.profile = { name: "John", email: "john@test.com" };
-            });
-          },
-        };
-      },
+      equality: { profile: "deep" },
+      setup: ({ update }) => ({
+        updateBoth: () => {
+          update((draft) => {
+            // Change age
+            draft.age = 26;
+            // "Change" profile but with same values (deep-equal)
+            draft.profile = { name: "John", email: "john@test.com" };
+          });
+        },
+      }),
     });
 
     const stores = container();
@@ -1077,17 +1026,15 @@ describe("StoreContext.update()", () => {
       state: {
         data: { items: [1, 2, 3] },
       },
-      setup: ({ config, update }) => {
-        config("data", { equality: "deep" });
-        return {
-          tryUpdate: () => {
-            update((draft) => {
-              // Same data, should not trigger update
-              draft.data = { items: [1, 2, 3] };
-            });
-          },
-        };
-      },
+      equality: { data: "deep" },
+      setup: ({ update }) => ({
+        tryUpdate: () => {
+          update((draft) => {
+            // Same data, should not trigger update
+            draft.data = { items: [1, 2, 3] };
+          });
+        },
+      }),
     });
 
     const stores = container();
@@ -1113,15 +1060,13 @@ describe("StoreContext.update()", () => {
       state: {
         profile: { name: "John", email: "john@test.com" },
       },
-      setup: ({ state, config }) => {
-        config("profile", { equality: "deep" });
-        return {
-          setProfile: (newProfile: { name: string; email: string }) => {
-            // Direct proxy write
-            state.profile = newProfile;
-          },
-        };
-      },
+      equality: { profile: "deep" },
+      setup: ({ state }) => ({
+        setProfile: (newProfile: { name: string; email: string }) => {
+          // Direct proxy write
+          state.profile = newProfile;
+        },
+      }),
     });
 
     const stores = container();
@@ -1139,6 +1084,78 @@ describe("StoreContext.update()", () => {
     expect(instance.dirty()).toBe(false);
   });
 
+  it("should support equality.default option", () => {
+    const listener = vi.fn();
+
+    const appStore = store({
+      state: {
+        profile: { name: "John" },
+        settings: { theme: "dark" },
+      },
+      equality: {
+        profile: "strict", // Override default for profile
+        default: "deep", // Default to deep equality
+      },
+      setup: ({ update }) => ({
+        updateBoth: () => {
+          update((draft) => {
+            draft.profile = { name: "John" }; // Different ref, strict = changed
+            draft.settings = { theme: "dark" }; // Different ref, deep = equal
+          });
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(appStore);
+
+    const originalSettings = instance.state.settings;
+    instance.subscribe(listener);
+
+    instance.actions.updateBoth();
+
+    // settings should keep original reference (deep equality as default)
+    expect(instance.state.settings).toBe(originalSettings);
+    // profile changed (strict equality override)
+    expect(instance.state.profile).not.toBe({ name: "John" });
+    // Only one notification (from profile change)
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("should support single equality value for all props", () => {
+    const listener = vi.fn();
+
+    const appStore = store({
+      state: {
+        data1: { value: 1 },
+        data2: { value: 2 },
+      },
+      equality: "deep", // Deep equality for ALL props
+      setup: ({ update }) => ({
+        tryUpdate: () => {
+          update((draft) => {
+            draft.data1 = { value: 1 }; // Deep equal
+            draft.data2 = { value: 2 }; // Deep equal
+          });
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(appStore);
+
+    const original1 = instance.state.data1;
+    const original2 = instance.state.data2;
+    instance.subscribe(listener);
+
+    instance.actions.tryUpdate();
+
+    // Both should keep original references
+    expect(instance.state.data1).toBe(original1);
+    expect(instance.state.data2).toBe(original2);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("should trigger update only for actually changed props with mixed equality", () => {
     const nameListener = vi.fn();
     const settingsListener = vi.fn();
@@ -1150,18 +1167,16 @@ describe("StoreContext.update()", () => {
         settings: { theme: "dark", lang: "en" },
         count: 0,
       },
-      setup: ({ config, update }) => {
-        config("settings", { equality: "deep" });
-        return {
-          complexUpdate: () => {
-            update((draft) => {
-              draft.name = "NewApp"; // Actually changes
-              draft.settings = { theme: "dark", lang: "en" }; // Deep-equal, no change
-              draft.count = 5; // Actually changes
-            });
-          },
-        };
-      },
+      equality: { settings: "deep" },
+      setup: ({ update }) => ({
+        complexUpdate: () => {
+          update((draft) => {
+            draft.name = "NewApp"; // Actually changes
+            draft.settings = { theme: "dark", lang: "en" }; // Deep-equal, no change
+            draft.count = 5; // Actually changes
+          });
+        },
+      }),
     });
 
     const stores = container();
@@ -1231,7 +1246,7 @@ describe("dirty()", () => {
   it("should not track changes during setup/effects as dirty", () => {
     const counter = store({
       state: { count: 0, doubled: 0 },
-      setup: ({ state, effect }) => {
+      setup: ({ state }) => {
         effect(() => {
           state.doubled = state.count * 2;
         });
@@ -1400,7 +1415,7 @@ describe("reset()", () => {
   it("should reset state including effect-modified values", () => {
     const counter = store({
       state: { count: 0, doubled: 0 },
-      setup: ({ state, effect }) => {
+      setup: ({ state }) => {
         effect(() => {
           state.doubled = state.count * 2;
         });

@@ -5,6 +5,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { store } from "./store";
 import { container } from "./container";
+import { effect } from "./tracking";
 
 describe("container()", () => {
   it("should create a container", () => {
@@ -176,7 +177,7 @@ describe("container.clear()", () => {
     const store1 = store({
       name: "store1",
       state: { value: 1 },
-      setup: ({ effect }) => {
+      setup: () => {
         effect((ctx) => {
           ctx.onCleanup(() => disposeOrder.push("store1"));
         });
@@ -187,7 +188,7 @@ describe("container.clear()", () => {
     const store2 = store({
       name: "store2",
       state: { value: 2 },
-      setup: ({ effect }) => {
+      setup: () => {
         effect((ctx) => {
           ctx.onCleanup(() => disposeOrder.push("store2"));
         });
@@ -198,7 +199,7 @@ describe("container.clear()", () => {
     const store3 = store({
       name: "store3",
       state: { value: 3 },
-      setup: ({ effect }) => {
+      setup: () => {
         effect((ctx) => {
           ctx.onCleanup(() => disposeOrder.push("store3"));
         });
@@ -528,7 +529,7 @@ describe("autoDispose lifetime", () => {
       name: "counter",
       state: { count: 0, doubled: 0 },
       lifetime: "autoDispose",
-      setup: ({ state, effect }) => {
+      setup: ({ state }) => {
         // Internal effect - should NOT count as subscriber
         effect(() => {
           state.doubled = state.count * 2;

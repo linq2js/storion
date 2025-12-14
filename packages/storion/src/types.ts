@@ -91,14 +91,6 @@ export interface StoreSpec<
 // Property Config
 // =============================================================================
 
-/**
- * Configuration options for a state property.
- */
-export interface PropertyConfig<T> {
-  /** Equality strategy for this property */
-  equality?: Equality<T>;
-}
-
 // =============================================================================
 // Setup Context
 // =============================================================================
@@ -146,51 +138,6 @@ export interface StoreContext<TState extends StateBase> {
   update(partial: Partial<TState>): void;
 
   /**
-   * Define a reactive effect.
-   * - Runs immediately (sync) during setup
-   * - Re-runs when tracked dependencies change
-   * - Use EffectContext for cleanup, signals, and safe async
-   *
-   * @param fn - Effect function that receives EffectContext
-   * @param options - Effect options (error handling, etc.)
-   *
-   * @example
-   * effect((ctx) => {
-   *   const sub = subscribe();
-   *   ctx.onCleanup(() => sub.unsubscribe());
-   * });
-   *
-   * @example
-   * // Safe async operations
-   * effect((ctx) => {
-   *   ctx.safe(fetchData()).then(data => { state.data = data });
-   * });
-   *
-   * @example
-   * // Abort signal for fetch
-   * effect((ctx) => {
-   *   fetch('/api', { signal: ctx.signal });
-   * });
-   */
-  effect(
-    fn: (ctx: import("./core/effect").EffectContext) => void,
-    options?: import("./core/effect").EffectOptions
-  ): void;
-
-  /**
-   * Configure a specific state property.
-   */
-  config<K extends keyof TState>(
-    key: K,
-    options: PropertyConfig<TState[K]>
-  ): void;
-
-  /**
-   * Execute function without tracking dependencies.
-   */
-  untrack<T>(fn: () => T): T;
-
-  /**
    * Check if state has been modified since setup completed.
    *
    * @overload Check if any property is dirty
@@ -235,8 +182,24 @@ export interface StoreOptions<
   /** Setup function - runs once when store is created */
   setup: (context: StoreContext<TState>) => TActions;
 
-  /** Default equality strategy for all properties */
-  equality?: Equality;
+  /**
+   * Equality strategy for state properties.
+   *
+   * @example
+   * // Single value - applies to all properties
+   * equality: "shallow"
+   *
+   * @example
+   * // Per-property configuration
+   * equality: {
+   *   profile: "deep",
+   *   settings: "shallow",
+   *   default: "strict" // Optional default for unlisted props
+   * }
+   */
+  equality?:
+    | Equality
+    | (Partial<Record<keyof TState, Equality>> & { default?: Equality });
 
   /** Lifetime management strategy */
   lifetime?: Lifetime;

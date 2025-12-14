@@ -288,11 +288,8 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
     it("should use store config equality for property updates", () => {
       const user = store({
         state: { profile: { name: "Alice", age: 30 } },
-        setup: ({ config }) => {
-          // Configure deep equality for profile
-          config("profile", { equality: "deep" });
-          return {};
-        },
+        equality: { profile: "deep" },
+        setup: () => ({}),
       });
 
       const stores = container();

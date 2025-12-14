@@ -13,7 +13,6 @@ export type {
   Lifetime,
   DispatchEvent,
   StoreSpec,
-  PropertyConfig,
   StoreContext,
   SetupContext,
   StoreOptions,

@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { store } from "./store";
 import { container } from "./container";
-import { withHooks, getHooks } from "./tracking";
+import { withHooks, getHooks, effect } from "./tracking";
 
 describe("hooks", () => {
   describe("withHooks()", () => {
@@ -247,7 +247,7 @@ describe("hooks", () => {
 
       const counter = store({
         state: { count: 0, doubled: 0 },
-        setup: ({ state, effect }) => {
+        setup: ({ state }) => {
           effect(() => {
             state.doubled = state.count * 2;
           });

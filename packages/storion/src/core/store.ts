@@ -12,7 +12,6 @@ import type {
   StoreInstance,
   StoreResolver,
   StoreContext,
-  PropertyConfig,
   DispatchEvent,
 } from "../types";
 
@@ -20,13 +19,9 @@ import { produce } from "immer";
 
 import {
   withHooks,
-  untrack as untrackFn,
   scheduleNotification,
   trackRead,
   trackWrite,
-  effect as createEffect,
-  type EffectFn,
-  type EffectOptions,
 } from "./tracking";
 import { resolveEquality } from "./equality";
 import { generateStoreId } from "./proxy";
@@ -152,14 +147,34 @@ export function createStoreInstance<
   // Effect dispose functions (collected via scheduleEffect hook)
   const effectDisposers: VoidFunction[] = [];
 
-  // Property equality
+  // Property equality - resolve from options
+  const equalityOption = options.equality;
   const propertyEquality = new Map<
     string,
     (a: unknown, b: unknown) => boolean
   >();
+  let defaultEquality = resolveEquality("strict");
 
-  // Default equality
-  const defaultEquality = resolveEquality(options.equality ?? "shallow");
+  if (equalityOption) {
+    if (
+      typeof equalityOption === "string" ||
+      typeof equalityOption === "function"
+    ) {
+      // Single equality for all props
+      defaultEquality = resolveEquality(equalityOption);
+    } else {
+      // Per-property configuration
+      const { default: defaultEq, ...propEqualities } = equalityOption;
+      if (defaultEq) {
+        defaultEquality = resolveEquality(defaultEq);
+      }
+      for (const [key, eq] of Object.entries(propEqualities)) {
+        if (eq) {
+          propertyEquality.set(key, resolveEquality(eq));
+        }
+      }
+    }
+  }
 
   // Get equality for a property
   const getEquality = (key: string) =>
@@ -488,34 +503,6 @@ export function createStoreInstance<
         }
       }
     },
-
-    effect(fn: EffectFn, options?: EffectOptions) {
-      // Prevent effect() calls outside setup phase
-      if (!isSetupPhase) {
-        throw new Error(
-          `effect() can only be called during setup phase. ` +
-            `Do not call effect() inside actions, async callbacks, or after setup completes.`
-        );
-      }
-
-      // Use the hook-based effect system
-      // Effects run after store instance is created (via scheduleEffect hook)
-      createEffect(fn, options);
-    },
-
-    config<K extends keyof TState>(key: K, config: PropertyConfig<TState[K]>) {
-      if (config.equality) {
-        propertyEquality.set(
-          key as string,
-          resolveEquality(config.equality) as (
-            a: unknown,
-            b: unknown
-          ) => boolean
-        );
-      }
-    },
-
-    untrack: untrackFn,
 
     dirty(prop?: keyof TState): boolean {
       return instance.dirty(prop as any);
