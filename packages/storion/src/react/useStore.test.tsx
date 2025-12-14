@@ -530,4 +530,60 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       consoleSpy.mockRestore();
     });
   });
+
+  describe("async selector prevention", () => {
+    it("should throw if selector returns a Promise", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      expect(() => {
+        renderHook(
+          () =>
+            useStore(async ({ get }) => {
+              const [state] = get(counter);
+              return { count: state.count };
+            }),
+          {
+            wrapper: createWrapper(stores),
+          }
+        );
+      }).toThrow(/useStore selector must be synchronous/);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should throw if selector returns a PromiseLike", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      expect(() => {
+        renderHook(
+          () =>
+            useStore(({ get }) => {
+              const [state] = get(counter);
+              return { then: () => {}, count: state.count };
+            }),
+          {
+            wrapper: createWrapper(stores),
+          }
+        );
+      }).toThrow(/useStore selector must be synchronous/);
+
+      consoleSpy.mockRestore();
+    });
+  });
 });

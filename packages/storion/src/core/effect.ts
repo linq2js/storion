@@ -60,14 +60,183 @@ export interface RunEffectOptions {
 }
 
 // =============================================================================
+// Effect Context
+// =============================================================================
+
+/**
+ * Context passed to effect functions.
+ * Provides utilities for safe cleanup and async handling.
+ */
+export interface EffectContext {
+  /**
+   * The run number (1-indexed). Increments each time the effect runs.
+   * Can be used as a token to detect stale async operations.
+   *
+   * @example
+   * effect((ctx) => {
+   *   const runToken = ctx.nth;
+   *   fetchData().then(data => {
+   *     if (ctx.nth === runToken) {
+   *       state.data = data; // Only if still same run
+   *     }
+   *   });
+   * });
+   */
+  readonly nth: number;
+
+  /**
+   * AbortSignal that is aborted when effect is cleaned up.
+   * Created lazily on first access.
+   *
+   * @example
+   * effect((ctx) => {
+   *   fetch('/api/data', { signal: ctx.signal });
+   * });
+   */
+  readonly signal: AbortSignal;
+
+  /**
+   * Register a cleanup function.
+   * Cleanup runs when effect re-runs or is disposed.
+   * Can be called multiple times - all cleanups run in LIFO order.
+   *
+   * @returns Unregister function to remove this cleanup
+   *
+   * @example
+   * effect((ctx) => {
+   *   const sub = subscribe();
+   *   ctx.onCleanup(() => sub.unsubscribe()); // Registered before risky code
+   *   doSomethingRisky(); // Even if this throws, cleanup runs
+   * });
+   */
+  onCleanup(listener: VoidFunction): VoidFunction;
+
+  /**
+   * Wrap a promise to never resolve if effect becomes stale.
+   * Useful for async operations that should be cancelled on re-run.
+   *
+   * @example
+   * effect((ctx) => {
+   *   ctx.safe(fetchData()).then(data => {
+   *     // Only runs if effect hasn't re-run
+   *     state.data = data;
+   *   });
+   * });
+   */
+  safe<T>(promise: Promise<T>): Promise<T>;
+
+  /**
+   * Wrap a callback to not run if effect is stale/disposed.
+   * Useful for event handlers and timeouts.
+   *
+   * @example
+   * effect((ctx) => {
+   *   const handler = ctx.safe((event) => {
+   *     // Only runs if effect is still active
+   *     state.value = event.target.value;
+   *   });
+   *   element.addEventListener('input', handler);
+   *   ctx.onCleanup(() => element.removeEventListener('input', handler));
+   * });
+   */
+  safe<TArgs extends unknown[], TReturn>(
+    callback: (...args: TArgs) => TReturn
+  ): (...args: TArgs) => TReturn | undefined;
+}
+
+/**
+ * Create an EffectContext for a single effect run.
+ */
+function createEffectContext(
+  nth: number,
+  isStale: () => boolean
+): EffectContext {
+  const cleanups: VoidFunction[] = [];
+  let abortController: AbortController | null = null;
+
+  const runCleanups = () => {
+    // Abort signal first
+    if (abortController) {
+      abortController.abort();
+      abortController = null;
+    }
+
+    // Run cleanups in LIFO order
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop()!;
+      try {
+        cleanup();
+      } catch (e) {
+        console.error("Effect cleanup error:", e);
+      }
+    }
+  };
+
+  const context: EffectContext = {
+    nth,
+
+    get signal() {
+      // Lazy creation
+      if (!abortController) {
+        abortController = new AbortController();
+      }
+      return abortController.signal;
+    },
+
+    onCleanup(listener: VoidFunction): VoidFunction {
+      cleanups.push(listener);
+      // Return unregister function
+      return () => {
+        const index = cleanups.indexOf(listener);
+        if (index !== -1) {
+          cleanups.splice(index, 1);
+        }
+      };
+    },
+
+    safe<T>(promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)): any {
+      if (promiseOrCallback instanceof Promise) {
+        // Wrap promise
+        return new Promise<T>((resolve, reject) => {
+          promiseOrCallback.then(
+            (value) => {
+              if (!isStale()) {
+                resolve(value);
+              }
+              // Never resolve/reject if stale - promise stays pending
+            },
+            (error) => {
+              if (!isStale()) {
+                reject(error);
+              }
+              // Never resolve/reject if stale
+            }
+          );
+        });
+      }
+
+      // Wrap callback
+      return (...args: unknown[]) => {
+        if (!isStale()) {
+          return (promiseOrCallback as (...args: unknown[]) => T)(...args);
+        }
+        return undefined;
+      };
+    },
+  };
+
+  return Object.assign(context, { _runCleanups: runCleanups });
+}
+
+// =============================================================================
 // Effect
 // =============================================================================
 
 /**
  * Effect function type.
- * Can return an optional cleanup function.
+ * Receives EffectContext for cleanup registration, safe async, and abort signal.
  */
-export type EffectFn = () => void | VoidFunction;
+export type EffectFn = (ctx: EffectContext) => void;
 
 /**
  * Resolve error strategy from effect options or store options.
@@ -98,31 +267,40 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
  *
  * Effects can span multiple stores - use `resolver` from ReadEvent to subscribe.
  *
- * @param fn - Effect function (can return cleanup)
+ * @param fn - Effect function that receives EffectContext
  * @param options - Effect options (error handling, etc.)
  * @returns Dispose function to stop the effect
  *
  * @example
- * // Basic effect
- * effect(() => {
- *   console.log(state.count); // Tracked dependency
+ * // Basic effect with cleanup
+ * effect((ctx) => {
+ *   const sub = subscribe();
+ *   ctx.onCleanup(() => sub.unsubscribe());
  * });
  *
  * @example
- * // With error handling - keep alive on error
- * effect(() => {
- *   riskyOperation();
- * }, { onError: "keepAlive" });
+ * // Safe async - never resolves if effect re-runs
+ * effect((ctx) => {
+ *   ctx.safe(fetchData()).then(data => {
+ *     state.data = data;
+ *   });
+ * });
  *
  * @example
- * // With retry
- * effect(() => {
+ * // Abort signal for fetch
+ * effect((ctx) => {
+ *   fetch('/api/data', { signal: ctx.signal });
+ * });
+ *
+ * @example
+ * // With retry on error
+ * effect((ctx) => {
  *   fetchData();
  * }, { onError: { maxRetries: 3, delay: 1000 } });
  *
  * @example
  * // Custom error handler
- * effect(() => {
+ * effect((ctx) => {
  *   doSomething();
  * }, { onError: ({ error, retry, retryCount }) => {
  *   if (retryCount < 3) retry();
@@ -130,10 +308,12 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
  * }});
  */
 export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
-  let cleanup: VoidFunction | null = null;
+  let currentContext: (EffectContext & { _runCleanups: () => void }) | null =
+    null;
   let subscriptions: VoidFunction[] = [];
   let isRunning = false;
   let isDisposed = false;
+  let runGeneration = 0; // Track effect generations for staleness
   let retryCount = 0;
   let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -151,6 +331,7 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
     const dispose = () => {
       if (isDisposed) return;
       isDisposed = true;
+      runGeneration++; // Mark all pending async as stale
 
       // Cancel pending retry
       if (retryTimeout) {
@@ -158,9 +339,9 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
         retryTimeout = null;
       }
 
-      // Cleanup previous run
-      cleanup?.();
-      cleanup = null;
+      // Run context cleanups
+      currentContext?._runCleanups();
+      currentContext = null;
 
       // Unsubscribe all
       for (const unsub of subscriptions) {
@@ -261,10 +442,13 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       if (isDisposed || isRunning) return;
       isRunning = true;
 
+      // Increment generation to mark previous async operations as stale
+      const currentGeneration = ++runGeneration;
+
       try {
-        // Cleanup previous run
-        cleanup?.();
-        cleanup = null;
+        // Run previous context cleanups (this handles onCleanup registrations)
+        currentContext?._runCleanups();
+        currentContext = null;
 
         // Save current state before clearing (for keepAlive)
         if (subscriptions.length > 0) {
@@ -279,6 +463,16 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
         subscriptions = [];
         trackedDeps.clear();
         writtenProps.clear();
+
+        // Create new context for this run
+        // nth is 1-indexed (first run = 1), using currentGeneration as the value
+        const isStale = () => isDisposed || runGeneration !== currentGeneration;
+        currentContext = createEffectContext(
+          currentGeneration,
+          isStale
+        ) as EffectContext & {
+          _runCleanups: () => void;
+        };
 
         // Run effect with tracking
         withHooks(
@@ -298,22 +492,25 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
             onWrite: (event) => {
               current.onWrite?.(event); // Call existing hooks
               const key = `${event.storeId}.${event.prop}`;
-
-              // Check for self-reference: reading AND writing same property
-              if (trackedDeps.has(key)) {
-                throw new Error(
-                  `Self-reference detected: Effect reads and writes "${event.prop}". ` +
-                    `This would cause an infinite loop.`
-                );
-              }
-
+              // Track written props to skip subscribing to them
+              // This allows patterns like: state.count += state.by
+              // Effect will re-run on `by` change, not `count` change
               writtenProps.add(key);
             },
           }),
           () => {
-            const result = fn();
-            if (typeof result === "function") {
-              cleanup = result;
+            const result: unknown = fn(currentContext!);
+
+            // Prevent async effects - they cause tracking issues
+            if (
+              result !== null &&
+              result !== undefined &&
+              typeof (result as PromiseLike<unknown>).then === "function"
+            ) {
+              throw new Error(
+                "Effect function must be synchronous. " +
+                  "Use ctx.safe(promise) for async operations instead of returning a Promise."
+              );
             }
           }
         );
@@ -346,4 +543,3 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
     // This will be handled by the scheduled effect's dispose
   };
 }
-

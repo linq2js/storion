@@ -67,8 +67,109 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.2)(jsdom@25.0.1)(terser@5.44.1)
 
+  packages/expense-manager:
+    dependencies:
+      react:
+        specifier: ^19.0.0
+        version: 19.2.3
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.3(react@19.2.3)
+      storion:
+        specifier: workspace:*
+        version: link:../storion
+      uuid:
+        specifier: ^11.0.3
+        version: 11.1.0
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: ^6.6.3
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.2.0
+        version: 16.3.0(@testing-library/dom@9.3.4)(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@types/react':
+        specifier: ^19.0.2
+        version: 19.2.7
+      '@types/react-dom':
+        specifier: ^19.0.2
+        version: 19.2.3(@types/react@19.2.7)
+      '@types/uuid':
+        specifier: ^10.0.0
+        version: 10.0.0
+      '@vitejs/plugin-react':
+        specifier: ^4.3.4
+        version: 4.7.0(vite@6.4.1(@types/node@22.19.2)(jiti@1.21.7)(terser@5.44.1))
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.22(postcss@8.5.6)
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+      postcss:
+        specifier: ^8.4.49
+        version: 8.5.6
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.19
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.1(@types/node@22.19.2)(jiti@1.21.7)(terser@5.44.1)
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.2)(jsdom@25.0.1)(terser@5.44.1)
+
+  packages/performance:
+    dependencies:
+      '@reduxjs/toolkit':
+        specifier: ^2.0.0
+        version: 2.11.1(react-redux@9.2.0(@types/react@18.3.27)(react@18.3.1)(redux@5.0.1))(react@18.3.1)
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+      react-redux:
+        specifier: ^9.0.0
+        version: 9.2.0(@types/react@18.3.27)(react@18.3.1)(redux@5.0.1)
+      rxjs:
+        specifier: ^7.8.0
+        version: 7.8.2
+      storion:
+        specifier: workspace:*
+        version: link:../storion
+      zustand:
+        specifier: ^4.5.0
+        version: 4.5.7(@types/react@18.3.27)(immer@11.0.1)(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.3.27
+      '@types/react-dom':
+        specifier: ^18.2.0
+        version: 18.3.7(@types/react@18.3.27)
+      '@vitejs/plugin-react':
+        specifier: ^4.2.0
+        version: 4.7.0(vite@5.4.21(@types/node@22.19.2)(terser@5.44.1))
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@22.19.2)(terser@5.44.1)
+      vite-node:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@22.19.2)(terser@5.44.1)
+
   packages/storion:
     dependencies:
+      immer:
+        specifier: ^11.0.1
+        version: 11.0.1
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -608,6 +709,17 @@ packages:
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
 
+  '@reduxjs/toolkit@2.11.1':
+    resolution: {integrity: sha512-HjhlEREguAyBTGNzRlGNiDHGQ2EjLSPWwdhhpoEqHYy8hWak3Dp6/fU72OfqVsiMb8S6rbfPsWUF24fxpilrVA==}
+    peerDependencies:
+      react: ^16.9.0 || ^17.0.0 || ^18 || ^19
+      react-redux: ^7.2.1 || ^8.1.3 || ^9.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-redux:
+        optional: true
+
   '@rolldown/pluginutils@1.0.0-beta.27':
     resolution: {integrity: sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==}
 
@@ -755,6 +867,12 @@ packages:
   '@sinclair/typebox@0.27.8':
     resolution: {integrity: sha512-+Fj43pSMwJs4KRrH/938Uf+uAELIgVBmQzg/q1YG10djyfA3TnrU8N8XzqCh/okZdszqBQTZf96idMfE5lnwTA==}
 
+  '@standard-schema/spec@1.0.0':
+    resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
+
+  '@standard-schema/utils@0.3.0':
+    resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
+
   '@testing-library/dom@9.3.4':
     resolution: {integrity: sha512-FlS4ZWlp97iiNWig0Muq8p+3rVDjRiYE+YKGbAqXOu9nwJFFOdL00kFpz42M+4huzYi86vAK1sOOfyOG45muIQ==}
     engines: {node: '>=14'}
@@ -834,6 +952,9 @@ packages:
 
   '@types/react@19.2.7':
     resolution: {integrity: sha512-MWtvHrGZLFttgeEj28VXHxpmwYbor/ATPYbBfSFZEIRK0ecCFLl2Qo55z52Hss+UV9CRN7trSeq1zbgx7YDWWg==}
+
+  '@types/use-sync-external-store@0.0.6':
+    resolution: {integrity: sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==}
 
   '@types/uuid@10.0.0':
     resolution: {integrity: sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ==}
@@ -1431,6 +1552,9 @@ packages:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
 
+  immer@11.0.1:
+    resolution: {integrity: sha512-naDCyggtcBWANtIrjQEajhhBEuL9b0Zg4zmlWK2CzS6xCWSE39/vvf4LqnMjUAWHBhot4m9MHCM/Z+mfWhUkiA==}
+
   import-lazy@4.0.0:
     resolution: {integrity: sha512-rKtvo6a868b5Hu3heneU+L4yEQ4jYKLtjpnPeUdK7h0yzXGmyBTypknlkCvHFBqfX9YlorEiMM6Dnq/5atfHkw==}
     engines: {node: '>=8'}
@@ -1924,6 +2048,18 @@ packages:
   react-is@18.3.1:
     resolution: {integrity: sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==}
 
+  react-redux@9.2.0:
+    resolution: {integrity: sha512-ROY9fvHhwOD9ySfrF0wmvu//bKCQ6AeZZq1nJNtbDC+kk5DuSuNX/n6YWYF/SYy7bSba4D4FSz8DJeKY/S/r+g==}
+    peerDependencies:
+      '@types/react': ^18.2.25 || ^19
+      react: ^18.0 || ^19
+      redux: ^5.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      redux:
+        optional: true
+
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
@@ -1947,12 +2083,23 @@ packages:
     resolution: {integrity: sha512-6tDA8g98We0zd0GvVeMT9arEOnTw9qM03L9cJXaCjrip1OO764RDBLBfrB4cwzNGDj5OA5ioymC9GkizgWJDUg==}
     engines: {node: '>=8'}
 
+  redux-thunk@3.1.0:
+    resolution: {integrity: sha512-NW2r5T6ksUKXCabzhL9z+h206HQw/NJkcLm1GPImRQ8IzfXwRGqjVhKJGauHirT0DAuyy6hjdnMZaRoAcy0Klw==}
+    peerDependencies:
+      redux: ^5.0.0
+
+  redux@5.0.1:
+    resolution: {integrity: sha512-M9/ELqF6fy8FwmkpnF0S3YKOqMyoWJ4+CS5Efg2ct3oY9daQvd/Pc71FpGZsVsbl3Cpb+IIcjBDUnnyBdQbq4w==}
+
   regexp.prototype.flags@1.5.4:
     resolution: {integrity: sha512-dYqgNSZbDwkaJ2ceRd9ojCGjBq+mOm9LmtXnAnEGyHhN/5R7iDW2TRw3h+o/jCFxus3P2LfWIIiwowAjANm7IA==}
     engines: {node: '>= 0.4'}
 
   requires-port@1.0.0:
     resolution: {integrity: sha512-KigOCHcocU3XODJxsu8i/j8T9tzT4adHiecwORRQ0ZZFcp7ahwXuRU1m+yuO90C5ZUyGeGfocHDI14M3L3yDAQ==}
+
+  reselect@5.1.1:
+    resolution: {integrity: sha512-K/BG6eIky/SBpzfHZv/dd+9JBFiS4SWV7FIujVyJRux6e45+73RaUHXLmIR1f7WOMaQ0U1km6qwklRQxpJJY0w==}
 
   resolve@1.19.0:
     resolution: {integrity: sha512-rArEXAgsBG4UgRGcynxWIWKFvh/XZCcS8UJdHhwy91zwAvCZIbcs+vAbflgBnNjYMs/i/i+/Ux6IZhML1yPvxg==}
@@ -1982,6 +2129,9 @@ packages:
 
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
+
+  rxjs@7.8.2:
+    resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
 
   safe-regex-test@1.1.0:
     resolution: {integrity: sha512-x/+Cz4YrimQxQccJf5mKEbIa1NzeCRNI5Ecl/ekmlYaampdNLPalVyIcCZNNH3MvmqBugV5TMYZXv0ljslUlaw==}
@@ -2205,6 +2355,9 @@ packages:
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
 
+  tslib@2.8.1:
+    resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
+
   type-detect@4.1.0:
     resolution: {integrity: sha512-Acylog8/luQ8L7il+geoSxhEkazvkslg7PSNKOX59mbB9cOveP5aq9h74Y7YU8yDpJwetzQQrfIwtf4Wp4LKcw==}
     engines: {node: '>=4'}
@@ -2244,6 +2397,11 @@ packages:
 
   url-parse@1.5.10:
     resolution: {integrity: sha512-WypcfiRhfeUP9vvF0j6rw0J3hrWrw6iZv3+22h6iRMJ/8z1Tj6XfLP4DsUix5MhMPnXpiHDoKyoZ/bdCkwBCiQ==}
+
+  use-sync-external-store@1.6.0:
+    resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
@@ -2504,6 +2662,21 @@ packages:
     resolution: {integrity: sha512-D7eujBWkLa3p2sIpJA0d1pr7es+a7m0vFAnZLlCEKq/Ij2k0MLi9Br2UPxoxdYystm5K1yeBGzub0FlYUEWj2Q==}
     engines: {node: '>=8.0.0'}
     hasBin: true
+
+  zustand@4.5.7:
+    resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
+    engines: {node: '>=12.7.0'}
+    peerDependencies:
+      '@types/react': '>=16.8'
+      immer: '>=9.0.6'
+      react: '>=16.8'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
 
 snapshots:
 
@@ -2886,6 +3059,18 @@ snapshots:
 
   '@polka/url@1.0.0-next.29': {}
 
+  '@reduxjs/toolkit@2.11.1(react-redux@9.2.0(@types/react@18.3.27)(react@18.3.1)(redux@5.0.1))(react@18.3.1)':
+    dependencies:
+      '@standard-schema/spec': 1.0.0
+      '@standard-schema/utils': 0.3.0
+      immer: 11.0.1
+      redux: 5.0.1
+      redux-thunk: 3.1.0(redux@5.0.1)
+      reselect: 5.1.1
+    optionalDependencies:
+      react: 18.3.1
+      react-redux: 9.2.0(@types/react@18.3.27)(react@18.3.1)(redux@5.0.1)
+
   '@rolldown/pluginutils@1.0.0-beta.27': {}
 
   '@rollup/pluginutils@5.3.0(rollup@4.53.3)':
@@ -2996,6 +3181,10 @@ snapshots:
 
   '@sinclair/typebox@0.27.8': {}
 
+  '@standard-schema/spec@1.0.0': {}
+
+  '@standard-schema/utils@0.3.0': {}
+
   '@testing-library/dom@9.3.4':
     dependencies:
       '@babel/code-frame': 7.27.1
@@ -3089,6 +3278,8 @@ snapshots:
   '@types/react@19.2.7':
     dependencies:
       csstype: 3.2.3
+
+  '@types/use-sync-external-store@0.0.6': {}
 
   '@types/uuid@10.0.0': {}
 
@@ -3830,6 +4021,8 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
+  immer@11.0.1: {}
+
   import-lazy@4.0.0: {}
 
   indent-string@4.0.0: {}
@@ -4300,6 +4493,15 @@ snapshots:
 
   react-is@18.3.1: {}
 
+  react-redux@9.2.0(@types/react@18.3.27)(react@18.3.1)(redux@5.0.1):
+    dependencies:
+      '@types/use-sync-external-store': 0.0.6
+      react: 18.3.1
+      use-sync-external-store: 1.6.0(react@18.3.1)
+    optionalDependencies:
+      '@types/react': 18.3.27
+      redux: 5.0.1
+
   react-refresh@0.17.0: {}
 
   react@18.3.1:
@@ -4321,6 +4523,12 @@ snapshots:
       indent-string: 4.0.0
       strip-indent: 3.0.0
 
+  redux-thunk@3.1.0(redux@5.0.1):
+    dependencies:
+      redux: 5.0.1
+
+  redux@5.0.1: {}
+
   regexp.prototype.flags@1.5.4:
     dependencies:
       call-bind: 1.0.8
@@ -4331,6 +4539,8 @@ snapshots:
       set-function-name: 2.0.2
 
   requires-port@1.0.0: {}
+
+  reselect@5.1.1: {}
 
   resolve@1.19.0:
     dependencies:
@@ -4382,6 +4592,10 @@ snapshots:
   run-parallel@1.2.0:
     dependencies:
       queue-microtask: 1.2.3
+
+  rxjs@7.8.2:
+    dependencies:
+      tslib: 2.8.1
 
   safe-regex-test@1.1.0:
     dependencies:
@@ -4626,6 +4840,8 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
+  tslib@2.8.1: {}
+
   type-detect@4.1.0: {}
 
   typescript@5.4.2: {}
@@ -4654,6 +4870,10 @@ snapshots:
     dependencies:
       querystringify: 2.2.0
       requires-port: 1.0.0
+
+  use-sync-external-store@1.6.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   util-deprecate@1.0.2: {}
 
@@ -4911,3 +5131,11 @@ snapshots:
       validator: 13.15.23
     optionalDependencies:
       commander: 9.5.0
+
+  zustand@4.5.7(@types/react@18.3.27)(immer@11.0.1)(react@18.3.1):
+    dependencies:
+      use-sync-external-store: 1.6.0(react@18.3.1)
+    optionalDependencies:
+      '@types/react': 18.3.27
+      immer: 11.0.1
+      react: 18.3.1

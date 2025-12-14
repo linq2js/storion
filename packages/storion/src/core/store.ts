@@ -11,28 +11,25 @@ import type {
   StoreOptions,
   StoreInstance,
   StoreResolver,
-  SetupContext,
+  StoreContext,
   PropertyConfig,
   DispatchEvent,
 } from "../types";
+
+import { produce } from "immer";
 
 import {
   withHooks,
   untrack as untrackFn,
   scheduleNotification,
+  trackRead,
+  trackWrite,
   effect as createEffect,
   type EffectFn,
   type EffectOptions,
 } from "./tracking";
 import { resolveEquality } from "./equality";
-
-// Effect types are now in tracking.ts
-
-import {
-  generateStoreId,
-  createMutableStateProxy,
-  createReadonlyStateProxy,
-} from "./proxy";
+import { generateStoreId } from "./proxy";
 
 import { emitter, Emitter } from "../emitter";
 
@@ -92,9 +89,10 @@ export function createStoreInstance<
   const options = spec.options;
   const storeId = generateStoreId(options.name);
 
-  // State
+  // State (immutable - replaced on each update)
   let disposed = false;
-  const rawState = { ...options.state };
+  let currentState = { ...options.state } as TState;
+  let initialState: TState = currentState; // Same reference initially, updated after effects
 
   // ==========================================================================
   // AutoDispose RefCount Tracking
@@ -273,8 +271,36 @@ export function createStoreInstance<
       disposeEmitter.emit();
     },
 
-    get disposed() {
+    disposed() {
       return disposed;
+    },
+
+    dirty(prop?: keyof TState): boolean {
+      if (prop !== undefined) {
+        return currentState[prop] !== initialState[prop];
+      }
+      // Simple reference comparison - state is immutable
+      return currentState !== initialState;
+    },
+
+    reset() {
+      if (currentState === initialState) return; // Already at initial state
+
+      // Capture changed keys before reset
+      const changedKeys: Array<{ key: keyof TState; oldValue: unknown }> = [];
+      for (const key of Object.keys(initialState) as Array<keyof TState>) {
+        if (currentState[key] !== initialState[key]) {
+          changedKeys.push({ key, oldValue: currentState[key] });
+        }
+      }
+
+      // Reset to initial state (single assignment)
+      currentState = initialState;
+
+      // Trigger listeners for changed properties
+      for (const { key, oldValue } of changedKeys) {
+        handlePropertyChange(key as string, oldValue, initialState[key]);
+      }
     },
   };
 
@@ -299,25 +325,71 @@ export function createStoreInstance<
   };
 
   // ==========================================================================
-  // State Proxies
+  // State Proxies (immutable - create new state object on each write)
   // ==========================================================================
 
   // Mutable proxy for setup context (internal use)
-  const mutableState = createMutableStateProxy(
-    rawState,
-    storeId,
-    localResolver,
-    getEquality,
-    handlePropertyChange
-  );
+  const mutableState = new Proxy({} as TState, {
+    get(_, prop) {
+      if (typeof prop !== "string") return undefined;
+      const value = currentState[prop as keyof TState];
+      trackRead(storeId, prop, value, localResolver);
+      return value;
+    },
+    set(_, prop, value) {
+      if (typeof prop !== "string") return false;
+      const oldValue = currentState[prop as keyof TState];
+      trackWrite(storeId, prop, value, oldValue);
+      const equality = getEquality(prop);
+      if (equality(oldValue, value)) return true;
+      // Immutable update - create new state object
+      currentState = { ...currentState, [prop]: value };
+      handlePropertyChange(prop, oldValue, value);
+      return true;
+    },
+    has(_, prop) {
+      return prop in currentState;
+    },
+    ownKeys() {
+      return Reflect.ownKeys(currentState);
+    },
+    getOwnPropertyDescriptor(_, prop) {
+      if (typeof prop !== "string") return undefined;
+      const descriptor = Reflect.getOwnPropertyDescriptor(currentState, prop);
+      if (descriptor) {
+        return { ...descriptor, configurable: true, enumerable: true };
+      }
+      return undefined;
+    },
+  });
 
   // Readonly proxy for external access
-  const readonlyState = createReadonlyStateProxy(
-    rawState,
-    storeId,
-    localResolver,
-    getEquality
-  );
+  const readonlyState = new Proxy({} as TState, {
+    get(_, prop) {
+      if (typeof prop !== "string") return undefined;
+      const value = currentState[prop as keyof TState];
+      trackRead(storeId, prop, value, localResolver);
+      return value;
+    },
+    set(_, prop) {
+      console.warn(`Cannot set property "${String(prop)}" on readonly state`);
+      return false;
+    },
+    has(_, prop) {
+      return prop in currentState;
+    },
+    ownKeys() {
+      return Reflect.ownKeys(currentState);
+    },
+    getOwnPropertyDescriptor(_, prop) {
+      if (typeof prop !== "string") return undefined;
+      const descriptor = Reflect.getOwnPropertyDescriptor(currentState, prop);
+      if (descriptor) {
+        return { ...descriptor, configurable: true, enumerable: true };
+      }
+      return undefined;
+    },
+  });
 
   // ==========================================================================
   // Setup Context
@@ -329,7 +401,7 @@ export function createStoreInstance<
   // Current store's lifetime (default is keepAlive)
   const currentLifetime = options.lifetime ?? "keepAlive";
 
-  const setupContext: SetupContext<TState> = {
+  const setupContext: StoreContext<TState> = {
     state: mutableState,
 
     get<S extends StateBase, A extends ActionsBase>(
@@ -365,6 +437,58 @@ export function createStoreInstance<
       return [instance.state, instance.actions] as const;
     },
 
+    update(updaterOrPartial: ((draft: TState) => void) | Partial<TState>) {
+      let nextState = currentState;
+      if (typeof updaterOrPartial === "function") {
+        // Immer-style updater function
+        const updater = updaterOrPartial as (draft: TState) => void;
+        nextState = produce(currentState, updater);
+      } else {
+        nextState = produce(currentState, (draft) => {
+          Object.assign(draft, updaterOrPartial);
+        });
+      }
+
+      // Immer returns same reference if no changes
+      if (nextState === currentState) return;
+
+      // Check each changed prop with custom equality
+      // Build stable state: preserve references for "equal" props
+      const prevState = currentState;
+      const changedProps: Array<{
+        key: keyof TState;
+        oldValue: unknown;
+        newValue: unknown;
+      }> = [];
+      const stableState = { ...nextState };
+
+      for (const key of Object.keys(nextState) as Array<keyof TState>) {
+        if (prevState[key] !== nextState[key]) {
+          const equality = getEquality(key as string);
+          if (equality(prevState[key], nextState[key])) {
+            // Equal by custom equality - preserve original reference for stability
+            stableState[key] = prevState[key];
+          } else {
+            // Actually changed
+            changedProps.push({
+              key,
+              oldValue: prevState[key],
+              newValue: nextState[key],
+            });
+          }
+        }
+      }
+
+      // Only update if there are actual changes after equality checks
+      if (changedProps.length > 0) {
+        currentState = stableState;
+        // Trigger listeners for changed properties
+        for (const { key, oldValue, newValue } of changedProps) {
+          handlePropertyChange(key as string, oldValue, newValue);
+        }
+      }
+    },
+
     effect(fn: EffectFn, options?: EffectOptions) {
       // Prevent effect() calls outside setup phase
       if (!isSetupPhase) {
@@ -392,6 +516,14 @@ export function createStoreInstance<
     },
 
     untrack: untrackFn,
+
+    dirty(prop?: keyof TState): boolean {
+      return instance.dirty(prop as any);
+    },
+
+    reset() {
+      instance.reset();
+    },
   };
 
   // ==========================================================================
@@ -431,6 +563,10 @@ export function createStoreInstance<
     const dispose = runEffect();
     effectDisposers.push(dispose);
   }
+
+  // Capture initial state - dirty tracking starts now
+  // After this, any write creates a new currentState object
+  initialState = currentState;
 
   // ==========================================================================
   // Wrap Actions and assign to instance

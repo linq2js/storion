@@ -170,15 +170,16 @@ describe("effects", () => {
     expect(instance.state.doubled).toBe(2);
   });
 
-  it("should support cleanup functions", () => {
+  it("should support cleanup via onCleanup", () => {
     const cleanup = vi.fn();
 
     const counter = store({
       state: { count: 0 },
       setup: ({ state, effect }) => {
-        effect(() => {
-          const _ = state.count;
-          return cleanup;
+        effect((ctx) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+          state.count; // Track dependency
+          ctx.onCleanup(cleanup);
         });
 
         return {
@@ -207,7 +208,9 @@ describe("effects", () => {
     const counter = store({
       state: { count: 0 },
       setup: ({ effect }) => {
-        effect(() => cleanup);
+        effect((ctx) => {
+          ctx.onCleanup(cleanup);
+        });
         return {};
       },
     });
@@ -221,24 +224,35 @@ describe("effects", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("should detect self-reference and throw with failFast", () => {
+  it("should allow self-reference (read + write same prop)", () => {
+    // Pattern: state.count += state.by
+    // Effect reads count and by, writes count
+    // Should NOT cause infinite loop - only subscribes to non-written props
     const counter = store({
-      state: { count: 0 },
+      state: { count: 0, by: 5 },
       setup: ({ state, effect }) => {
-        // Use failFast to ensure error throws
-        effect(
-          () => {
-            state.count = state.count + 1;
+        effect(() => {
+          // Read count and by, write count
+          state.count = state.count + state.by;
+        });
+        return {
+          setBy: (value: number) => {
+            state.by = value;
           },
-          { onError: "failFast" }
-        );
-        return {};
+        };
       },
     });
 
     const stores = container();
+    const instance = stores.get(counter);
 
-    expect(() => stores.get(counter)).toThrow(/self-reference/i);
+    // Initial effect runs: count = 0 + 5 = 5
+    expect(instance.state.count).toBe(5);
+
+    // Change `by` triggers effect (count is NOT subscribed due to writtenProps)
+    instance.actions.setBy(10);
+    // Effect runs: count = 5 + 10 = 15
+    expect(instance.state.count).toBe(15);
   });
 
   it("should keep effect alive on error with keepAlive (default)", () => {
@@ -775,5 +789,699 @@ describe("disposal", () => {
     stores.dispose(counter);
 
     expect(() => instance.actions.increment()).toThrow(/disposed/i);
+  });
+});
+
+describe("StoreContext.update()", () => {
+  it("should update state with Immer-style updater function", () => {
+    const todoStore = store({
+      state: {
+        todos: [] as Array<{ id: number; text: string; done: boolean }>,
+        nextId: 1,
+      },
+      setup: ({ update }) => ({
+        addTodo: (text: string) => {
+          update((draft) => {
+            draft.todos.push({ id: draft.nextId, text, done: false });
+            draft.nextId++;
+          });
+        },
+        toggleTodo: (id: number) => {
+          update((draft) => {
+            const todo = draft.todos.find((t) => t.id === id);
+            if (todo) {
+              todo.done = !todo.done;
+            }
+          });
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(todoStore);
+
+    instance.actions.addTodo("Learn Storion");
+    expect(instance.state.todos).toHaveLength(1);
+    expect(instance.state.todos[0]).toEqual({
+      id: 1,
+      text: "Learn Storion",
+      done: false,
+    });
+    expect(instance.state.nextId).toBe(2);
+
+    instance.actions.toggleTodo(1);
+    expect(instance.state.todos[0].done).toBe(true);
+  });
+
+  it("should update state with partial object", () => {
+    const userStore = store({
+      state: {
+        name: "John",
+        age: 25,
+        email: "john@example.com",
+      },
+      setup: ({ update }) => ({
+        updateProfile: (partial: { name?: string; age?: number }) => {
+          update(partial);
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(userStore);
+
+    instance.actions.updateProfile({ name: "Jane", age: 30 });
+    expect(instance.state.name).toBe("Jane");
+    expect(instance.state.age).toBe(30);
+    expect(instance.state.email).toBe("john@example.com");
+  });
+
+  it("should trigger reactivity when using update() with Immer", () => {
+    const listener = vi.fn();
+
+    const counter = store({
+      state: { count: 0, multiplier: 2 },
+      setup: ({ update, effect }) => {
+        effect(() => {
+          listener(counter);
+        });
+        return {
+          increment: () => {
+            update((draft) => {
+              draft.count++;
+            });
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    listener.mockClear(); // Clear initial effect call
+
+    instance.actions.increment();
+    expect(instance.state.count).toBe(1);
+    // Effect should not be called since it didn't track count
+  });
+
+  it("should trigger reactivity when using update() with partial", () => {
+    const listener = vi.fn();
+
+    const counter = store({
+      state: { count: 0 },
+      setup: ({ state, update, effect }) => {
+        effect(() => {
+          listener(state.count);
+        });
+        return {
+          setCount: (value: number) => {
+            update({ count: value });
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    listener.mockClear(); // Clear initial effect call
+
+    instance.actions.setCount(10);
+    expect(instance.state.count).toBe(10);
+    expect(listener).toHaveBeenCalledWith(10);
+  });
+
+  it("should not trigger reactivity when value is same (Immer)", () => {
+    const listener = vi.fn();
+
+    const counter = store({
+      state: { count: 5 },
+      setup: ({ state, update, effect }) => {
+        effect(() => {
+          listener(state.count);
+        });
+        return {
+          tryUpdate: () => {
+            update((draft) => {
+              // No actual change
+              draft.count = 5;
+            });
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    listener.mockClear();
+
+    instance.actions.tryUpdate();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("should work with nested object updates (Immer)", () => {
+    const appStore = store({
+      state: {
+        user: {
+          profile: {
+            name: "John",
+            settings: {
+              theme: "light" as "light" | "dark",
+              notifications: true,
+            },
+          },
+        },
+      },
+      setup: ({ update }) => ({
+        toggleTheme: () => {
+          update((draft) => {
+            draft.user.profile.settings.theme =
+              draft.user.profile.settings.theme === "light" ? "dark" : "light";
+          });
+        },
+        disableNotifications: () => {
+          update((draft) => {
+            draft.user.profile.settings.notifications = false;
+          });
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(appStore);
+
+    expect(instance.state.user.profile.settings.theme).toBe("light");
+
+    instance.actions.toggleTheme();
+    expect(instance.state.user.profile.settings.theme).toBe("dark");
+
+    instance.actions.disableNotifications();
+    expect(instance.state.user.profile.settings.notifications).toBe(false);
+  });
+
+  it("should work with array mutations (Immer)", () => {
+    const listStore = store({
+      state: {
+        items: [1, 2, 3],
+      },
+      setup: ({ update }) => ({
+        push: (item: number) => {
+          update((draft) => {
+            draft.items.push(item);
+          });
+        },
+        pop: () => {
+          update((draft) => {
+            draft.items.pop();
+          });
+        },
+        splice: (start: number, count: number) => {
+          update((draft) => {
+            draft.items.splice(start, count);
+          });
+        },
+        reverse: () => {
+          update((draft) => {
+            draft.items.reverse();
+          });
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(listStore);
+
+    instance.actions.push(4);
+    expect(instance.state.items).toEqual([1, 2, 3, 4]);
+
+    instance.actions.pop();
+    expect(instance.state.items).toEqual([1, 2, 3]);
+
+    instance.actions.splice(1, 1);
+    expect(instance.state.items).toEqual([1, 3]);
+
+    instance.actions.reverse();
+    expect(instance.state.items).toEqual([3, 1]);
+  });
+
+  it("should preserve reference for deep-equal props", () => {
+    const profileListener = vi.fn();
+    const ageListener = vi.fn();
+
+    const userStore = store({
+      state: {
+        profile: { name: "John", email: "john@test.com" },
+        age: 25,
+      },
+      setup: ({ config, update }) => {
+        config("profile", { equality: "deep" });
+        return {
+          updateBoth: () => {
+            update((draft) => {
+              // Change age
+              draft.age = 26;
+              // "Change" profile but with same values (deep-equal)
+              draft.profile = { name: "John", email: "john@test.com" };
+            });
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(userStore);
+
+    // Capture original profile reference
+    const originalProfile = instance.state.profile;
+
+    instance.subscribe("profile", profileListener);
+    instance.subscribe("age", ageListener);
+
+    instance.actions.updateBoth();
+
+    // Age should change and trigger listener
+    expect(instance.state.age).toBe(26);
+    expect(ageListener).toHaveBeenCalledWith({ next: 26, prev: 25 });
+
+    // Profile should keep original reference (deep-equal)
+    expect(instance.state.profile).toBe(originalProfile);
+    expect(profileListener).not.toHaveBeenCalled();
+  });
+
+  it("should not update state if all props are equal after custom equality", () => {
+    const listener = vi.fn();
+
+    const appStore = store({
+      state: {
+        data: { items: [1, 2, 3] },
+      },
+      setup: ({ config, update }) => {
+        config("data", { equality: "deep" });
+        return {
+          tryUpdate: () => {
+            update((draft) => {
+              // Same data, should not trigger update
+              draft.data = { items: [1, 2, 3] };
+            });
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(appStore);
+
+    const originalData = instance.state.data;
+    instance.subscribe(listener);
+
+    instance.actions.tryUpdate();
+
+    // Reference should be preserved
+    expect(instance.state.data).toBe(originalData);
+    // No change notification
+    expect(listener).not.toHaveBeenCalled();
+    // Not dirty
+    expect(instance.dirty()).toBe(false);
+  });
+
+  it("should preserve reference with proxy write and deep equality", () => {
+    const profileListener = vi.fn();
+
+    const userStore = store({
+      state: {
+        profile: { name: "John", email: "john@test.com" },
+      },
+      setup: ({ state, config }) => {
+        config("profile", { equality: "deep" });
+        return {
+          setProfile: (newProfile: { name: string; email: string }) => {
+            // Direct proxy write
+            state.profile = newProfile;
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(userStore);
+
+    const originalProfile = instance.state.profile;
+    instance.subscribe("profile", profileListener);
+
+    // Set to deep-equal value via proxy write
+    instance.actions.setProfile({ name: "John", email: "john@test.com" });
+
+    // Should NOT create new state, should NOT notify
+    expect(instance.state.profile).toBe(originalProfile);
+    expect(profileListener).not.toHaveBeenCalled();
+    expect(instance.dirty()).toBe(false);
+  });
+
+  it("should trigger update only for actually changed props with mixed equality", () => {
+    const nameListener = vi.fn();
+    const settingsListener = vi.fn();
+    const countListener = vi.fn();
+
+    const appStore = store({
+      state: {
+        name: "App",
+        settings: { theme: "dark", lang: "en" },
+        count: 0,
+      },
+      setup: ({ config, update }) => {
+        config("settings", { equality: "deep" });
+        return {
+          complexUpdate: () => {
+            update((draft) => {
+              draft.name = "NewApp"; // Actually changes
+              draft.settings = { theme: "dark", lang: "en" }; // Deep-equal, no change
+              draft.count = 5; // Actually changes
+            });
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(appStore);
+
+    const originalSettings = instance.state.settings;
+
+    instance.subscribe("name", nameListener);
+    instance.subscribe("settings", settingsListener);
+    instance.subscribe("count", countListener);
+
+    instance.actions.complexUpdate();
+
+    // name changed
+    expect(instance.state.name).toBe("NewApp");
+    expect(nameListener).toHaveBeenCalledWith({ next: "NewApp", prev: "App" });
+
+    // settings preserved (deep-equal)
+    expect(instance.state.settings).toBe(originalSettings);
+    expect(settingsListener).not.toHaveBeenCalled();
+
+    // count changed
+    expect(instance.state.count).toBe(5);
+    expect(countListener).toHaveBeenCalledWith({ next: 5, prev: 0 });
+  });
+});
+
+describe("dirty()", () => {
+  it("should return false when no changes made", () => {
+    const counter = store({
+      state: { count: 0, name: "test" },
+      setup: ({ state }) => ({
+        increment: () => {
+          state.count++;
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    expect(instance.dirty()).toBe(false);
+    expect(instance.dirty("count")).toBe(false);
+    expect(instance.dirty("name")).toBe(false);
+  });
+
+  it("should return true after property changed", () => {
+    const counter = store({
+      state: { count: 0, name: "test" },
+      setup: ({ state }) => ({
+        increment: () => {
+          state.count++;
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    instance.actions.increment();
+
+    expect(instance.dirty()).toBe(true);
+    expect(instance.dirty("count")).toBe(true);
+    expect(instance.dirty("name")).toBe(false);
+  });
+
+  it("should not track changes during setup/effects as dirty", () => {
+    const counter = store({
+      state: { count: 0, doubled: 0 },
+      setup: ({ state, effect }) => {
+        effect(() => {
+          state.doubled = state.count * 2;
+        });
+        return {
+          increment: () => {
+            state.count++;
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    // Effect ran during init, but shouldn't mark as dirty
+    expect(instance.dirty()).toBe(false);
+    expect(instance.dirty("doubled")).toBe(false);
+
+    // Now action should mark as dirty
+    instance.actions.increment();
+    expect(instance.dirty()).toBe(true);
+    expect(instance.dirty("count")).toBe(true);
+    expect(instance.dirty("doubled")).toBe(true); // Effect updated doubled
+  });
+
+  it("should track multiple property changes", () => {
+    const user = store({
+      state: { name: "John", age: 25, email: "john@test.com" },
+      setup: ({ state }) => ({
+        updateName: (name: string) => {
+          state.name = name;
+        },
+        updateAge: (age: number) => {
+          state.age = age;
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(user);
+
+    instance.actions.updateName("Jane");
+    expect(instance.dirty("name")).toBe(true);
+    expect(instance.dirty("age")).toBe(false);
+    expect(instance.dirty("email")).toBe(false);
+
+    instance.actions.updateAge(30);
+    expect(instance.dirty("name")).toBe(true);
+    expect(instance.dirty("age")).toBe(true);
+    expect(instance.dirty("email")).toBe(false);
+  });
+});
+
+describe("disposed()", () => {
+  it("should return false when not disposed", () => {
+    const counter = store({
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    expect(instance.disposed()).toBe(false);
+  });
+
+  it("should return true after dispose", () => {
+    const counter = store({
+      state: { count: 0 },
+      setup: () => ({}),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    instance.dispose();
+
+    expect(instance.disposed()).toBe(true);
+  });
+});
+
+describe("reset()", () => {
+  it("should reset state to initial values", () => {
+    const counter = store({
+      state: { count: 0, name: "initial" },
+      setup: ({ state }) => ({
+        increment: () => {
+          state.count++;
+        },
+        setName: (name: string) => {
+          state.name = name;
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    instance.actions.increment();
+    instance.actions.increment();
+    instance.actions.setName("changed");
+
+    expect(instance.state.count).toBe(2);
+    expect(instance.state.name).toBe("changed");
+    expect(instance.dirty()).toBe(true);
+
+    instance.reset();
+
+    expect(instance.state.count).toBe(0);
+    expect(instance.state.name).toBe("initial");
+    expect(instance.dirty()).toBe(false);
+  });
+
+  it("should trigger listeners for changed properties", () => {
+    const listener = vi.fn();
+
+    const counter = store({
+      state: { count: 0 },
+      setup: ({ state }) => ({
+        increment: () => {
+          state.count++;
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    instance.actions.increment();
+    instance.subscribe("count", listener);
+
+    listener.mockClear();
+    instance.reset();
+
+    expect(listener).toHaveBeenCalledWith({ next: 0, prev: 1 });
+  });
+
+  it("should not trigger listeners for unchanged properties", () => {
+    const countListener = vi.fn();
+    const nameListener = vi.fn();
+
+    const counter = store({
+      state: { count: 0, name: "test" },
+      setup: ({ state }) => ({
+        increment: () => {
+          state.count++;
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    instance.actions.increment(); // Only count changes
+    instance.subscribe("count", countListener);
+    instance.subscribe("name", nameListener);
+
+    countListener.mockClear();
+    nameListener.mockClear();
+    instance.reset();
+
+    expect(countListener).toHaveBeenCalledTimes(1);
+    expect(nameListener).not.toHaveBeenCalled();
+  });
+
+  it("should reset state including effect-modified values", () => {
+    const counter = store({
+      state: { count: 0, doubled: 0 },
+      setup: ({ state, effect }) => {
+        effect(() => {
+          state.doubled = state.count * 2;
+        });
+        return {
+          increment: () => {
+            state.count++;
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    // Initial state after effect: { count: 0, doubled: 0 }
+    expect(instance.state.doubled).toBe(0);
+
+    instance.actions.increment();
+    expect(instance.state.count).toBe(1);
+    expect(instance.state.doubled).toBe(2);
+
+    instance.reset();
+
+    expect(instance.state.count).toBe(0);
+    expect(instance.state.doubled).toBe(0);
+    expect(instance.dirty()).toBe(false);
+  });
+
+  it("should be callable from StoreContext in actions", () => {
+    const counter = store({
+      state: { count: 0 },
+      setup: ({ state, reset }) => ({
+        increment: () => {
+          state.count++;
+        },
+        resetState: () => {
+          reset();
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    instance.actions.increment();
+    instance.actions.increment();
+    expect(instance.state.count).toBe(2);
+
+    instance.actions.resetState();
+    expect(instance.state.count).toBe(0);
+  });
+
+  it("should allow dirty() check from StoreContext", () => {
+    let isDirtyFromAction = false;
+
+    const counter = store({
+      state: { count: 0 },
+      setup: ({ state, dirty }) => ({
+        increment: () => {
+          state.count++;
+        },
+        checkDirty: () => {
+          isDirtyFromAction = dirty();
+        },
+        checkDirtyCount: () => {
+          isDirtyFromAction = dirty("count");
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    instance.actions.checkDirty();
+    expect(isDirtyFromAction).toBe(false);
+
+    instance.actions.increment();
+    instance.actions.checkDirty();
+    expect(isDirtyFromAction).toBe(true);
+
+    instance.actions.checkDirtyCount();
+    expect(isDirtyFromAction).toBe(true);
   });
 });

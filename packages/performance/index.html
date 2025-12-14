@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Storion Performance Benchmarks</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg-primary: #0d1117;
+        --bg-secondary: #161b22;
+        --bg-tertiary: #21262d;
+        --text-primary: #e6edf3;
+        --text-secondary: #8b949e;
+        --accent-green: #3fb950;
+        --accent-blue: #58a6ff;
+        --accent-orange: #d29922;
+        --accent-red: #f85149;
+        --accent-purple: #a371f7;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+
+      h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .subtitle {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+      }
+
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+
+      button {
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        padding: 0.75rem 2rem;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      button.primary {
+        background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+        color: white;
+      }
+
+      button.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(88, 166, 255, 0.3);
+      }
+
+      button.primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .status {
+        text-align: center;
+        color: var(--text-secondary);
+        margin-bottom: 2rem;
+        font-family: 'JetBrains Mono', monospace;
+        min-height: 1.5rem;
+      }
+
+      .results {
+        display: grid;
+        gap: 1.5rem;
+      }
+
+      .benchmark-card {
+        background: var(--bg-secondary);
+        border-radius: 12px;
+        padding: 1.5rem;
+        border: 1px solid var(--bg-tertiary);
+      }
+
+      .benchmark-card h2 {
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .benchmark-card h2::before {
+        content: '📊';
+      }
+
+      .benchmark-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+      }
+
+      .benchmark-table th {
+        text-align: left;
+        padding: 0.75rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+        border-bottom: 1px solid var(--bg-tertiary);
+      }
+
+      .benchmark-table td {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--bg-tertiary);
+      }
+
+      .benchmark-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .library-name {
+        font-weight: 600;
+      }
+
+      .library-storion { color: var(--accent-purple); }
+      .library-zustand { color: var(--accent-blue); }
+      .library-redux { color: var(--accent-orange); }
+      .library-rxjs { color: var(--accent-red); }
+
+      .ops-value {
+        font-weight: 600;
+        color: var(--accent-green);
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .badge-fastest {
+        background: rgba(63, 185, 80, 0.2);
+        color: var(--accent-green);
+      }
+
+      .badge-slower {
+        background: rgba(139, 148, 158, 0.2);
+        color: var(--text-secondary);
+      }
+
+      .loading {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--bg-tertiary);
+        border-top-color: var(--accent-blue);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-right: 0.5rem;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: var(--bg-tertiary);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 2rem;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+        transition: width 0.3s ease;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>⚡ Storion Benchmarks</h1>
+        <p class="subtitle">Performance comparison: Storion vs Zustand vs Redux vs RxJS</p>
+      </header>
+
+      <div class="controls">
+        <button id="runBtn" class="primary">Run Benchmarks</button>
+      </div>
+
+      <div class="progress-bar" style="display: none;">
+        <div class="progress-bar-fill" style="width: 0%"></div>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <div class="results" id="results"></div>
+    </div>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

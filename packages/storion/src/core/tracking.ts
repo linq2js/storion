@@ -14,6 +14,7 @@ export type {
   EffectErrorStrategy,
   EffectOptions,
   RunEffectOptions,
+  EffectContext,
   EffectFn,
 } from "./effect";
 export { effect } from "./effect";
@@ -194,7 +195,7 @@ export function trackWrite(
  * Use this to read state without creating dependencies.
  *
  * @example
- * effect(() => {
+ * effect((ctx) => {
  *   const tracked = state.count;        // Creates dependency
  *   const ignored = untrack(() => state.name);  // No dependency
  * });

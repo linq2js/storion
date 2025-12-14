@@ -177,8 +177,8 @@ describe("container.clear()", () => {
       name: "store1",
       state: { value: 1 },
       setup: ({ effect }) => {
-        effect(() => {
-          return () => disposeOrder.push("store1");
+        effect((ctx) => {
+          ctx.onCleanup(() => disposeOrder.push("store1"));
         });
         return {};
       },
@@ -188,8 +188,8 @@ describe("container.clear()", () => {
       name: "store2",
       state: { value: 2 },
       setup: ({ effect }) => {
-        effect(() => {
-          return () => disposeOrder.push("store2");
+        effect((ctx) => {
+          ctx.onCleanup(() => disposeOrder.push("store2"));
         });
         return {};
       },
@@ -199,8 +199,8 @@ describe("container.clear()", () => {
       name: "store3",
       state: { value: 3 },
       setup: ({ effect }) => {
-        effect(() => {
-          return () => disposeOrder.push("store3");
+        effect((ctx) => {
+          ctx.onCleanup(() => disposeOrder.push("store3"));
         });
         return {};
       },

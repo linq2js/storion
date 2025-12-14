@@ -59,18 +59,19 @@
     }
   },
   "dependencies": {
+    "immer": "^11.0.1",
     "lodash": "^4.17.21"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
+    "@types/lodash": "^4.17.21",
     "@types/node": "^22.10.1",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.45",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^1.1.0",
     "@vitest/ui": "^1.1.0",
-    "@types/lodash": "^4.17.21",
     "jsdom": "^22.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

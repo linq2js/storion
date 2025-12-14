@@ -80,7 +80,7 @@ export function createStateProxy<T extends Record<string, unknown>>(
 
       const oldValue = target[prop as keyof T];
 
-      // Track write for self-reference detection
+      // Track write for devtools and to skip subscribing to written props
       trackWrite(storeId, prop, value, oldValue);
 
       const equality = getEquality(prop);

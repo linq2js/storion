@@ -106,7 +106,7 @@ export interface PropertyConfig<T> {
 /**
  * Context provided to the setup() function.
  */
-export interface SetupContext<TState extends StateBase> {
+export interface StoreContext<TState extends StateBase> {
   /**
    * Mutable reactive state proxy.
    * Writes trigger subscriber notifications.
@@ -127,17 +127,54 @@ export interface SetupContext<TState extends StateBase> {
   ): readonly [Readonly<S>, A];
 
   /**
+   * Update state using Immer-style updater function.
+   *
+   * @example
+   * update(draft => {
+   *   draft.items.push({ id: 1, name: 'New Item' });
+   *   draft.count++;
+   * });
+   */
+  update(updater: (draft: TState) => void): void;
+
+  /**
+   * Update state with partial object (shallow merge).
+   *
+   * @example
+   * update({ count: 10, name: 'Updated' });
+   */
+  update(partial: Partial<TState>): void;
+
+  /**
    * Define a reactive effect.
    * - Runs immediately (sync) during setup
    * - Re-runs when tracked dependencies change
-   * - Can return cleanup function
+   * - Use EffectContext for cleanup, signals, and safe async
    *
-   * @param fn - Effect function
+   * @param fn - Effect function that receives EffectContext
    * @param options - Effect options (error handling, etc.)
+   *
+   * @example
+   * effect((ctx) => {
+   *   const sub = subscribe();
+   *   ctx.onCleanup(() => sub.unsubscribe());
+   * });
+   *
+   * @example
+   * // Safe async operations
+   * effect((ctx) => {
+   *   ctx.safe(fetchData()).then(data => { state.data = data });
+   * });
+   *
+   * @example
+   * // Abort signal for fetch
+   * effect((ctx) => {
+   *   fetch('/api', { signal: ctx.signal });
+   * });
    */
   effect(
-    fn: () => void | VoidFunction,
-    options?: import("./core/tracking").EffectOptions
+    fn: (ctx: import("./core/effect").EffectContext) => void,
+    options?: import("./core/effect").EffectOptions
   ): void;
 
   /**
@@ -152,7 +189,31 @@ export interface SetupContext<TState extends StateBase> {
    * Execute function without tracking dependencies.
    */
   untrack<T>(fn: () => T): T;
+
+  /**
+   * Check if state has been modified since setup completed.
+   *
+   * @overload Check if any property is dirty
+   * @returns true if any state property differs from initial value
+   *
+   * @overload Check if specific property is dirty
+   * @param prop - Property key to check
+   * @returns true if the property differs from initial value
+   */
+  dirty(): boolean;
+  dirty<K extends keyof TState>(prop: K): boolean;
+
+  /**
+   * Reset state to initial values (captured after setup/effects).
+   * Triggers change notifications for all modified properties.
+   */
+  reset(): void;
 }
+
+/**
+ * @deprecated Use StoreContext instead
+ */
+export type SetupContext<TState extends StateBase> = StoreContext<TState>;
 
 // =============================================================================
 // Store Options
@@ -172,7 +233,7 @@ export interface StoreOptions<
   state: TState;
 
   /** Setup function - runs once when store is created */
-  setup: (context: SetupContext<TState>) => TActions;
+  setup: (context: StoreContext<TState>) => TActions;
 
   /** Default equality strategy for all properties */
   equality?: Equality;
@@ -237,7 +298,26 @@ export interface StoreInstance<
   dispose(): void;
 
   /** Whether the instance is disposed */
-  readonly disposed: boolean;
+  disposed(): boolean;
+
+  /**
+   * Check if state has been modified since setup completed.
+   *
+   * @overload Check if any property is dirty
+   * @returns true if any state property differs from initial value
+   *
+   * @overload Check if specific property is dirty
+   * @param prop - Property key to check
+   * @returns true if the property differs from initial value
+   */
+  dirty(): boolean;
+  dirty<K extends keyof TState>(prop: K): boolean;
+
+  /**
+   * Reset state to initial values (captured after setup/effects).
+   * Triggers change notifications for all modified properties.
+   */
+  reset(): void;
 
   /**
    * @internal Internal subscription for effects - doesn't affect refCount.

@@ -14,6 +14,7 @@ export type {
   DispatchEvent,
   StoreSpec,
   PropertyConfig,
+  StoreContext,
   SetupContext,
   StoreOptions,
   StoreResolver,
@@ -33,6 +34,7 @@ export { batch, untrack } from "./core/tracking";
 export {
   effect,
   type EffectFn,
+  type EffectContext,
   type EffectOptions,
   type EffectErrorStrategy,
   type EffectErrorContext,

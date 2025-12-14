@@ -81,6 +81,17 @@ export function useStore<T extends object>(
     () => selector(selectorContext)
   );
 
+  // Prevent async selectors - they cause tracking issues
+  if (
+    result &&
+    typeof (result as unknown as PromiseLike<unknown>).then === "function"
+  ) {
+    throw new Error(
+      "useStore selector must be synchronous. " +
+        "Do not return a Promise from the selector function."
+    );
+  }
+
   // Build output with stable functions (preserve array vs object)
   const output = (Array.isArray(result) ? [] : {}) as StableResult<T>;
 
