@@ -221,13 +221,17 @@ describe("effects", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("should detect self-reference and throw", () => {
+  it("should detect self-reference and throw with failFast", () => {
     const counter = store({
       state: { count: 0 },
       setup: ({ state, effect }) => {
-        effect(() => {
-          state.count = state.count + 1;
-        });
+        // Use failFast to ensure error throws
+        effect(
+          () => {
+            state.count = state.count + 1;
+          },
+          { onError: "failFast" }
+        );
         return {};
       },
     });
@@ -235,6 +239,48 @@ describe("effects", () => {
     const stores = container();
 
     expect(() => stores.get(counter)).toThrow(/self-reference/i);
+  });
+
+  it("should keep effect alive on error with keepAlive (default)", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let runCount = 0;
+
+    const counter = store({
+      state: { count: 0, trigger: 0 },
+      setup: ({ state, effect }) => {
+        effect(() => {
+          runCount++;
+          // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+          state.trigger; // track trigger
+          if (runCount === 1) {
+            throw new Error("First run fails");
+          }
+          state.count = 10;
+        });
+        return {
+          bumpTrigger: () => {
+            state.trigger++;
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(counter);
+
+    // First run throws, but effect stays alive due to keepAlive default
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Effect error (keepAlive):",
+      expect.any(Error)
+    );
+    expect(runCount).toBe(1);
+
+    // Trigger re-run - should succeed now
+    instance.actions.bumpTrigger();
+    expect(runCount).toBe(2);
+    expect(instance.state.count).toBe(10);
+
+    errorSpy.mockRestore();
   });
 
   it("should throw when effect() is called in action", () => {

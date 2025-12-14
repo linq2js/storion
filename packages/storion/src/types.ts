@@ -131,8 +131,14 @@ export interface SetupContext<TState extends StateBase> {
    * - Runs immediately (sync) during setup
    * - Re-runs when tracked dependencies change
    * - Can return cleanup function
+   *
+   * @param fn - Effect function
+   * @param options - Effect options (error handling, etc.)
    */
-  effect(fn: () => void | VoidFunction): void;
+  effect(
+    fn: () => void | VoidFunction,
+    options?: import("./core/tracking").EffectOptions
+  ): void;
 
   /**
    * Configure a specific state property.
@@ -232,6 +238,16 @@ export interface StoreInstance<
 
   /** Whether the instance is disposed */
   readonly disposed: boolean;
+
+  /**
+   * @internal Internal subscription for effects - doesn't affect refCount.
+   * Used by the effect system to track dependencies without preventing
+   * autoDispose from working.
+   */
+  _subscribeInternal?<K extends keyof TState>(
+    propKey: K,
+    listener: () => void
+  ): VoidFunction;
 }
 
 // =============================================================================

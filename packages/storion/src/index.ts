@@ -29,3 +29,12 @@ export type {
 export { store } from "./core/store";
 export { container } from "./core/container";
 export { batch, untrack } from "./core/tracking";
+
+export {
+  effect,
+  type EffectFn,
+  type EffectOptions,
+  type EffectErrorStrategy,
+  type EffectErrorContext,
+  type EffectRetryConfig,
+} from "./core/effect";

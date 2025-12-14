@@ -7,6 +7,17 @@
 
 import type { StoreResolver } from "../types";
 
+// Re-export effect types and function
+export type {
+  EffectRetryConfig,
+  EffectErrorContext,
+  EffectErrorStrategy,
+  EffectOptions,
+  RunEffectOptions,
+  EffectFn,
+} from "./effect";
+export { effect } from "./effect";
+
 // =============================================================================
 // Hooks
 // =============================================================================
@@ -56,7 +67,9 @@ export interface Hooks {
    * Schedule a function to run an effect.
    * @param runEffect - Function to run effect and return dispose effect function
    */
-  scheduleEffect(runEffect: () => VoidFunction): void;
+  scheduleEffect(
+    runEffect: (options?: import("./effect").RunEffectOptions) => VoidFunction
+  ): void;
 }
 
 let globalHooks: Hooks = {

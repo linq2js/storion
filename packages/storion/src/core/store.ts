@@ -20,99 +20,13 @@ import {
   withHooks,
   untrack as untrackFn,
   scheduleNotification,
+  effect as createEffect,
+  type EffectFn,
+  type EffectOptions,
 } from "./tracking";
 import { resolveEquality } from "./equality";
 
-// =============================================================================
-// Effect Types (local to store)
-// =============================================================================
-
-/**
- * Represents a reactive effect.
- */
-interface Effect {
-  /** The effect function */
-  fn: () => void | VoidFunction;
-
-  /** Cleanup function from previous run */
-  cleanup: VoidFunction | null;
-
-  /** Dependencies tracked during last run: "storeId.propKey" */
-  dependencies: Set<string>;
-
-  /** Properties written during this effect run */
-  writtenProps: Set<string>;
-}
-
-/**
- * Create a new effect.
- */
-function createEffect(fn: () => void | VoidFunction): Effect {
-  return {
-    fn,
-    cleanup: null,
-    dependencies: new Set(),
-    writtenProps: new Set(),
-  };
-}
-
-/**
- * Run an effect, tracking its dependencies via hooks.
- */
-function runEffect(effect: Effect): void {
-  // 1. Run cleanup from previous execution
-  if (effect.cleanup) {
-    effect.cleanup();
-    effect.cleanup = null;
-  }
-
-  // 2. Clear old dependencies and written props
-  effect.dependencies.clear();
-  effect.writtenProps.clear();
-
-  // 3. Run effect with hooks to track dependencies
-  withHooks(
-    {
-      onRead: ({ storeId, prop }) => {
-        effect.dependencies.add(`${storeId}.${prop}`);
-      },
-      onWrite: ({ storeId, prop }) => {
-        const depKey = `${storeId}.${prop}`;
-
-        // Check for self-reference: reading AND writing same property
-        if (effect.dependencies.has(depKey)) {
-          throw new Error(
-            `Self-reference detected: Effect reads and writes "${prop}". ` +
-              `This would cause an infinite loop.`
-          );
-        }
-
-        effect.writtenProps.add(depKey);
-      },
-    },
-    () => {
-      // 4. Run effect (tracking happens via hooks)
-      const cleanup = effect.fn();
-
-      // 5. Store cleanup function
-      if (typeof cleanup === "function") {
-        effect.cleanup = cleanup;
-      }
-    }
-  );
-}
-
-/**
- * Dispose an effect (run cleanup).
- */
-function disposeEffect(effect: Effect): void {
-  if (effect.cleanup) {
-    effect.cleanup();
-    effect.cleanup = null;
-  }
-  effect.dependencies.clear();
-  effect.writtenProps.clear();
-}
+// Effect types are now in tracking.ts
 
 import {
   generateStoreId,
@@ -237,10 +151,8 @@ export function createStoreInstance<
     return em;
   };
 
-  // Effects
-  const effects: Effect[] = [];
-  const propertyEffects = new Map<string, Set<Effect>>();
-  const runningEffects = new Set<Effect>(); // Track currently running effects
+  // Effect dispose functions (collected via scheduleEffect hook)
+  const effectDisposers: VoidFunction[] = [];
 
   // Property equality
   const propertyEquality = new Map<
@@ -264,29 +176,8 @@ export function createStoreInstance<
     oldValue: unknown,
     newValue: unknown
   ): void {
-    // Notify property-specific effects
-    const propEffects = propertyEffects.get(key);
-    if (propEffects) {
-      // Snapshot the effects to avoid issues with modifying set during iteration
-      const effectsToRun = [...propEffects];
-
-      for (const effect of effectsToRun) {
-        // Skip effects that are currently running (prevent infinite recursion)
-        if (runningEffects.has(effect)) {
-          continue;
-        }
-
-        runningEffects.add(effect);
-        try {
-          runEffect(effect);
-          registerEffectDependencies(effect);
-        } finally {
-          runningEffects.delete(effect);
-        }
-      }
-    }
-
     // Notify property subscribers (using emitter)
+    // Effects subscribe via this mechanism through the hooks system
     const propEmitter = propertyEmitters.get(key as keyof TState);
     if (propEmitter) {
       propEmitter.emit({ newValue, oldValue });
@@ -299,6 +190,115 @@ export function createStoreInstance<
   }
 
   // ==========================================================================
+  // Instance (created early so effects can subscribe)
+  // ==========================================================================
+
+  // We need to create the instance structure early so that effects can
+  // subscribe via resolver.get(storeId). We'll fill in actions later.
+  let instanceActions: TActions = {} as TActions;
+
+  const instance: StoreInstance<TState, TActions> = {
+    id: storeId,
+
+    get state() {
+      return readonlyState as Readonly<TState>;
+    },
+
+    get actions() {
+      return instanceActions;
+    },
+
+    onDispose: disposeEmitter.on,
+
+    subscribe(
+      listenerOrPropKey: (() => void) | keyof TState,
+      propListener?: (event: { next: any; prev: any }) => void
+    ): VoidFunction {
+      incrementRef();
+
+      // Overload 1: subscribe(listener) - all changes
+      if (typeof listenerOrPropKey === "function") {
+        const unsub = changeEmitter.on(listenerOrPropKey);
+        return () => {
+          unsub();
+          decrementRef();
+        };
+      }
+
+      // Overload 2: subscribe(propKey, listener) - specific property
+      const propKey = listenerOrPropKey;
+      const propEmitter = getPropertyEmitter(propKey);
+      const unsub = propEmitter.on(({ newValue, oldValue }) => {
+        propListener!({ next: newValue, prev: oldValue });
+      });
+      return () => {
+        unsub();
+        decrementRef();
+      };
+    },
+
+    // Internal subscription for effects - doesn't affect refCount
+    _subscribeInternal(
+      propKey: keyof TState,
+      listener: () => void
+    ): VoidFunction {
+      const propEmitter = getPropertyEmitter(propKey);
+      return propEmitter.on(listener);
+    },
+
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+
+      // Cancel pending auto-dispose timeout
+      if (disposeTimeout) {
+        clearTimeout(disposeTimeout);
+        disposeTimeout = null;
+      }
+
+      // Dispose all effects
+      for (const dispose of effectDisposers) {
+        dispose();
+      }
+      effectDisposers.length = 0;
+
+      // Clear subscribers (using emitter.clear())
+      changeEmitter.clear();
+      for (const em of propertyEmitters.values()) {
+        em.clear();
+      }
+      propertyEmitters.clear();
+
+      // Notify disposal listeners
+      disposeEmitter.emit();
+    },
+
+    get disposed() {
+      return disposed;
+    },
+  };
+
+  // ==========================================================================
+  // Local Resolver (includes current instance)
+  // ==========================================================================
+
+  // Create a local resolver that includes the current instance
+  // This allows effects to subscribe to the current store via storeId
+  const localResolver: StoreResolver = {
+    get(specOrId: any): any {
+      // If looking up by ID and it's our store, return our instance
+      if (typeof specOrId === "string" && specOrId === storeId) {
+        return instance;
+      }
+      // Otherwise delegate to the container resolver
+      return resolver.get(specOrId);
+    },
+    has(spec: any) {
+      return resolver.has(spec);
+    },
+  };
+
+  // ==========================================================================
   // State Proxies
   // ==========================================================================
 
@@ -306,7 +306,7 @@ export function createStoreInstance<
   const mutableState = createMutableStateProxy(
     rawState,
     storeId,
-    resolver,
+    localResolver,
     getEquality,
     handlePropertyChange
   );
@@ -315,40 +315,9 @@ export function createStoreInstance<
   const readonlyState = createReadonlyStateProxy(
     rawState,
     storeId,
-    resolver,
+    localResolver,
     getEquality
   );
-
-  // ==========================================================================
-  // Effect Registration
-  // ==========================================================================
-
-  function registerEffectDependencies(effect: Effect): void {
-    // Clear previous registrations for this effect
-    for (const [, effectSet] of propertyEffects) {
-      effectSet.delete(effect);
-    }
-
-    // Register new dependencies (only READ dependencies, not written properties)
-    for (const dep of effect.dependencies) {
-      const [depStoreId, propKey] = dep.split(".");
-
-      // Skip properties that were written by this effect (they're in writtenProps)
-      if (effect.writtenProps.has(dep)) {
-        continue;
-      }
-
-      // Only register if it's this store's property
-      if (depStoreId === storeId) {
-        let effectSet = propertyEffects.get(propKey);
-        if (!effectSet) {
-          effectSet = new Set();
-          propertyEffects.set(propKey, effectSet);
-        }
-        effectSet.add(effect);
-      }
-    }
-  }
 
   // ==========================================================================
   // Setup Context
@@ -396,7 +365,7 @@ export function createStoreInstance<
       return [instance.state, instance.actions] as const;
     },
 
-    effect(fn) {
+    effect(fn: EffectFn, options?: EffectOptions) {
       // Prevent effect() calls outside setup phase
       if (!isSetupPhase) {
         throw new Error(
@@ -405,19 +374,9 @@ export function createStoreInstance<
         );
       }
 
-      const effect = createEffect(fn);
-
-      // Run immediately (with tracking to prevent re-entry)
-      runningEffects.add(effect);
-      try {
-        runEffect(effect);
-        registerEffectDependencies(effect);
-      } finally {
-        runningEffects.delete(effect);
-      }
-
-      // Store for cleanup
-      effects.push(effect);
+      // Use the hook-based effect system
+      // Effects run after store instance is created (via scheduleEffect hook)
+      createEffect(fn, options);
     },
 
     config<K extends keyof TState>(key: K, config: PropertyConfig<TState[K]>) {
@@ -441,12 +400,25 @@ export function createStoreInstance<
 
   let actions: TActions;
 
+  // Collect scheduled effects during setup, run them after setup completes
+  const scheduledEffects: Array<() => VoidFunction> = [];
+
   try {
-    actions = options.setup(setupContext);
+    // Run setup with hooks to collect scheduled effects
+    actions = withHooks(
+      (current) => ({
+        ...current,
+        scheduleEffect: (runEffect) => {
+          // Collect effect runners, don't run yet
+          scheduledEffects.push(runEffect);
+        },
+      }),
+      () => options.setup(setupContext)
+    );
   } catch (error) {
-    // Cleanup effects on setup error
-    for (const effect of effects) {
-      disposeEffect(effect);
+    // Cleanup any effects that were already scheduled
+    for (const dispose of effectDisposers) {
+      dispose();
     }
     throw error;
   } finally {
@@ -454,8 +426,14 @@ export function createStoreInstance<
     isSetupPhase = false;
   }
 
+  // Now run all scheduled effects and collect their dispose functions
+  for (const runEffect of scheduledEffects) {
+    const dispose = runEffect();
+    effectDisposers.push(dispose);
+  }
+
   // ==========================================================================
-  // Wrap Actions
+  // Wrap Actions and assign to instance
   // ==========================================================================
 
   const wrappedActions = {} as TActions;
@@ -484,81 +462,8 @@ export function createStoreInstance<
     };
   }
 
-  // ==========================================================================
-  // Instance
-  // ==========================================================================
-
-  const instance: StoreInstance<TState, TActions> = {
-    id: storeId,
-
-    get state() {
-      return readonlyState as Readonly<TState>;
-    },
-
-    onDispose: disposeEmitter.on,
-    actions: wrappedActions,
-
-    subscribe(
-      listenerOrPropKey: (() => void) | keyof TState,
-      propListener?: (event: { next: any; prev: any }) => void
-    ): VoidFunction {
-      incrementRef();
-
-      // Overload 1: subscribe(listener) - all changes
-      if (typeof listenerOrPropKey === "function") {
-        const unsub = changeEmitter.on(listenerOrPropKey);
-        return () => {
-          unsub();
-          decrementRef();
-        };
-      }
-
-      // Overload 2: subscribe(propKey, listener) - specific property
-      const propKey = listenerOrPropKey;
-      const propEmitter = getPropertyEmitter(propKey);
-      const unsub = propEmitter.on(({ newValue, oldValue }) => {
-        propListener!({ next: newValue, prev: oldValue });
-      });
-      return () => {
-        unsub();
-        decrementRef();
-      };
-    },
-
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-
-      // Cancel pending auto-dispose timeout
-      if (disposeTimeout) {
-        clearTimeout(disposeTimeout);
-        disposeTimeout = null;
-      }
-
-      // Dispose all effects
-      for (const effect of effects) {
-        disposeEffect(effect);
-      }
-      effects.length = 0;
-
-      // Clear subscribers (using emitter.clear())
-      changeEmitter.clear();
-      for (const em of propertyEmitters.values()) {
-        em.clear();
-      }
-      propertyEmitters.clear();
-
-      // Clear property effects
-      propertyEffects.clear();
-
-      // Notify disposal listeners
-      disposeEmitter.emit();
-    },
-
-    get disposed() {
-      return disposed;
-    },
-  };
+  // Assign wrapped actions to instance
+  instanceActions = wrappedActions;
 
   // ==========================================================================
   // Initial AutoDispose Check
