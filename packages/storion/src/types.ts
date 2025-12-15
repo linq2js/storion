@@ -55,6 +55,32 @@ export type EqualityMap<T> = {
 export type Lifetime = "keepAlive" | "autoDispose";
 
 // =============================================================================
+// Store Metadata
+// =============================================================================
+
+/**
+ * Metadata interface for middleware and tooling.
+ * Extend via declaration merging to add typed metadata fields.
+ *
+ * @example
+ * // In your middleware package:
+ * declare module 'storion' {
+ *   interface StoreMeta {
+ *     persist?: boolean;
+ *     persistKey?: string;
+ *   }
+ * }
+ *
+ * // Then users get autocomplete:
+ * store({
+ *   meta: { persist: true, persistKey: 'user' },
+ *   ...
+ * })
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface StoreMeta {}
+
+// =============================================================================
 // Dispatch Events
 // =============================================================================
 
@@ -277,6 +303,26 @@ export interface StoreOptions<
    * })
    */
   denormalize?: (data: Record<string, unknown>) => TState;
+
+  /**
+   * Metadata for middleware and tooling.
+   * Extend StoreMeta via declaration merging to add typed fields.
+   *
+   * @example
+   * // Middleware declares its meta fields:
+   * declare module 'storion' {
+   *   interface StoreMeta {
+   *     persist?: boolean;
+   *   }
+   * }
+   *
+   * // User configures per-store:
+   * store({
+   *   meta: { persist: true },
+   *   ...
+   * })
+   */
+  meta?: StoreMeta;
 }
 
 // =============================================================================
