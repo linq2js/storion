@@ -93,6 +93,50 @@ function MyComponent() {
 }
 ```
 
+### Vanilla JS (No Framework)
+
+Storion works great without any framework:
+
+```ts
+import { store, container, effect } from "storion";
+
+const counterStore = store({
+  name: "counter",
+  state: { count: 0 },
+  setup({ state }) {
+    // Build DOM
+    document.body.innerHTML = `
+      <div>
+        <h1>Counter</h1>
+        <p>Count: <span id="count">0</span></p>
+        <button id="increment">+</button>
+        <button id="decrement">-</button>
+      </div>
+    `;
+
+    const $count = document.getElementById("count")!;
+    const $increment = document.getElementById("increment")!;
+    const $decrement = document.getElementById("decrement")!;
+
+    // Reactive DOM updates
+    effect(() => {
+      $count.textContent = String(state.count);
+    });
+
+    // Event listeners
+    $increment.addEventListener("click", () => state.count++);
+    $decrement.addEventListener("click", () => state.count--);
+
+    return {};
+  },
+});
+
+// Initialize the app
+container().get(counterStore);
+```
+
+**That's it!** The `effect()` automatically re-runs when `state.count` changes, updating the DOM.
+
 ---
 
 ## Mental Model
