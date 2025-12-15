@@ -37,7 +37,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state] = get(counter);
             return { count: state.count };
           }),
@@ -61,7 +61,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state, actions] = get(counter);
             return {
               count: state.count,
@@ -89,7 +89,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [counterState] = get(counter);
             const [userState] = get(user);
             return {
@@ -124,7 +124,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { rerender } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state] = get(counter);
             return { count: state.count };
           }),
@@ -160,7 +160,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { rerender } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state] = get(user);
             const result: Record<string, unknown> = { name: state.name };
             if (trackCity) {
@@ -201,7 +201,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result, rerender } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state, actions] = get(counter);
             return {
               count: state.count,
@@ -234,7 +234,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state, storeActions] = get(counter);
             return {
               count: state.count,
@@ -266,7 +266,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result, rerender } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             if (!enabled) {
               return { data: null };
             }
@@ -297,7 +297,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state] = get(user);
             return { profile: state.profile };
           }),
@@ -329,7 +329,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const { result } = renderHook(
         () => {
           renderCount();
-          return useStore(({ get }) => {
+          return useStore(({ resolve: get }) => {
             const [state, actions] = get(counter);
             return {
               // This IS tracked
@@ -384,7 +384,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state] = get(counter);
             return {
               tracked: state.a,
@@ -416,7 +416,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const stores = container();
 
       function Counter() {
-        const { count, increment } = useStore(({ get }) => {
+        const { count, increment } = useStore(({ resolve: get }) => {
           const [state, actions] = get(counter);
           return {
             count: state.count,
@@ -464,7 +464,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result: hookResult } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state, actions] = get(counter);
             return [state.count, actions.increment] as const;
           }),
@@ -489,7 +489,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result: hookResult } = renderHook(
         () =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state, actions] = get(counter);
             return [
               { count: state.count, name: state.name },
@@ -518,7 +518,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       expect(() => {
         renderHook(() =>
-          useStore(({ get }) => {
+          useStore(({ resolve: get }) => {
             const [state] = get(counter);
             return { count: state.count };
           })
@@ -544,7 +544,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(() => {
         renderHook(
           () =>
-            useStore(async ({ get }) => {
+            useStore(async ({ resolve: get }) => {
               const [state] = get(counter);
               return { count: state.count };
             }),
@@ -571,7 +571,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(() => {
         renderHook(
           () =>
-            useStore(({ get }) => {
+            useStore(({ resolve: get }) => {
               const [state] = get(counter);
               return { then: () => {}, count: state.count };
             }),
@@ -596,7 +596,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
         ctx: SelectorContext,
         counterSpec: typeof counter
       ) => {
-        const [state] = ctx.get(counterSpec);
+        const [state] = ctx.resolve(counterSpec);
         return state.count * 2;
       };
 
@@ -631,7 +631,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
         specs: StoreSpec<{ value: number }>[]
       ) => {
         return specs.reduce((sum, spec) => {
-          const [state] = ctx.get(spec);
+          const [state] = ctx.resolve(spec);
           return sum + state.value;
         }, 0);
       };
@@ -663,7 +663,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       });
 
       const countMixin = (ctx: SelectorContext, spec: typeof counter) => {
-        const [state] = ctx.get(spec);
+        const [state] = ctx.resolve(spec);
         return state.count;
       };
 

@@ -140,26 +140,6 @@ export function createReadonlyStateProxy<T extends Record<string, unknown>>(
   }) as Readonly<T>;
 }
 
-/**
- * Creates a mutable state proxy.
- * Both reads and writes are tracked.
- */
-export function createMutableStateProxy<T extends Record<string, unknown>>(
-  rawState: T,
-  storeId: string,
-  resolver: StoreResolver,
-  getEquality: (key: string) => (a: unknown, b: unknown) => boolean,
-  onPropertyChange: (key: string, oldValue: unknown, newValue: unknown) => void
-): T {
-  return createStateProxy(rawState, {
-    storeId,
-    resolver,
-    mutable: true,
-    getEquality,
-    onPropertyChange,
-  });
-}
-
 // =============================================================================
 // Tracking Proxy (for useStore)
 // =============================================================================

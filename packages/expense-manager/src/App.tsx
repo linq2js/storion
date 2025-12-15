@@ -14,6 +14,7 @@ import {
 } from "./infrastructure/repositories";
 import { Header } from "./presentation/components/Header";
 import { StatsPanel } from "./presentation/components/StatsPanel";
+import { CategoryBreakdown } from "./presentation/components/CategoryBreakdown";
 import { ExpenseList } from "./presentation/components/ExpenseList";
 import { FilterBar } from "./presentation/components/FilterBar";
 import { ExpenseModal } from "./presentation/components/ExpenseModal";
@@ -26,8 +27,8 @@ const repository: ExpenseRepository = new ExpenseRepositoryImpl(
 
 export function App() {
   const { expenses, isLoading, error, load, clearError } = useStore(
-    ({ get }) => {
-      const [state, actions] = get(expenseStore);
+    ({ resolve }) => {
+      const [state, actions] = resolve(expenseStore);
       return {
         expenses: state.expenses,
         isLoading: state.isLoading,
@@ -38,16 +39,16 @@ export function App() {
     }
   );
 
-  const { dateRange, category } = useStore(({ get }) => {
-    const [state] = get(filterStore);
+  const { dateRange, category } = useStore(({ resolve }) => {
+    const [state] = resolve(filterStore);
     return {
       dateRange: state.dateRange,
       category: state.category,
     };
   });
 
-  const { activeModal } = useStore(({ get }) => {
-    const [state] = get(uiStore);
+  const { activeModal } = useStore(({ resolve }) => {
+    const [state] = resolve(uiStore);
     return { activeModal: state.activeModal };
   });
 
@@ -76,28 +77,38 @@ export function App() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-primary-50">
+    <div className="min-h-screen">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Error Toast */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center justify-between">
-            <span>{error}</span>
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center justify-between animate-slide-up">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm font-medium">{error}</span>
+            </div>
             <button
               onClick={clearError}
-              className="text-red-500 hover:text-red-700"
+              className="text-rose-400 hover:text-rose-600 transition-colors"
             >
-              ✕
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
         )}
 
-        {/* Stats Panel */}
+        {/* Stats Summary */}
         <StatsPanel stats={stats} isLoading={isLoading} />
 
         {/* Filter Bar */}
         <FilterBar />
+
+        {/* Category Breakdown */}
+        <CategoryBreakdown />
 
         {/* Expense List */}
         <ExpenseList
@@ -115,4 +126,3 @@ export function App() {
     </div>
   );
 }
-

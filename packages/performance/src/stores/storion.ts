@@ -70,7 +70,7 @@ export function createStorionDerived() {
   const derivedSpec = store({
     name: "derived",
     state: { sum: 0, product: 0 },
-    setup: ({ state, get }) => {
+    setup: ({ state, resolve: get }) => {
       const [base] = get(baseSpec);
 
       effect(() => {
@@ -118,4 +118,3 @@ export function createStorionWithSubscribers(subscriberCount: number) {
     },
   };
 }
-

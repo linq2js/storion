@@ -16,47 +16,38 @@ export const filterStore = store({
     searchQuery: "",
   },
 
-  setup: ({ state }) => ({
-    /**
-     * Set date range preset.
-     */
-    setDateRangePreset(preset: DateRangePreset) {
-      state.dateRangePreset = preset;
-      state.dateRange = getDateRangeFromPreset(preset);
-    },
+  equality: {
+    dateRange: "deep",
+  },
 
-    /**
-     * Set custom date range.
-     */
-    setCustomDateRange(start: Date, end: Date) {
-      state.dateRangePreset = "month"; // Reset preset indicator
-      state.dateRange = DateRange.create(start, end);
-    },
+  setup({ state }) {
+    return {
+      setDateRangePreset(preset: DateRangePreset) {
+        state.dateRangePreset = preset;
+        state.dateRange = getDateRangeFromPreset(preset);
+      },
 
-    /**
-     * Set category filter.
-     */
-    setCategory(category: CategoryType | null) {
-      state.category = category;
-    },
+      setCustomDateRange(start: Date, end: Date) {
+        state.dateRangePreset = "month";
+        state.dateRange = DateRange.create(start, end);
+      },
 
-    /**
-     * Set search query.
-     */
-    setSearchQuery(query: string) {
-      state.searchQuery = query;
-    },
+      setCategory(category: CategoryType | null) {
+        state.category = category;
+      },
 
-    /**
-     * Reset all filters.
-     */
-    reset() {
-      state.dateRangePreset = "month";
-      state.dateRange = DateRange.thisMonth();
-      state.category = null;
-      state.searchQuery = "";
-    },
-  }),
+      setSearchQuery(query: string) {
+        state.searchQuery = query;
+      },
+
+      reset() {
+        state.dateRangePreset = "month";
+        state.dateRange = DateRange.thisMonth();
+        state.category = null;
+        state.searchQuery = "";
+      },
+    };
+  },
 });
 
 function getDateRangeFromPreset(preset: DateRangePreset): DateRange {
@@ -73,4 +64,3 @@ function getDateRangeFromPreset(preset: DateRangePreset): DateRange {
       return DateRange.allTime();
   }
 }
-

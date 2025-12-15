@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useStore } from "storion/react";
 import { CreateExpenseInput } from "@/domain/entities";
 import { getAllCategories, CategoryType } from "@/domain/value-objects";
@@ -9,24 +9,25 @@ interface ExpenseModalProps {
   repository: ExpenseRepository;
 }
 
-export function ExpenseModal({ repository }: ExpenseModalProps) {
-  const { activeModal, selectedExpense, closeModal } = useStore(({ get }) => {
-    const [state, actions] = get(uiStore);
-    return {
-      activeModal: state.activeModal,
-      selectedExpense: state.selectedExpense,
-      closeModal: actions.closeModal,
-    };
-  });
+export const ExpenseModal = memo(function ExpenseModal({
+  repository,
+}: ExpenseModalProps) {
+  const { activeModal, selectedExpense, closeModal, add, update } = useStore(
+    ({ resolve }) => {
+      const [uiState, uiActions] = resolve(uiStore);
+      const [, expenseActions] = resolve(expenseStore);
 
-  const { add, update } = useStore(({ get }) => {
-    const [, actions] = get(expenseStore);
-    return {
-      add: (input: CreateExpenseInput) => actions.add(repository, input),
-      update: (id: string, input: CreateExpenseInput) =>
-        actions.update(repository, id, input),
-    };
-  });
+      return {
+        activeModal: uiState.activeModal,
+        selectedExpense: uiState.selectedExpense,
+        closeModal: uiActions.closeModal,
+        add: (input: CreateExpenseInput) =>
+          expenseActions.add(repository, input),
+        update: (id: string, input: CreateExpenseInput) =>
+          expenseActions.update(repository, id, input),
+      };
+    }
+  );
 
   const isEdit = activeModal === "edit";
   const categories = getAllCategories();
@@ -76,28 +77,49 @@ export function ExpenseModal({ repository }: ExpenseModalProps) {
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
         {/* Backdrop */}
-        <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"
-          onClick={closeModal}
-        />
+        <div className="modal-backdrop" onClick={closeModal} />
 
         {/* Modal */}
-        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-          <h2 className="text-xl font-bold text-slate-900 mb-6">
-            {isEdit ? "Edit Expense" : "Add Expense"}
-          </h2>
+        <div className="modal-content p-6 relative">
+          {/* Close button */}
+          <button
+            onClick={closeModal}
+            className="absolute top-4 right-4 btn-icon"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Header */}
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-surface-900">
+              {isEdit ? "Edit Expense" : "New Expense"}
+            </h2>
+            <p className="text-sm text-surface-500 mt-1">
+              {isEdit ? "Update the expense details" : "Track a new expense"}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Description
-              </label>
+            <div className="input-group">
+              <label className="input-label">Description</label>
               <input
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="What did you spend on?"
+                placeholder="Coffee, groceries, etc."
                 className="input"
                 required
                 autoFocus
@@ -105,12 +127,10 @@ export function ExpenseModal({ repository }: ExpenseModalProps) {
             </div>
 
             {/* Amount */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Amount
-              </label>
+            <div className="input-group">
+              <label className="input-label">Amount</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-surface-400 font-medium">
                   $
                 </span>
                 <input
@@ -118,7 +138,7 @@ export function ExpenseModal({ repository }: ExpenseModalProps) {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="input pl-8"
+                  className="input pl-8 font-mono"
                   min="0.01"
                   step="0.01"
                   required
@@ -126,29 +146,33 @@ export function ExpenseModal({ repository }: ExpenseModalProps) {
               </div>
             </div>
 
-            {/* Category */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Category
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as CategoryType)}
-                className="input"
-              >
+            {/* Category Grid */}
+            <div className="input-group">
+              <label className="input-label">Category</label>
+              <div className="grid grid-cols-4 gap-2">
                 {categories.map((cat) => (
-                  <option key={cat.type} value={cat.type}>
-                    {cat.icon} {cat.label}
-                  </option>
+                  <button
+                    key={cat.type}
+                    type="button"
+                    onClick={() => setCategory(cat.type)}
+                    className={`p-3 rounded-xl text-center transition-all ${
+                      category === cat.type
+                        ? "bg-primary-100 ring-2 ring-primary-500"
+                        : "bg-surface-50 hover:bg-surface-100"
+                    }`}
+                  >
+                    <span className="text-xl block mb-1">{cat.icon}</span>
+                    <span className="text-xs text-surface-600 truncate block">
+                      {cat.label.split(" ")[0]}
+                    </span>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             {/* Date */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Date
-              </label>
+            <div className="input-group">
+              <label className="input-label">Date</label>
               <input
                 type="date"
                 value={date}
@@ -159,7 +183,7 @@ export function ExpenseModal({ repository }: ExpenseModalProps) {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={closeModal}
@@ -173,11 +197,34 @@ export function ExpenseModal({ repository }: ExpenseModalProps) {
                 className="btn btn-primary flex-1"
                 disabled={isSubmitting}
               >
-                {isSubmitting
-                  ? "Saving..."
-                  : isEdit
-                    ? "Save Changes"
-                    : "Add Expense"}
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 animate-spin"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Saving...
+                  </span>
+                ) : isEdit ? (
+                  "Save Changes"
+                ) : (
+                  "Add Expense"
+                )}
               </button>
             </div>
           </form>
@@ -185,5 +232,4 @@ export function ExpenseModal({ repository }: ExpenseModalProps) {
       </div>
     </div>
   );
-}
-
+});

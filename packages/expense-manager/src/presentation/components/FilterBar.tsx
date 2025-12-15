@@ -1,91 +1,97 @@
+import { memo } from "react";
 import { useStore } from "storion/react";
 import { filterStore, DateRangePreset } from "../stores";
 import { getAllCategories, CategoryType } from "@/domain/value-objects";
 
-const DATE_PRESETS: { value: DateRangePreset; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "week", label: "This Week" },
-  { value: "month", label: "This Month" },
-  { value: "lastMonth", label: "Last Month" },
-  { value: "all", label: "All Time" },
+const DATE_PRESETS: { value: DateRangePreset; label: string; short: string }[] = [
+  { value: "today", label: "Today", short: "1D" },
+  { value: "week", label: "This Week", short: "1W" },
+  { value: "month", label: "This Month", short: "1M" },
+  { value: "lastMonth", label: "Last Month", short: "LM" },
+  { value: "all", label: "All Time", short: "All" },
 ];
 
-export function FilterBar() {
-  const {
-    dateRangePreset,
-    category,
-    setDateRangePreset,
-    setCategory,
-    reset,
-  } = useStore(({ get }) => {
-    const [state, actions] = get(filterStore);
-    return {
-      dateRangePreset: state.dateRangePreset,
-      category: state.category,
-      setDateRangePreset: actions.setDateRangePreset,
-      setCategory: actions.setCategory,
-      reset: actions.reset,
-    };
-  });
+export const FilterBar = memo(function FilterBar() {
+  const { dateRangePreset, category, setDateRangePreset, setCategory, reset } =
+    useStore(({ resolve }) => {
+      const [state, actions] = resolve(filterStore);
+      return {
+        dateRangePreset: state.dateRangePreset,
+        category: state.category,
+        setDateRangePreset: actions.setDateRangePreset,
+        setCategory: actions.setCategory,
+        reset: actions.reset,
+      };
+    });
 
   const categories = getAllCategories();
+  const hasFilters = category !== null;
 
   return (
-    <div className="card p-4 mb-6">
-      <div className="flex flex-col sm:flex-row gap-4">
-        {/* Date Range Filter */}
+    <div className="card p-4 sm:p-5 mb-6">
+      <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
+        {/* Date Range Pills */}
         <div className="flex-1">
-          <label className="block text-xs font-medium text-slate-500 mb-2">
-            Time Period
-          </label>
+          <label className="section-title block mb-3">Time Period</label>
           <div className="flex flex-wrap gap-2">
             {DATE_PRESETS.map((preset) => (
               <button
                 key={preset.value}
                 onClick={() => setDateRangePreset(preset.value)}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                className={`tag transition-all ${
                   dateRangePreset === preset.value
-                    ? "bg-primary-100 text-primary-700 font-medium"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "tag-active shadow-sm"
+                    : "tag-inactive"
                 }`}
               >
-                {preset.label}
+                <span className="hidden sm:inline">{preset.label}</span>
+                <span className="sm:hidden">{preset.short}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Category Filter */}
-        <div className="sm:w-48">
-          <label className="block text-xs font-medium text-slate-500 mb-2">
-            Category
-          </label>
-          <select
-            value={category ?? ""}
-            onChange={(e) =>
-              setCategory(
-                e.target.value ? (e.target.value as CategoryType) : null
-              )
-            }
-            className="input py-1.5 text-sm"
-          >
-            <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat.type} value={cat.type}>
-                {cat.icon} {cat.label}
-              </option>
-            ))}
-          </select>
+        {/* Category Dropdown */}
+        <div className="sm:w-44">
+          <label className="section-title block mb-3">Category</label>
+          <div className="relative">
+            <select
+              value={category ?? ""}
+              onChange={(e) =>
+                setCategory(
+                  e.target.value ? (e.target.value as CategoryType) : null
+                )
+              }
+              className="input py-2 pr-10 text-sm appearance-none cursor-pointer"
+            >
+              <option value="">All</option>
+              {categories.map((cat) => (
+                <option key={cat.type} value={cat.type}>
+                  {cat.icon} {cat.label}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-surface-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
         </div>
 
-        {/* Reset Button */}
-        <div className="flex items-end">
-          <button onClick={reset} className="btn btn-ghost text-sm py-1.5">
-            Reset
+        {/* Reset */}
+        {hasFilters && (
+          <button
+            onClick={reset}
+            className="btn btn-ghost text-sm gap-1.5 text-surface-500 hover:text-surface-700"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Clear
           </button>
-        </div>
+        )}
       </div>
     </div>
   );
-}
-
+});

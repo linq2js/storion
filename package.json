@@ -7,7 +7,11 @@
     "build:all": "pnpm -r build",
     "build:check": "pnpm -r build:check",
     "test": "pnpm --filter storion test",
-    "dev": "pnpm --filter storion dev"
+    "test:all": "pnpm -r test",
+    "dev": "pnpm --filter storion dev",
+    "dev:expense": "pnpm --filter expense-manager dev",
+    "dev:all": "pnpm --filter storion --filter expense-manager dev",
+    "bench": "pnpm --filter @storion/performance bench"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

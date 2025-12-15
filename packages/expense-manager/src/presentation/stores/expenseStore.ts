@@ -32,86 +32,67 @@ export const expenseStore = store({
     error: null as string | null,
   },
 
-  setup: ({ state }) => ({
-    /**
-     * Load all expenses.
-     */
-    async load(repository: ExpenseRepository) {
-      state.isLoading = true;
-      state.error = null;
+  setup({ state }) {
+    return {
+      async load(repository: ExpenseRepository) {
+        state.isLoading = true;
+        state.error = null;
 
-      try {
-        const useCase = new GetExpensesUseCase(repository);
-        const result = await useCase.execute({ dateRange: DateRange.allTime() });
-        state.expenses = result.expenses;
-      } catch (err) {
-        state.error = err instanceof Error ? err.message : "Failed to load expenses";
-      } finally {
-        state.isLoading = false;
-      }
-    },
+        try {
+          const useCase = new GetExpensesUseCase(repository);
+          const result = await useCase.execute({ dateRange: DateRange.allTime() });
+          state.expenses = result.expenses;
+        } catch (err) {
+          state.error = err instanceof Error ? err.message : "Failed to load expenses";
+        } finally {
+          state.isLoading = false;
+        }
+      },
 
-    /**
-     * Add a new expense.
-     */
-    async add(repository: ExpenseRepository, input: CreateExpenseInput) {
-      state.error = null;
+      async add(repository: ExpenseRepository, input: CreateExpenseInput) {
+        state.error = null;
 
-      try {
-        const useCase = new AddExpenseUseCase(repository);
-        const expense = await useCase.execute(input);
-        state.expenses = [expense, ...state.expenses];
-      } catch (err) {
-        state.error = err instanceof Error ? err.message : "Failed to add expense";
-        throw err;
-      }
-    },
+        try {
+          const useCase = new AddExpenseUseCase(repository);
+          const expense = await useCase.execute(input);
+          state.expenses = [expense, ...state.expenses];
+        } catch (err) {
+          state.error = err instanceof Error ? err.message : "Failed to add expense";
+          throw err;
+        }
+      },
 
-    /**
-     * Update an expense.
-     */
-    async update(
-      repository: ExpenseRepository,
-      id: string,
-      input: UpdateExpenseInput
-    ) {
-      state.error = null;
+      async update(repository: ExpenseRepository, id: string, input: UpdateExpenseInput) {
+        state.error = null;
 
-      try {
-        const useCase = new UpdateExpenseUseCase(repository);
-        const updated = await useCase.execute(id, input);
-        state.expenses = state.expenses.map((e) =>
-          e.id === id ? updated : e
-        );
-      } catch (err) {
-        state.error = err instanceof Error ? err.message : "Failed to update expense";
-        throw err;
-      }
-    },
+        try {
+          const useCase = new UpdateExpenseUseCase(repository);
+          const updated = await useCase.execute(id, input);
+          state.expenses = state.expenses.map((e) => (e.id === id ? updated : e));
+        } catch (err) {
+          state.error = err instanceof Error ? err.message : "Failed to update expense";
+          throw err;
+        }
+      },
 
-    /**
-     * Delete an expense.
-     */
-    async remove(repository: ExpenseRepository, id: string) {
-      state.error = null;
+      async remove(repository: ExpenseRepository, id: string) {
+        state.error = null;
 
-      try {
-        const useCase = new DeleteExpenseUseCase(repository);
-        await useCase.execute(id);
-        state.expenses = state.expenses.filter((e) => e.id !== id);
-      } catch (err) {
-        state.error = err instanceof Error ? err.message : "Failed to delete expense";
-        throw err;
-      }
-    },
+        try {
+          const useCase = new DeleteExpenseUseCase(repository);
+          await useCase.execute(id);
+          state.expenses = state.expenses.filter((e) => e.id !== id);
+        } catch (err) {
+          state.error = err instanceof Error ? err.message : "Failed to delete expense";
+          throw err;
+        }
+      },
 
-    /**
-     * Clear error.
-     */
-    clearError() {
-      state.error = null;
-    },
-  }),
+      clearError() {
+        state.error = null;
+      },
+    };
+  },
 });
 
 /**

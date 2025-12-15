@@ -311,8 +311,8 @@ describe("dependencies via get()", () => {
 
     const doubler = store({
       state: { doubled: 0 },
-      setup: ({ state, get }) => {
-        const [counterState] = get(counter);
+      setup: ({ state, resolve }) => {
+        const [counterState] = resolve(counter);
 
         effect(() => {
           state.doubled = counterState.count * 2;
@@ -335,21 +335,21 @@ describe("dependencies via get()", () => {
   it("should detect circular dependencies", () => {
     const storeA = store({
       state: { value: "a" },
-      setup: ({ get }) => {
+      setup: ({ resolve }) => {
         return {};
       },
     });
 
     const storeB = store({
       state: { value: "b" },
-      setup: ({ get }) => {
-        get(storeA);
+      setup: ({ resolve }) => {
+        resolve(storeA);
         return {};
       },
     });
 
-    (storeA.options as any).setup = ({ get }: any) => {
-      get(storeB);
+    (storeA.options as any).setup = ({ resolve }: any) => {
+      resolve(storeB);
       return {};
     };
 
@@ -370,8 +370,8 @@ describe("dependencies via get()", () => {
       name: "longLived",
       state: { value: 0 },
       lifetime: "keepAlive",
-      setup: ({ get }) => {
-        get(shortLived); // This should throw
+      setup: ({ resolve }) => {
+        resolve(shortLived); // This should throw
         return {};
       },
     });
@@ -393,8 +393,8 @@ describe("dependencies via get()", () => {
       name: "shortLived",
       state: { value: 0 },
       lifetime: "autoDispose",
-      setup: ({ get }) => {
-        get(longLived); // This is OK
+      setup: ({ resolve }) => {
+        resolve(longLived); // This is OK
         return {};
       },
     });
@@ -417,8 +417,8 @@ describe("dependencies via get()", () => {
       name: "storeB",
       state: { value: 0 },
       lifetime: "autoDispose",
-      setup: ({ get }) => {
-        get(storeA);
+      setup: ({ resolve }) => {
+        resolve(storeA);
         return {};
       },
     });
@@ -429,24 +429,24 @@ describe("dependencies via get()", () => {
     expect(() => stores.get(storeB)).not.toThrow();
   });
 
-  it("should throw when get() is called outside setup phase (in action)", () => {
+  it("should throw when resolve() is called outside setup phase (in action)", () => {
     const dependency = store({
       name: "dependency",
       state: { value: 0 },
       setup: () => ({}),
     });
 
-    let capturedGet: any;
+    let capturedResolve: any;
 
     const main = store({
       name: "main",
       state: { value: 0 },
-      setup: ({ get }) => {
-        capturedGet = get; // Capture the get function
+      setup: ({ resolve }) => {
+        capturedResolve = resolve; // Capture the resolve function
         return {
           tryGetLater: () => {
-            // This should throw - calling get() in action
-            capturedGet(dependency);
+            // This should throw - calling resolve() in action
+            capturedResolve(dependency);
           },
         };
       },
@@ -470,8 +470,8 @@ describe("dependencies via get()", () => {
       name: "storeB",
       state: { value: 0 },
       lifetime: "keepAlive",
-      setup: ({ get }) => {
-        get(storeA);
+      setup: ({ resolve }) => {
+        resolve(storeA);
         return {};
       },
     });
@@ -494,8 +494,8 @@ describe("dependencies via get()", () => {
       name: "defaultStore",
       state: { value: 0 },
       // No lifetime specified - defaults to keepAlive
-      setup: ({ get }) => {
-        get(autoDisposeStore);
+      setup: ({ resolve }) => {
+        resolve(autoDisposeStore);
         return {};
       },
     });
@@ -1612,7 +1612,7 @@ describe("StoreContext.use()", () => {
       ctx: import("../types").StoreContext<{ synced: number }>,
       counterSpec: typeof counter
     ) => {
-      const [counterState] = ctx.get(counterSpec);
+      const [counterState] = ctx.resolve(counterSpec);
       effect(() => {
         ctx.state.synced = counterState.count;
       });

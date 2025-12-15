@@ -1,12 +1,47 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "path";
+
+// Plugin to watch storion source and trigger HMR
+function watchStorion(): Plugin {
+  const storionSrc = path.resolve(__dirname, "../storion/src");
+  
+  return {
+    name: "watch-storion",
+    configureServer(server) {
+      // Watch storion source directory
+      server.watcher.add(storionSrc);
+      
+      // Trigger full reload when storion changes
+      server.watcher.on("change", (file) => {
+        if (file.startsWith(storionSrc)) {
+          console.log(`[storion] ${path.relative(storionSrc, file)} changed, reloading...`);
+          server.ws.send({ type: "full-reload" });
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), watchStorion()],
   resolve: {
-    alias: {
-      "@": "/src",
+    alias: [
+      // More specific paths first
+      { find: "storion/react", replacement: path.resolve(__dirname, "../storion/src/react/index.ts") },
+      { find: "storion", replacement: path.resolve(__dirname, "../storion/src/index.ts") },
+      { find: "@", replacement: "/src" },
+    ],
+  },
+  server: {
+    fs: {
+      // Allow serving files from storion source
+      allow: [".."],
     },
+  },
+  optimizeDeps: {
+    // Exclude storion from pre-bundling so changes are picked up immediately
+    exclude: ["storion"],
   },
   test: {
     globals: true,

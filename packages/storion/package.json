@@ -1,7 +1,7 @@
 {
   "name": "storion",
   "version": "0.1.0",
-  "description": "Storion - A type-safe store specification library",
+  "description": "A lightweight, type-safe reactive state management library with automatic dependency tracking, fine-grained subscriptions, and first-class React support",
   "type": "module",
   "main": "./dist/storion.js",
   "module": "./dist/storion.js",
@@ -36,13 +36,18 @@
     "prepublishOnly": "pnpm run build"
   },
   "keywords": [
-    "state",
-    "management",
+    "state-management",
     "store",
     "reactive",
     "react",
-    "dependency-injection",
-    "typescript"
+    "typescript",
+    "dependency-tracking",
+    "fine-grained",
+    "effects",
+    "proxy",
+    "hooks",
+    "container",
+    "dependency-injection"
   ],
   "author": "",
   "license": "MIT",

@@ -147,7 +147,7 @@ export interface StoreContext<TState extends StateBase> {
    * Note: Returns limited tuple, not full StoreInstance.
    * You cannot access id, subscribe(), or dispose().
    */
-  get<S extends StateBase, A extends ActionsBase>(
+  resolve<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): readonly [Readonly<S>, A];
 
@@ -460,7 +460,7 @@ export interface SelectorContext {
    * @param spec - Store specification
    * @returns Tuple of [trackingState, actions]
    */
-  get<S extends StateBase, A extends ActionsBase>(
+  resolve<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): readonly [Readonly<S>, A];
 

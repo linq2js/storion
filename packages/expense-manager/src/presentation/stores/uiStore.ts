@@ -15,52 +15,36 @@ export const uiStore = store({
     isSidebarOpen: true,
   },
 
-  setup: ({ state }) => ({
-    /**
-     * Open add expense modal.
-     */
-    openAddModal() {
-      state.activeModal = "add";
-      state.selectedExpense = null;
-    },
+  setup({ state }) {
+    return {
+      openAddModal() {
+        state.activeModal = "add";
+        state.selectedExpense = null;
+      },
 
-    /**
-     * Open edit expense modal.
-     */
-    openEditModal(expense: Expense) {
-      state.activeModal = "edit";
-      state.selectedExpense = expense;
-    },
+      openEditModal(expense: Expense) {
+        state.activeModal = "edit";
+        state.selectedExpense = expense;
+      },
 
-    /**
-     * Open delete confirmation modal.
-     */
-    openDeleteModal(expense: Expense) {
-      state.activeModal = "delete";
-      state.selectedExpense = expense;
-    },
+      openDeleteModal(expense: Expense) {
+        state.activeModal = "delete";
+        state.selectedExpense = expense;
+      },
 
-    /**
-     * Close any open modal.
-     */
-    closeModal() {
-      state.activeModal = null;
-      state.selectedExpense = null;
-    },
+      closeModal() {
+        state.activeModal = null;
+        state.selectedExpense = null;
+      },
 
-    /**
-     * Toggle sidebar.
-     */
-    toggleSidebar() {
-      state.isSidebarOpen = !state.isSidebarOpen;
-    },
+      toggleSidebar() {
+        state.isSidebarOpen = !state.isSidebarOpen;
+      },
 
-    /**
-     * Set sidebar state.
-     */
-    setSidebarOpen(isOpen: boolean) {
-      state.isSidebarOpen = isOpen;
-    },
-  }),
+      setSidebarOpen(isOpen: boolean) {
+        state.isSidebarOpen = isOpen;
+      },
+    };
+  },
 });
 

@@ -58,7 +58,7 @@ export function useStore<T extends object>(
   // Create selector context (no tracking proxy needed - hooks handle it)
   const selectorContext: SelectorContext = useMemo(() => {
     const ctx: SelectorContext = {
-      get<S extends StateBase, A extends ActionsBase>(
+      resolve<S extends StateBase, A extends ActionsBase>(
         spec: StoreSpec<S, A>
       ): readonly [Readonly<S>, A] {
         // Get full instance from container

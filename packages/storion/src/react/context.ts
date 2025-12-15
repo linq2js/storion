@@ -8,9 +8,12 @@ import {
   createElement,
   type ReactNode,
   type FC,
+  useMemo,
+  memo,
 } from "react";
 
 import type { StoreContainer } from "../types";
+import { container } from "../core/container";
 
 // =============================================================================
 // Context
@@ -22,24 +25,29 @@ const StoreContext = createContext<StoreContainer | null>(null);
  * Provider component for store container.
  */
 export interface StoreProviderProps {
-  container: StoreContainer;
+  container?: StoreContainer;
   children: ReactNode;
 }
 
-export const StoreProvider: FC<StoreProviderProps> = ({
-  container: value,
-  children,
-}) => {
-  return createElement(StoreContext.Provider, { value }, children);
-};
+export const StoreProvider: FC<StoreProviderProps> = memo(
+  ({ container: value, children }) => {
+    const valueOrDefault = useMemo(() => value ?? container(), [value]);
+    return createElement(
+      StoreContext.Provider,
+      { value: valueOrDefault },
+      children
+    );
+  }
+);
 
 /**
  * Hook to get the current store container.
  */
 export function useContainer(): StoreContainer {
-  const container = useContext(StoreContext);
-  if (!container) {
+  const ctx = useContext(StoreContext);
+
+  if (!ctx) {
     throw new Error("useContainer must be used within a StoreProvider");
   }
-  return container;
+  return ctx;
 }

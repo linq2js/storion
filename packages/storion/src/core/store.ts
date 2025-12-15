@@ -25,7 +25,7 @@ import {
   hasReadHook,
   hasWriteHook,
 } from "./tracking";
-import { resolveEquality } from "./equality";
+import { resolveEquality, strictEqual } from "./equality";
 import { generateStoreId } from "./proxy";
 
 import { emitter, Emitter } from "../emitter";
@@ -155,9 +155,13 @@ export function createStoreInstance<
     string,
     (a: unknown, b: unknown) => boolean
   >();
-  let defaultEquality = resolveEquality("strict");
+  let defaultEquality: ((a: unknown, b: unknown) => boolean) | null = null;
+
+  // Track if any custom equality is configured (for fast path optimization)
+  let hasCustomEquality = false;
 
   if (equalityOption) {
+    hasCustomEquality = true;
     if (
       typeof equalityOption === "string" ||
       typeof equalityOption === "function"
@@ -178,9 +182,15 @@ export function createStoreInstance<
     }
   }
 
-  // Get equality for a property
+  // Get equality for a property (only called when hasCustomEquality is true)
   const getEquality = (key: string) =>
-    propertyEquality.get(key) ?? defaultEquality;
+    propertyEquality.get(key) ?? defaultEquality ?? strictEqual;
+
+  // Fast path: check equality using === when no custom equality configured
+  // Otherwise use configured equality function
+  const isEqual = hasCustomEquality
+    ? (key: string, a: unknown, b: unknown) => getEquality(key)(a, b)
+    : (_key: string, a: unknown, b: unknown) => a === b;
 
   // ==========================================================================
   // Property Change Handler
@@ -363,8 +373,8 @@ export function createStoreInstance<
       if (hasWriteHook()) {
         trackWrite(storeId, prop, value, oldValue);
       }
-      const equality = getEquality(prop);
-      if (equality(oldValue, value)) return true;
+      // Fast path: skip equality function call when no custom equality configured
+      if (isEqual(prop, oldValue, value)) return true;
       // Immutable update - create new state object
       currentState = { ...currentState, [prop]: value };
       handlePropertyChange(prop, oldValue, value);
@@ -430,7 +440,7 @@ export function createStoreInstance<
   const setupContext: StoreContext<TState> = {
     state: mutableState,
 
-    get<S extends StateBase, A extends ActionsBase>(
+    resolve<S extends StateBase, A extends ActionsBase>(
       depSpec: StoreSpec<S, A>
     ): readonly [Readonly<S>, A] {
       // Prevent dynamic store creation outside setup phase
@@ -478,14 +488,35 @@ export function createStoreInstance<
       // Immer returns same reference if no changes
       if (nextState === currentState) return;
 
-      // Check each changed prop with custom equality
-      // Build stable state: preserve references for "equal" props
       const prevState = currentState;
       const changedProps: Array<{
         key: keyof TState;
         oldValue: unknown;
         newValue: unknown;
       }> = [];
+
+      // Fast path: no custom equality configured
+      if (!hasCustomEquality) {
+        for (const key of Object.keys(nextState) as Array<keyof TState>) {
+          if (prevState[key] !== nextState[key]) {
+            changedProps.push({
+              key,
+              oldValue: prevState[key],
+              newValue: nextState[key],
+            });
+          }
+        }
+        if (changedProps.length > 0) {
+          currentState = nextState;
+          for (const { key, oldValue, newValue } of changedProps) {
+            handlePropertyChange(key as string, oldValue, newValue);
+          }
+        }
+        return;
+      }
+
+      // Slow path: custom equality configured
+      // Build stable state: preserve references for "equal" props
       const stableState = { ...nextState };
 
       for (const key of Object.keys(nextState) as Array<keyof TState>) {

@@ -17,6 +17,7 @@ import type {
 
 import { createStoreInstance, CreateStoreInstanceOptions } from "./store";
 import { emitter } from "../emitter";
+import { untrack } from "./tracking";
 
 /**
  * Create a store container.
@@ -142,7 +143,8 @@ export function container(options: ContainerOptions = {}): StoreContainer {
 
     try {
       // Create instance through middleware chain
-      instance = createWithMiddleware(spec);
+      // untrack to avoid tracking the creation of the instance
+      instance = untrack(() => createWithMiddleware(spec));
 
       // Cache instance
       instancesBySpec.set(spec, instance);
