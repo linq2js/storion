@@ -5,20 +5,20 @@ import {
   filterStore,
   uiStore,
   getFilteredExpenses,
-  getExpenseStats,
 } from "./presentation/stores";
 import { ExpenseRepository } from "./application/ports";
 import {
   LocalStorageExpenseStorage,
   ExpenseRepositoryImpl,
 } from "./infrastructure/repositories";
-import { Header } from "./presentation/components/Header";
+import { Header, FloatingAddButton } from "./presentation/components/Header";
 import { StatsPanel } from "./presentation/components/StatsPanel";
 import { CategoryBreakdown } from "./presentation/components/CategoryBreakdown";
 import { ExpenseList } from "./presentation/components/ExpenseList";
 import { FilterBar } from "./presentation/components/FilterBar";
 import { ExpenseModal } from "./presentation/components/ExpenseModal";
 import { DeleteModal } from "./presentation/components/DeleteModal";
+import { ReportPage } from "./presentation/components/ReportPage";
 
 // Create repository instance
 const repository: ExpenseRepository = new ExpenseRepositoryImpl(
@@ -47,9 +47,9 @@ export function App() {
     };
   });
 
-  const { activeModal } = useStore(({ resolve }) => {
+  const { activeModal, activeView } = useStore(({ resolve }) => {
     const [state] = resolve(uiStore);
-    return { activeModal: state.activeModal };
+    return { activeModal: state.activeModal, activeView: state.activeView };
   });
 
   // Load expenses on mount
@@ -65,15 +65,10 @@ export function App() {
     }
   }, [error]);
 
-  // Compute filtered expenses and stats
+  // Compute filtered expenses
   const filteredExpenses = useMemo(
     () => getFilteredExpenses(expenses, dateRange, category),
     [expenses, dateRange, category]
-  );
-
-  const stats = useMemo(
-    () => getExpenseStats(expenses, dateRange),
-    [expenses, dateRange]
   );
 
   return (
@@ -101,22 +96,37 @@ export function App() {
           </div>
         )}
 
-        {/* Stats Summary */}
-        <StatsPanel stats={stats} isLoading={isLoading} />
+        {activeView === "dashboard" ? (
+          <>
+            {/* Stats Summary */}
+            <StatsPanel expenses={expenses} isLoading={isLoading} />
 
-        {/* Filter Bar */}
-        <FilterBar />
+            {/* Filter Bar */}
+            <FilterBar />
 
-        {/* Category Breakdown */}
-        <CategoryBreakdown />
+            {/* Category Breakdown */}
+            <CategoryBreakdown />
 
-        {/* Expense List */}
-        <ExpenseList
-          expenses={filteredExpenses}
-          isLoading={isLoading}
-          repository={repository}
-        />
+            {/* Expense List */}
+            <ExpenseList
+              expenses={filteredExpenses}
+              isLoading={isLoading}
+              repository={repository}
+            />
+          </>
+        ) : (
+          <>
+            {/* Filter Bar for Reports */}
+            <FilterBar />
+
+            {/* Reports Page */}
+            <ReportPage />
+          </>
+        )}
       </main>
+
+      {/* Floating Add Button */}
+      <FloatingAddButton />
 
       {/* Modals */}
       {(activeModal === "add" || activeModal === "edit") && (

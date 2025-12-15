@@ -2,6 +2,7 @@ import { store } from "storion";
 import { Expense } from "@/domain/entities";
 
 export type ModalType = "add" | "edit" | "delete" | null;
+export type ViewType = "dashboard" | "reports";
 
 /**
  * UI store - manages UI state (modals, forms, etc.).
@@ -13,6 +14,7 @@ export const uiStore = store({
     activeModal: null as ModalType,
     selectedExpense: null as Expense | null,
     isSidebarOpen: true,
+    activeView: "dashboard" as ViewType,
   },
 
   setup({ state }) {
@@ -43,6 +45,10 @@ export const uiStore = store({
 
       setSidebarOpen(isOpen: boolean) {
         state.isSidebarOpen = isOpen;
+      },
+
+      setView(view: ViewType) {
+        state.activeView = view;
       },
     };
   },

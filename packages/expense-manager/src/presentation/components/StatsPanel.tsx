@@ -1,25 +1,54 @@
-import { memo } from "react";
-import { ExpenseStats } from "@/domain/services";
+import { memo, useMemo } from "react";
+import { Expense } from "@/domain/entities";
+import { getCategory } from "@/domain/value-objects";
+import { ExpenseCalculator } from "@/domain/services";
 
 interface StatsPanelProps {
-  stats: ExpenseStats;
+  expenses: Expense[];
   isLoading: boolean;
 }
 
 export const StatsPanel = memo(function StatsPanel({
-  stats,
+  expenses,
   isLoading,
 }: StatsPanelProps) {
+  // Calculate stats
+  const { lastExpense, todayTotal, monthTotal, todayCount, monthCount } = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Sort by date descending to get last expense
+    const sorted = ExpenseCalculator.sortByDate(expenses, false);
+    const last = sorted[0] ?? null;
+
+    // Today's expenses
+    const todayExpenses = expenses.filter(e => e.date >= todayStart);
+    const todaySum = ExpenseCalculator.calculateTotal(todayExpenses);
+
+    // This month's expenses (MTD)
+    const monthExpenses = expenses.filter(e => e.date >= monthStart);
+    const monthSum = ExpenseCalculator.calculateTotal(monthExpenses);
+
+    return {
+      lastExpense: last,
+      todayTotal: todaySum,
+      monthTotal: monthSum,
+      todayCount: todayExpenses.length,
+      monthCount: monthExpenses.length,
+    };
+  }, [expenses]);
+
   if (isLoading) {
     return (
-      <div className="mb-6 space-y-6 animate-stagger">
-        <div className="card p-6 sm:p-8">
+      <div className="mb-6 space-y-4 animate-stagger">
+        <div className="card p-5">
           <div className="skeleton h-4 w-24 mb-2" />
-          <div className="skeleton h-10 w-40 mb-2" />
+          <div className="skeleton h-6 w-48 mb-1" />
           <div className="skeleton h-4 w-32" />
         </div>
-        <div className="grid grid-cols-3 gap-3 sm:gap-4">
-          {[...Array(3)].map((_, i) => (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          {[...Array(2)].map((_, i) => (
             <div key={i} className="stat-card">
               <div className="skeleton w-9 h-9 rounded-xl mb-2" />
               <div className="skeleton h-5 w-20 mb-1" />
@@ -33,77 +62,102 @@ export const StatsPanel = memo(function StatsPanel({
 
   return (
     <div className="mb-6 space-y-4">
-      {/* Hero Stat */}
-      <div className="card p-6 sm:p-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
+      {/* Last Expense Card */}
+      <div className="card p-5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="relative">
-          <p className="section-title mb-2">Total Spent</p>
-          <p className="money-lg text-surface-900" title={stats.total.format()}>
-            {formatCompact(stats.total.format())}
-          </p>
-          <p className="text-sm text-surface-500 mt-1">
-            {stats.count} transaction{stats.count !== 1 ? "s" : ""} this period
-          </p>
+          <p className="section-title mb-2">Last Expense</p>
+          {lastExpense ? (
+            <>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">{getCategory(lastExpense.category).icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-surface-900 truncate">
+                    {lastExpense.description}
+                  </p>
+                  <p className="text-xs text-surface-500">
+                    {formatRelativeDate(lastExpense.date)}
+                  </p>
+                </div>
+                <p className="money-md text-surface-900">
+                  {lastExpense.amount.format()}
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-surface-500 text-sm">No expenses yet</p>
+          )}
         </div>
       </div>
 
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4 animate-stagger">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 animate-stagger">
         <QuickStat
-          label="Average"
-          value={stats.average.format()}
+          label="Today"
+          value={todayTotal.format()}
+          subtext={`${todayCount} expense${todayCount !== 1 ? "s" : ""}`}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
           }
-          color="purple"
+          color="amber"
+          isEmpty={todayCount === 0}
         />
         <QuickStat
-          label="Daily Avg"
-          value={stats.dailyAverage.format()}
+          label="This Month"
+          value={monthTotal.format()}
+          subtext={`${monthCount} expense${monthCount !== 1 ? "s" : ""} MTD`}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           }
-          color="amber"
-        />
-        <QuickStat
-          label="Highest"
-          value={stats.highest?.format() ?? "$0.00"}
-          icon={
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-          }
-          color="rose"
+          color="purple"
+          isEmpty={monthCount === 0}
         />
       </div>
     </div>
   );
 });
 
+// Format date relative to now
+function formatRelativeDate(date: Date): string {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  if (date >= todayStart) {
+    return `Today at ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+  }
+  if (date >= yesterdayStart) {
+    return `Yesterday at ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+  }
+
+  const diffDays = Math.floor((todayStart.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 7) {
+    return `${diffDays} days ago`;
+  }
+
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 // Format large numbers compactly
 export function formatCompact(value: string): string {
-  // Extract numeric part (assumes format like "$1,234.56")
   const numStr = value.replace(/[^0-9.-]/g, "");
   const num = parseFloat(numStr);
 
   if (isNaN(num)) return value;
-
-  // Keep original format for reasonable numbers
   if (num < 100000) return value;
 
-  // Match digits, commas, and decimal portion (e.g., "1,234,567.89")
   const numPattern = /[\d,]+(\.\d+)?/;
 
-  // Compact format for very large numbers
   if (num >= 1000000000) {
-    return value.replace(numPattern, (num / 1000000000).toFixed(1) + "B");
+    return value.replace(numPattern, (num / 1000000000).toFixed(1).replace(/\.0$/, "") + "B");
   }
   if (num >= 1000000) {
-    return value.replace(numPattern, (num / 1000000).toFixed(1) + "M");
+    return value.replace(numPattern, (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M");
   }
   if (num >= 100000) {
     return value.replace(numPattern, (num / 1000).toFixed(0) + "K");
@@ -115,32 +169,42 @@ export function formatCompact(value: string): string {
 interface QuickStatProps {
   label: string;
   value: string;
+  subtext: string;
   icon: React.ReactNode;
   color: "purple" | "amber" | "rose" | "teal";
+  isEmpty?: boolean;
 }
 
 const QuickStat = memo(function QuickStat({
   label,
   value,
+  subtext,
   icon,
   color,
+  isEmpty,
 }: QuickStatProps) {
   const colorClasses = {
-    purple: "bg-purple-50 text-purple-600",
-    amber: "bg-amber-50 text-amber-600",
-    rose: "bg-rose-50 text-rose-600",
-    teal: "bg-primary-50 text-primary-600",
+    purple: "text-purple-200",
+    amber: "text-amber-200",
+    rose: "text-rose-200",
+    teal: "text-primary-200",
   };
 
   return (
-    <div className="stat-card">
-      <div className={`w-9 h-9 rounded-xl ${colorClasses[color]} flex items-center justify-center mb-2`}>
+    <div className="stat-card relative overflow-hidden">
+      {/* Background icon decoration */}
+      <div className={`absolute top-2 right-2 w-16 h-16 ${colorClasses[color]} opacity-40 [&>svg]:w-full [&>svg]:h-full`}>
         {icon}
       </div>
-      <p className="money-sm text-surface-900" title={value}>
-        {formatCompact(value)}
-      </p>
-      <p className="stat-label">{label}</p>
+      
+      {/* Content */}
+      <div className="relative z-10">
+        <p className={`money-sm ${isEmpty ? "text-surface-400" : "text-surface-900"}`} title={value}>
+          {formatCompact(value)}
+        </p>
+        <p className="stat-label">{label}</p>
+        <p className="text-[10px] text-surface-400 mt-0.5">{subtext}</p>
+      </div>
     </div>
   );
 });

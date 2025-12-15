@@ -45,3 +45,11 @@ export {
   type EffectErrorContext,
   type EffectRetryConfig,
 } from "./core/effect";
+
+// Middleware utilities
+export {
+  applyFor,
+  applyExcept,
+  compose,
+  type SpecPattern,
+} from "./core/middleware";
