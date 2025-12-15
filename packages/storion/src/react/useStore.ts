@@ -23,11 +23,12 @@ import { useContainer } from "./context";
  * React hook to consume stores with automatic optimization.
  *
  * Features:
- * - Multi-store access via get() in selector
- * - Conditional access (get() can be called conditionally)
+ * - Multi-store access via resolve() in selector
+ * - Conditional access (resolve() can be called conditionally)
  * - Auto-stable functions (never cause re-renders)
  * - Fine-grained updates (only re-renders when selected values change)
  * - Respects untrack() for skipping dependency tracking
+ * - Works with pick() for value-level granularity
  */
 interface UseStoreRefs<T> {
   selector: Selector<T>;

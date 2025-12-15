@@ -392,7 +392,8 @@ export interface StoreInstance<
   /** Bound actions with reactive last() method */
   readonly actions: ReactiveActions<TActions>;
 
-  readonly deps: StoreInstance<any, any>[];
+  /** Store instances this store depends on (via resolve() in setup) */
+  readonly deps: readonly StoreInstance<any, any>[];
 
   /**
    * Subscribe to state changes.

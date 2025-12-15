@@ -35,6 +35,8 @@ export type {
 export { store } from "./core/store";
 export { container } from "./core/container";
 export { batch, untrack } from "./core/tracking";
+
+// Fine-grained reactivity
 export { pick, type PickEquality } from "./core/pick";
 
 export {
