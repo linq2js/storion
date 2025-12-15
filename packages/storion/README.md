@@ -566,31 +566,38 @@ const { count } = useCounter((state, actions) => ({ count: state.count }));
 ### Middleware
 
 ```ts
-import { applyFor, applyExcept, compose } from "storion";
+import { applyFor, applyExcept } from "storion";
+
+// Just pass an array of middleware
+container({ middleware: [logger, devtools, persist] });
 
 // Conditional middleware
-applyFor("user*", logger); // Wildcard match
-applyFor(/Store$/, [logger, devtools]); // RegExp match
-applyFor((spec) => spec.meta?.persist, persistMiddleware); // Predicate
+const conditionalLogger = applyFor("user*", logger); // Wildcard match
+const multiMiddleware = applyFor(/Store$/, [logger, devtools]); // RegExp match
+const persistOnly = applyFor((spec) => spec.meta?.persist, persistMiddleware); // Predicate
 
 // Exclude middleware
-applyExcept("_internal*", logger);
+const noInternalLogging = applyExcept("_internal*", logger);
 
-// Compose multiple
-const combined = compose(logger, devtools, persist);
-
-// Use in container
-container({ middleware: [combined] });
+// Combine them
+container({ middleware: [conditionalLogger, persistOnly, noInternalLogging] });
 ```
 
 ### Middleware Signature
 
 ```ts
 type StoreMiddleware = (
-  instance: StoreInstance,
   spec: StoreSpec,
-  container: StoreContainer
-) => void | (() => void); // Return cleanup function
+  next: (spec: StoreSpec) => StoreInstance
+) => StoreInstance;
+
+// Example: logging middleware
+const logger: StoreMiddleware = (spec, next) => {
+  console.log(`Creating store: ${spec.name}`);
+  const instance = next(spec); // Call next to create the instance
+  console.log(`Created: ${instance.id}`);
+  return instance;
+};
 ```
 
 ---
