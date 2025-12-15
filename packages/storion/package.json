@@ -1,6 +1,6 @@
 {
   "name": "storion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reactive stores for modern apps. Type-safe. Auto-tracked. Effortlessly composable",
   "type": "module",
   "main": "./dist/storion.js",
@@ -33,7 +33,11 @@
     "version:patch": "npm version patch -m \"chore: bump version to %s\"",
     "version:minor": "npm version minor -m \"chore: bump version to %s\"",
     "version:major": "npm version major -m \"chore: bump version to %s\"",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "release:patch": "pnpm version:patch && git push && git push --tags && npm publish",
+    "release:minor": "pnpm version:minor && git push && git push --tags && npm publish",
+    "release:major": "pnpm version:major && git push && git push --tags && npm publish",
+    "publish:dry": "npm publish --dry-run"
   },
   "keywords": [
     "state-management",
@@ -49,11 +53,15 @@
     "container",
     "dependency-injection"
   ],
-  "author": "",
+  "author": "linq2js",
   "license": "MIT",
+  "homepage": "https://github.com/linq2js/storion#readme",
+  "bugs": {
+    "url": "https://github.com/linq2js/storion/issues"
+  },
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "git+https://github.com/linq2js/storion.git"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"

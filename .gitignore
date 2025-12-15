@@ -27,3 +27,6 @@ pnpm-debug.log*
 package-lock.json
 yarn.lock
 
+# Secrets
+.npmrc
+
