@@ -5,7 +5,7 @@
   "scripts": {
     "build": "pnpm --filter storion build",
     "build:all": "pnpm -r build",
-    "build:check": "pnpm -r build:check",
+    "typecheck": "pnpm -r build:check",
     "test": "pnpm --filter storion test",
     "test:all": "pnpm -r test",
     "dev": "pnpm --filter storion dev",

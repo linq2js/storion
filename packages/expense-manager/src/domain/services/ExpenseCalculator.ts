@@ -8,6 +8,7 @@ export interface ExpenseStats {
   total: Money;
   count: number;
   average: Money;
+  highest: Money | null;
   byCategory: Record<CategoryType, Money>;
   dailyAverage: Money;
 }
@@ -79,12 +80,15 @@ export const ExpenseCalculator = {
     const total = this.calculateTotal(expenses);
     const count = expenses.length;
     const average = count > 0 ? Money.create(total.amount / count) : Money.zero();
+    const highest = count > 0
+      ? expenses.reduce((max, e) => e.amount.amount > max.amount ? e.amount : max, expenses[0].amount)
+      : null;
     const byCategory = this.calculateByCategory(expenses);
     const days = dateRange.getDays();
     const dailyAverage =
       days > 0 ? Money.create(total.amount / days) : Money.zero();
 
-    return { total, count, average, byCategory, dailyAverage };
+    return { total, count, average, highest, byCategory, dailyAverage };
   },
 
   /**

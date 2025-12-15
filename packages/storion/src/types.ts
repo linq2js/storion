@@ -86,13 +86,54 @@ export interface StoreMeta {}
 
 /**
  * Event emitted when an action is dispatched.
+ * Immutable - new object created for each dispatch.
  */
 export type DispatchEvent<TActions extends ActionsBase> = {
   [K in keyof TActions]: {
-    name: K;
-    args: Parameters<TActions[K]>;
+    /** Action name */
+    readonly name: K;
+    /** Arguments passed to the action */
+    readonly args: Parameters<TActions[K]>;
+    /** Invocation count for this action (1-indexed) */
+    readonly nth: number;
   };
 }[keyof TActions];
+
+/**
+ * Single action's dispatch event (for typing action.last())
+ */
+export type ActionDispatchEvent<
+  TActions extends ActionsBase,
+  K extends keyof TActions
+> = {
+  readonly name: K;
+  readonly args: Parameters<TActions[K]>;
+  readonly nth: number;
+};
+
+/**
+ * Action with reactive last() method.
+ * Call last() inside effect to reactively track dispatches.
+ */
+export type ReactiveAction<
+  TActions extends ActionsBase,
+  K extends keyof TActions
+> = TActions[K] & {
+  /**
+   * Get the last dispatch event for this action.
+   * Reactive - triggers effect re-run when action is dispatched.
+   *
+   * @returns Last dispatch event, or undefined if never dispatched
+   */
+  last(): ActionDispatchEvent<TActions, K> | undefined;
+};
+
+/**
+ * Actions object with reactive last() method on each action.
+ */
+export type ReactiveActions<TActions extends ActionsBase> = {
+  [K in keyof TActions]: ReactiveAction<TActions, K>;
+};
 
 // =============================================================================
 // Store Spec
@@ -348,8 +389,8 @@ export interface StoreInstance<
   /** Readonly reactive state proxy */
   readonly state: Readonly<TState>;
 
-  /** Bound actions */
-  readonly actions: TActions;
+  /** Bound actions with reactive last() method */
+  readonly actions: ReactiveActions<TActions>;
 
   /**
    * Subscribe to state changes.
@@ -362,11 +403,35 @@ export interface StoreInstance<
    * @param propKey - Property to watch
    * @param listener - Callback invoked with { next, prev } values
    * @returns Unsubscribe function
+   *
+   * @overload Subscribe to specific action dispatches
+   * @param actionKey - Action name prefixed with '@' (e.g., '@increment')
+   * @param listener - Callback invoked with dispatch event
+   * @returns Unsubscribe function
+   *
+   * @overload Subscribe to ALL action dispatches
+   * @param wildcard - '@*' to match all actions
+   * @param listener - Callback invoked with dispatch event
+   * @returns Unsubscribe function
    */
   subscribe(listener: () => void): VoidFunction;
   subscribe<K extends keyof TState>(
     propKey: K,
     listener: (event: { next: TState[K]; prev: TState[K] }) => void
+  ): VoidFunction;
+  subscribe<K extends keyof TActions>(
+    actionKey: `@${K & string}`,
+    listener: (event: {
+      next: ActionDispatchEvent<TActions, K>;
+      prev: ActionDispatchEvent<TActions, K> | undefined;
+    }) => void
+  ): VoidFunction;
+  subscribe(
+    wildcard: "@*",
+    listener: (event: {
+      next: DispatchEvent<TActions>;
+      prev: DispatchEvent<TActions> | undefined;
+    }) => void
   ): VoidFunction;
 
   /**

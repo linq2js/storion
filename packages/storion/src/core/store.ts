@@ -13,6 +13,8 @@ import type {
   StoreResolver,
   StoreContext,
   DispatchEvent,
+  ActionDispatchEvent,
+  ReactiveActions,
 } from "../types";
 
 import { produce } from "immer";
@@ -152,6 +154,44 @@ export function createStoreInstance<
     return em;
   };
 
+  // ==========================================================================
+  // Action Dispatch Tracking
+  // ==========================================================================
+
+  /** Stores last invocation for each action (immutable objects) */
+  const actionInvocations = new Map<
+    string,
+    ActionDispatchEvent<TActions, keyof TActions>
+  >();
+
+  /** Invocation count per action */
+  const actionNthCounters = new Map<string, number>();
+
+  /** Emitters for action dispatches (#actionName) */
+  const actionEmitters = new Map<
+    string,
+    Emitter<{
+      next: ActionDispatchEvent<TActions, keyof TActions>;
+      prev: ActionDispatchEvent<TActions, keyof TActions> | undefined;
+    }>
+  >();
+
+  /** Wildcard emitter for all action dispatches (@) */
+  const wildcardActionEmitter = emitter<{
+    next: DispatchEvent<TActions>;
+    prev: DispatchEvent<TActions> | undefined;
+  }>();
+
+  // Get or create action emitter
+  const getActionEmitter = (actionName: string) => {
+    let em = actionEmitters.get(actionName);
+    if (!em) {
+      em = emitter();
+      actionEmitters.set(actionName, em);
+    }
+    return em;
+  };
+
   // Effect dispose functions (collected via scheduleEffect hook)
   const disposeEffectsEmitter = emitter();
 
@@ -221,12 +261,82 @@ export function createStoreInstance<
   }
 
   // ==========================================================================
+  // Action Dispatch Handler
+  // ==========================================================================
+
+  /**
+   * Record action dispatch and notify subscribers.
+   * Called BEFORE action execution to ensure dispatch is recorded even if action throws.
+   */
+  function handleActionDispatch<K extends keyof TActions>(
+    actionName: K,
+    args: Parameters<TActions[K]>
+  ): void {
+    const name = actionName as string;
+
+    // Increment invocation counter
+    const nth = (actionNthCounters.get(name) ?? 0) + 1;
+    actionNthCounters.set(name, nth);
+
+    // Get previous invocation
+    const prev = actionInvocations.get(name);
+
+    // Create immutable dispatch event
+    const next: ActionDispatchEvent<TActions, K> = Object.freeze({
+      name: actionName,
+      args,
+      nth,
+    });
+
+    // Store new invocation
+    actionInvocations.set(
+      name,
+      next as ActionDispatchEvent<TActions, keyof TActions>
+    );
+
+    // Notify action-specific emitter (#actionName)
+    const actionEmitter = actionEmitters.get(name);
+    if (actionEmitter) {
+      actionEmitter.emit({
+        next: next as ActionDispatchEvent<TActions, keyof TActions>,
+        prev,
+      });
+    }
+
+    // Notify wildcard emitter (@)
+    if (wildcardActionEmitter.size > 0) {
+      wildcardActionEmitter.emit({
+        next: next as DispatchEvent<TActions>,
+        prev: prev as DispatchEvent<TActions> | undefined,
+      });
+    }
+  }
+
+  /**
+   * Get last invocation for an action (reactive - triggers trackRead).
+   */
+  function getActionLastInvocation<K extends keyof TActions>(
+    actionName: K
+  ): ActionDispatchEvent<TActions, K> | undefined {
+    const propKey = `@${String(actionName)}`;
+    const invocation = actionInvocations.get(String(actionName));
+
+    // Trigger reactive tracking if inside effect
+    if (hasReadHook()) {
+      trackRead(storeId, propKey, invocation, localResolver);
+    }
+
+    return invocation as ActionDispatchEvent<TActions, K> | undefined;
+  }
+
+  // ==========================================================================
   // Instance (created early so effects can subscribe)
   // ==========================================================================
 
   // We need to create the instance structure early so that effects can
   // subscribe via resolver.get(storeId). We'll fill in actions later.
-  let instanceActions: TActions = {} as TActions;
+  let instanceActions: ReactiveActions<TActions> =
+    {} as ReactiveActions<TActions>;
 
   const instance: StoreInstance<TState, TActions> = {
     id: storeId,
@@ -243,12 +353,12 @@ export function createStoreInstance<
     onDispose: disposeEmitter.on,
 
     subscribe(
-      listenerOrPropKey: (() => void) | keyof TState,
+      listenerOrPropKey: (() => void) | keyof TState | string,
       propListener?: (event: { next: any; prev: any }) => void
     ): VoidFunction {
       incrementRef();
 
-      // Overload 1: subscribe(listener) - all changes
+      // Overload 1: subscribe(listener) - all state changes
       if (typeof listenerOrPropKey === "function") {
         const unsub = changeEmitter.on(listenerOrPropKey);
         return () => {
@@ -257,8 +367,30 @@ export function createStoreInstance<
         };
       }
 
+      const key = listenerOrPropKey as string;
+
+      // Overload 3: subscribe('@*', listener) - all action dispatches
+      if (key === "@*") {
+        const unsub = wildcardActionEmitter.on(propListener!);
+        return () => {
+          unsub();
+          decrementRef();
+        };
+      }
+
+      // Overload 4: subscribe('@actionName', listener) - specific action dispatch
+      if (key.startsWith("@")) {
+        const actionName = key.slice(1);
+        const actionEmitter = getActionEmitter(actionName);
+        const unsub = actionEmitter.on(propListener!);
+        return () => {
+          unsub();
+          decrementRef();
+        };
+      }
+
       // Overload 2: subscribe(propKey, listener) - specific property
-      const propKey = listenerOrPropKey;
+      const propKey = listenerOrPropKey as keyof TState;
       const propEmitter = getPropertyEmitter(propKey);
       const unsub = propEmitter.on(({ newValue, oldValue }) => {
         propListener!({ next: newValue, prev: oldValue });
@@ -271,10 +403,20 @@ export function createStoreInstance<
 
     // Internal subscription for effects - doesn't affect refCount
     _subscribeInternal(
-      propKey: keyof TState,
+      propKey: keyof TState | string,
       listener: () => void
     ): VoidFunction {
-      const propEmitter = getPropertyEmitter(propKey);
+      const key = propKey as string;
+
+      // Action subscription (@actionName)
+      if (key.startsWith("@")) {
+        const actionName = key.slice(1);
+        const actionEmitter = getActionEmitter(actionName);
+        return actionEmitter.on(listener);
+      }
+
+      // Property subscription
+      const propEmitter = getPropertyEmitter(propKey as keyof TState);
       return propEmitter.on(listener);
     },
 
@@ -290,13 +432,22 @@ export function createStoreInstance<
 
       // Dispose all effects
       disposeEffectsEmitter.emitAndClear();
-      // Clear subscribers (using emitter.clear())
-      changeEmitter.clear();
 
+      // Clear state subscribers
+      changeEmitter.clear();
       for (const em of propertyEmitters.values()) {
         em.clear();
       }
       propertyEmitters.clear();
+
+      // Clear action subscribers
+      wildcardActionEmitter.clear();
+      for (const em of actionEmitters.values()) {
+        em.clear();
+      }
+      actionEmitters.clear();
+      actionInvocations.clear();
+      actionNthCounters.clear();
 
       // Notify disposal listeners
       disposeEmitter.emit();
@@ -621,26 +772,35 @@ export function createStoreInstance<
   initialState = currentState;
 
   // ==========================================================================
-  // Wrap Actions and assign to instance
+  // Wrap Actions with dispatch tracking and .last() method
   // ==========================================================================
 
-  const wrappedActions = {} as TActions;
+  const wrappedActions = {} as ReactiveActions<TActions>;
 
   for (const [name, action] of Object.entries(actions)) {
-    (wrappedActions as any)[name] = (...args: any[]) => {
+    // Create the wrapped action function
+    const wrappedAction = (...args: any[]) => {
       if (disposed) {
         throw new Error(`Cannot call action on disposed store: ${storeId}`);
       }
 
-      try {
-        const result = action(...args);
+      // Dispatch event BEFORE action execution
+      // This ensures dispatch is recorded even if action throws
+      handleActionDispatch(
+        name as keyof TActions,
+        args as Parameters<TActions[keyof TActions]>
+      );
 
-        // Dispatch event
-        if (options.onDispatch) {
-          options.onDispatch({ name, args } as DispatchEvent<TActions>);
+      // Also call options.onDispatch if provided
+      if (options.onDispatch) {
+        const invocation = actionInvocations.get(name);
+        if (invocation) {
+          options.onDispatch(invocation as DispatchEvent<TActions>);
         }
+      }
 
-        return result;
+      try {
+        return action(...args);
       } catch (error) {
         if (options.onError) {
           options.onError(error);
@@ -648,6 +808,11 @@ export function createStoreInstance<
         throw error;
       }
     };
+
+    // Add .last() method for reactive dispatch tracking
+    wrappedAction.last = () => getActionLastInvocation(name as keyof TActions);
+
+    (wrappedActions as any)[name] = wrappedAction;
   }
 
   // Assign wrapped actions to instance

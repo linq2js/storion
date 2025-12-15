@@ -694,10 +694,18 @@ describe("onDispatch", () => {
     const instance = stores.get(counter);
 
     instance.actions.increment(5);
-    expect(onDispatch).toHaveBeenCalledWith({ name: "increment", args: [5] });
+    expect(onDispatch).toHaveBeenCalledWith({
+      name: "increment",
+      args: [5],
+      nth: 1,
+    });
 
     instance.actions.reset();
-    expect(onDispatch).toHaveBeenCalledWith({ name: "reset", args: [] });
+    expect(onDispatch).toHaveBeenCalledWith({
+      name: "reset",
+      args: [],
+      nth: 1,
+    });
   });
 });
 
