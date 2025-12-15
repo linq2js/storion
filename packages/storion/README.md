@@ -382,6 +382,139 @@ instance.subscribe("@save", (event) => {
 });
 ```
 
+### 🧩 Mixins — Split & Reuse Store Logic
+
+Large stores can be split into mixins using `use()`. Each mixin only knows about its own state slice:
+
+```tsx
+import { store, effect, type StoreContext } from "storion/react";
+
+// Each mixin defines its OWN state shape
+interface UserState {
+  users: User[];
+}
+
+interface PostState {
+  posts: Post[];
+}
+
+interface NotificationState {
+  notifications: Notification[];
+}
+
+// Mixin 1: Notifications (base mixin)
+const notificationMixin = ({ state }: StoreContext<NotificationState>) => ({
+  notify: (msg: string) => {
+    state.notifications.push({ id: Date.now(), message: msg });
+  },
+  clearAll: () => {
+    state.notifications = [];
+  },
+});
+
+// Mixin 2: User management — uses notificationMixin!
+const userMixin = ({
+  state,
+  use,
+}: StoreContext<UserState & NotificationState>) => {
+  const { notify } = use(notificationMixin); // Compose another mixin
+
+  return {
+    addUser: (user: User) => {
+      state.users.push(user);
+      notify(`User ${user.name} added`); // Use action from other mixin
+    },
+    removeUser: (id: string) => {
+      state.users = state.users.filter((u) => u.id !== id);
+      notify(`User removed`);
+    },
+  };
+};
+
+// Mixin 3: Post management — also uses notificationMixin!
+const postMixin = ({
+  state,
+  use,
+}: StoreContext<PostState & NotificationState>) => {
+  const { notify } = use(notificationMixin);
+
+  effect(() => {
+    console.log(`Posts updated: ${state.posts.length} total`);
+  });
+
+  return {
+    addPost: (post: Post) => {
+      state.posts.push(post);
+      notify(`New post: ${post.title}`);
+    },
+    deletePost: (id: string) => {
+      state.posts = state.posts.filter((p) => p.id !== id);
+      notify(`Post deleted`);
+    },
+  };
+};
+
+// Compose: AppState = UserState & PostState & NotificationState
+const appStore = store({
+  name: "app",
+  state: {
+    users: [] as User[],
+    posts: [] as Post[],
+    notifications: [] as Notification[],
+  },
+  setup({ use }) {
+    // Each mixin works with its slice of state
+    const userActions = use(userMixin);
+    const postActions = use(postMixin);
+    const notificationActions = use(notificationMixin);
+
+    return {
+      ...userActions,
+      ...postActions,
+      ...notificationActions,
+    };
+  },
+});
+```
+
+**Benefits:**
+
+- 📁 **Organization** — Split 500+ line stores into focused modules
+- ♻️ **Reuse** — Mixins are decoupled, reusable across stores
+- 🧪 **Testable** — Test mixins in isolation with minimal state
+- 🎭 **Effects** — Mixins can define their own reactive effects
+
+**Note:** `use()` runs the mixin fresh each call (no singleton). This enables parameterized mixins:
+
+```ts
+const apiMixin = ({ state }, endpoint: string) => ({
+  fetch: () => fetch(endpoint),
+});
+
+use(apiMixin, "/api/users"); // Different instances
+use(apiMixin, "/api/posts");
+```
+
+If you need singleton per store, use `memoize` (e.g., from lodash):
+
+```ts
+import memoize from "lodash/memoize";
+
+// Memoized by first arg (StoreContext) — singleton per store
+const notificationMixin = memoize(
+  ({ state }: StoreContext<NotificationState>) => ({
+    notify: (msg: string) =>
+      state.notifications.push({ id: Date.now(), message: msg }),
+    clearAll: () => {
+      state.notifications = [];
+    },
+  })
+);
+
+// Same store context → same mixin instance
+// Different store context → new mixin instance
+```
+
 ---
 
 ## API Reference

@@ -52,13 +52,21 @@ export const StatsPanel = memo(function StatsPanel({
 
   if (isLoading) {
     return (
-      <div className="mb-6 space-y-4 animate-stagger">
-        <div className="card p-5">
+      <div className="mb-6 space-y-3 sm:space-y-4 animate-stagger">
+        {/* Last Expense skeleton - visible on mobile only */}
+        <div className="lg:hidden card p-5">
           <div className="skeleton h-4 w-24 mb-2" />
           <div className="skeleton h-6 w-48 mb-1" />
           <div className="skeleton h-4 w-32" />
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        {/* Grid skeleton */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {/* Last Expense skeleton - visible on large only */}
+          <div className="hidden lg:block card p-5">
+            <div className="skeleton h-4 w-24 mb-2" />
+            <div className="skeleton h-6 w-48 mb-1" />
+            <div className="skeleton h-4 w-32" />
+          </div>
           {[...Array(2)].map((_, i) => (
             <div key={i} className="stat-card">
               <div className="skeleton w-9 h-9 rounded-xl mb-2" />
@@ -72,44 +80,84 @@ export const StatsPanel = memo(function StatsPanel({
   }
 
   return (
-    <div className="mb-6 space-y-4">
-      {/* Last Expense Card */}
-      {lastExpense ? (
-        <button
-          onClick={() => openEditModal(lastExpense)}
-          className="card p-5 relative overflow-hidden w-full text-left cursor-pointer hover:shadow-md transition-shadow duration-200 group"
-        >
-          <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:from-primary-200/50 transition-colors duration-200" />
-          <div className="relative">
-            <p className="section-title mb-2">Last Expense</p>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-2xl">{getCategory(lastExpense.category).icon}</span>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-surface-900 truncate">
-                  {lastExpense.description}
-                </p>
-                <p className="text-xs text-surface-500">
-                  {formatRelativeDate(lastExpense.date)}
+    <div className="mb-6 space-y-3 sm:space-y-4">
+      {/* Last Expense Card - full width on mobile, 1/3 on large */}
+      <div className="lg:hidden">
+        {lastExpense ? (
+          <button
+            onClick={() => openEditModal(lastExpense)}
+            className="card p-5 relative overflow-hidden w-full text-left cursor-pointer hover:shadow-md transition-shadow duration-200 group"
+          >
+            <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:from-primary-200/50 transition-colors duration-200" />
+            <div className="relative">
+              <p className="section-title mb-2">Last Expense</p>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">{getCategory(lastExpense.category).icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-surface-900 truncate">
+                    {lastExpense.description}
+                  </p>
+                  <p className="text-xs text-surface-500">
+                    {formatRelativeDate(lastExpense.date)}
+                  </p>
+                </div>
+                <p className="money-md text-surface-900">
+                  {lastExpense.amount.format()}
                 </p>
               </div>
-              <p className="money-md text-surface-900">
-                {lastExpense.amount.format()}
-              </p>
+            </div>
+          </button>
+        ) : (
+          <div className="card p-5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="relative">
+              <p className="section-title mb-2">Last Expense</p>
+              <p className="text-surface-500 text-sm">No expenses yet</p>
             </div>
           </div>
-        </button>
-      ) : (
-        <div className="card p-5 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="relative">
-            <p className="section-title mb-2">Last Expense</p>
-            <p className="text-surface-500 text-sm">No expenses yet</p>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Quick Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 animate-stagger">
+      {/* Quick Stats - 2 cols on mobile, 3 cols on large (with Last Expense) */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        {/* Last Expense - only visible on large screens */}
+        <div className="hidden lg:block">
+          {lastExpense ? (
+            <button
+              onClick={() => openEditModal(lastExpense)}
+              className="card p-5 relative overflow-hidden w-full h-full text-left cursor-pointer hover:shadow-md transition-shadow duration-200 group"
+            >
+              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:from-primary-200/50 transition-colors duration-200" />
+              <div className="relative">
+                <p className="section-title mb-2">Last Expense</p>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">{getCategory(lastExpense.category).icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-surface-900 truncate">
+                      {lastExpense.description}
+                    </p>
+                    <p className="text-xs text-surface-500">
+                      {formatRelativeDate(lastExpense.date)}
+                    </p>
+                  </div>
+                  <p className="money-md text-surface-900">
+                    {lastExpense.amount.format()}
+                  </p>
+                </div>
+              </div>
+            </button>
+          ) : (
+            <div className="card p-5 relative overflow-hidden h-full">
+              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative">
+                <p className="section-title mb-2">Last Expense</p>
+                <p className="text-surface-500 text-sm">No expenses yet</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Today Stat */}
         <QuickStat
           label="Today"
           value={todayTotal.format()}
@@ -123,6 +171,8 @@ export const StatsPanel = memo(function StatsPanel({
           isEmpty={todayCount === 0}
           onClick={() => setDateRangePreset("today")}
         />
+
+        {/* This Month Stat */}
         <QuickStat
           label="This Month"
           value={monthTotal.format()}
