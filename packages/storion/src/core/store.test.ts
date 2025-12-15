@@ -25,13 +25,13 @@ describe("store()", () => {
     expect(counter.options.state).toEqual({ count: 0 });
   });
 
-  it("should create a store without name", () => {
+  it("should create a store without name (auto-generated)", () => {
     const counter = store({
       state: { count: 0 },
       setup: () => ({}),
     });
 
-    expect(counter.name).toBeUndefined();
+    expect(counter.name).toMatch(/^spec-\d+$/);
     expect(counter.options).toBeDefined();
   });
 });
@@ -70,7 +70,7 @@ describe("store instance", () => {
     const instance2 = stores2.get(counter);
 
     expect(instance1.id).not.toBe(instance2.id);
-    expect(instance1.id).toContain("counter_");
+    expect(instance1.id).toMatch(/^counter:\d+$/);
   });
 
   it("should modify state via actions", () => {

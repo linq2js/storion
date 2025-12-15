@@ -81,7 +81,7 @@ export interface StoreSpec<
   TActions extends ActionsBase = ActionsBase
 > {
   /** Store name for debugging */
-  readonly name?: string;
+  readonly name: string;
 
   /** Store options (state, setup, lifetime, etc.) */
   readonly options: StoreOptions<TState, TActions>;
@@ -251,6 +251,32 @@ export interface StoreOptions<
 
   /** Called when an effect or action throws an error */
   onError?: (error: unknown) => void;
+
+  /**
+   * Transform state to a serializable format for persistence.
+   * Handles complex types like Date, Map, Set, class instances.
+   *
+   * @example
+   * normalize: (state) => ({
+   *   ...state,
+   *   lastLogin: state.lastLogin?.toISOString() ?? null,
+   *   cache: Object.fromEntries(state.cache),
+   * })
+   */
+  normalize?: (state: TState) => Record<string, unknown>;
+
+  /**
+   * Transform serialized data back to state shape.
+   * Reverses the normalize transformation.
+   *
+   * @example
+   * denormalize: (data) => ({
+   *   ...data,
+   *   lastLogin: data.lastLogin ? new Date(data.lastLogin as string) : null,
+   *   cache: new Map(Object.entries(data.cache as Record<string, unknown>)),
+   * })
+   */
+  denormalize?: (data: Record<string, unknown>) => TState;
 }
 
 // =============================================================================
@@ -269,6 +295,9 @@ export interface StoreInstance<
 > {
   /** Unique identifier for this instance */
   readonly id: string;
+
+  /** The store specification that created this instance */
+  readonly spec: StoreSpec<TState, TActions>;
 
   /** Readonly reactive state proxy */
   readonly state: Readonly<TState>;
@@ -323,6 +352,32 @@ export interface StoreInstance<
    * Triggers change notifications for all modified properties.
    */
   reset(): void;
+
+  /**
+   * Extract current state in serializable format for persistence.
+   * Uses the `normalize` option if defined, otherwise returns shallow copy of state.
+   *
+   * @example
+   * // In persistor
+   * const data = instance.dehydrate();
+   * localStorage.setItem(key, JSON.stringify(data));
+   */
+  dehydrate(): Record<string, unknown>;
+
+  /**
+   * Restore state from persisted data.
+   * Uses the `denormalize` option if defined, otherwise applies data directly.
+   *
+   * **Important:** Only applies to non-dirty props. If a prop has been modified
+   * since initialization (e.g., by an effect fetching fresh data), it will be
+   * skipped to avoid overwriting newer data with stale persisted data.
+   *
+   * @example
+   * // In persistor
+   * const data = JSON.parse(localStorage.getItem(key));
+   * instance.hydrate(data);
+   */
+  hydrate(data: Record<string, unknown>): void;
 
   /**
    * @internal Internal subscription for effects - doesn't affect refCount.

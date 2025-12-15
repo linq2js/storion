@@ -26,7 +26,7 @@ import {
   hasWriteHook,
 } from "./tracking";
 import { resolveEquality, strictEqual } from "./equality";
-import { generateStoreId } from "./proxy";
+import { generateSpecName, generateStoreId } from "./generator";
 
 import { emitter, Emitter } from "../emitter";
 
@@ -43,8 +43,9 @@ import { emitter, Emitter } from "../emitter";
 export function store<TState extends StateBase, TActions extends ActionsBase>(
   options: StoreOptions<TState, TActions>
 ): StoreSpec<TState, TActions> {
+  const name = options.name ?? generateSpecName();
   return {
-    name: options.name,
+    name,
     options,
   };
 }
@@ -81,7 +82,7 @@ export function createStoreInstance<
   instanceOptions: CreateStoreInstanceOptions = {}
 ): StoreInstance<TState, TActions> {
   const options = spec.options;
-  const storeId = generateStoreId(options.name);
+  const storeId = generateStoreId(spec.name);
 
   // State (immutable - replaced on each update)
   let disposed = false;
@@ -229,6 +230,7 @@ export function createStoreInstance<
 
   const instance: StoreInstance<TState, TActions> = {
     id: storeId,
+    spec,
 
     get state() {
       return readonlyState as Readonly<TState>;
@@ -329,6 +331,43 @@ export function createStoreInstance<
       // Trigger listeners for changed properties
       for (const { key, oldValue } of changedKeys) {
         handlePropertyChange(key as string, oldValue, initialState[key]);
+      }
+    },
+
+    dehydrate(): Record<string, unknown> {
+      const normalizer = options.normalize;
+      if (normalizer) {
+        return normalizer(currentState);
+      }
+      // Default: return shallow copy of state
+      return { ...currentState };
+    },
+
+    hydrate(data: Record<string, unknown>): void {
+      // Transform data using denormalize option if provided
+      const denormalizer = options.denormalize;
+      const newState = denormalizer
+        ? denormalizer(data)
+        : (data as unknown as TState);
+
+      // Apply each property, but skip dirty props to avoid overwriting fresh data
+      for (const key of Object.keys(newState) as Array<keyof TState>) {
+        // Skip if prop is dirty (has been modified since initialization)
+        if (currentState[key] !== initialState[key]) {
+          continue;
+        }
+
+        const oldValue = currentState[key];
+        const newValue = newState[key];
+
+        // Skip if value hasn't changed
+        if (isEqual(key as string, oldValue, newValue)) {
+          continue;
+        }
+
+        // Apply the change
+        currentState = { ...currentState, [key]: newValue };
+        handlePropertyChange(key as string, oldValue, newValue);
       }
     },
   };

@@ -197,14 +197,3 @@ export function createTrackingProxy<T extends Record<string, unknown>>(
   }) as Readonly<T>;
 }
 
-// =============================================================================
-// ID Generation
-// =============================================================================
-
-/**
- * Generates a unique store ID.
- */
-export function generateStoreId(name?: string): string {
-  const random = Math.random().toString(36).substring(2, 10);
-  return name ? `${name}_${random}` : `store_${random}`;
-}
