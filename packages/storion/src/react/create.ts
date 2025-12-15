@@ -1,5 +1,5 @@
 /**
- * define() - Shorthand for single-store apps
+ * create() - Shorthand for single-store apps
  *
  * Creates a store instance and a custom hook in one call.
  */
@@ -17,34 +17,34 @@ import { container } from "../core/container";
 import { useStoreWithContainer } from "./useStore";
 
 /**
- * Selector for define() hook.
+ * Selector for create() hook.
  * Receives state and actions directly (no resolve needed).
  */
-export type DefineSelector<
+export type CreateSelector<
   TState extends StateBase,
   TActions extends ActionsBase,
   T
 > = (state: Readonly<TState>, actions: TActions) => T;
 
 /**
- * Custom hook returned by define().
+ * Custom hook returned by create().
  */
-export type UseDefinedStore<
+export type UseCreatedStore<
   TState extends StateBase,
   TActions extends ActionsBase
 > = <T extends object>(
-  selector: DefineSelector<TState, TActions, T>
+  selector: CreateSelector<TState, TActions, T>
 ) => StableResult<T>;
 
 /**
- * Result of define() call.
+ * Result of create() call.
  */
-export type DefineResult<
+export type CreateResult<
   TState extends StateBase,
   TActions extends ActionsBase
 > = readonly [
   StoreInstance<TState, TActions>,
-  UseDefinedStore<TState, TActions>
+  UseCreatedStore<TState, TActions>
 ];
 
 /**
@@ -52,7 +52,7 @@ export type DefineResult<
  *
  * @example
  * ```ts
- * const [counter, useCounter] = define({
+ * const [counter, useCounter] = create({
  *   state: { count: 0 },
  *   setup({ state }) {
  *     return {
@@ -80,9 +80,9 @@ export type DefineResult<
  * @param options - Store options (state, setup, etc.)
  * @returns Tuple of [instance, hook]
  */
-export function define<TState extends StateBase, TActions extends ActionsBase>(
+export function create<TState extends StateBase, TActions extends ActionsBase>(
   options: StoreOptions<TState, TActions>
-): DefineResult<TState, TActions> {
+): CreateResult<TState, TActions> {
   // Create spec and dedicated container
   const spec = createSpec(options);
   const dedicatedContainer: StoreContainer = container();
@@ -91,8 +91,8 @@ export function define<TState extends StateBase, TActions extends ActionsBase>(
   const instance = dedicatedContainer.get(spec);
 
   // Create custom hook
-  const useDefinedStore: UseDefinedStore<TState, TActions> = <T extends object>(
-    selector: DefineSelector<TState, TActions, T>
+  const useCreatedStore: UseCreatedStore<TState, TActions> = <T extends object>(
+    selector: CreateSelector<TState, TActions, T>
   ): StableResult<T> => {
     return useStoreWithContainer(
       ({ resolve }) => {
@@ -103,6 +103,6 @@ export function define<TState extends StateBase, TActions extends ActionsBase>(
     );
   };
 
-  return [instance, useDefinedStore] as const;
+  return [instance, useCreatedStore] as const;
 }
 

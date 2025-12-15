@@ -12,11 +12,11 @@ export { useStore } from "./useStore";
 
 // Shorthand
 export {
-  define,
-  type DefineSelector,
-  type UseDefinedStore,
-  type DefineResult,
-} from "./define";
+  create,
+  type CreateSelector,
+  type UseCreatedStore,
+  type CreateResult,
+} from "./create";
 
 // Re-export core functions for convenience
 export * from "../index";

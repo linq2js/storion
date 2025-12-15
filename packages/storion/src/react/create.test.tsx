@@ -1,20 +1,20 @@
 /**
- * Tests for define() shorthand
+ * Tests for create() shorthand
  */
 
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import { define } from "./define";
+import { create } from "./create";
 
-describe("define", () => {
+describe("create", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe("instance", () => {
     it("should return a store instance", () => {
-      const [counter] = define({
+      const [counter] = create({
         state: { count: 0 },
         setup() {
           return {};
@@ -28,7 +28,7 @@ describe("define", () => {
     });
 
     it("should have working actions on instance", () => {
-      const [counter] = define({
+      const [counter] = create({
         state: { count: 0 },
         setup({ state }) {
           return {
@@ -52,7 +52,7 @@ describe("define", () => {
     });
 
     it("should support subscribe on instance", () => {
-      const [counter] = define({
+      const [counter] = create({
         state: { count: 0 },
         setup({ state }) {
           return {
@@ -78,7 +78,7 @@ describe("define", () => {
 
   describe("hook", () => {
     it("should return a working hook", () => {
-      const [, useCounter] = define({
+      const [, useCounter] = create({
         state: { count: 0 },
         setup() {
           return {};
@@ -95,7 +95,7 @@ describe("define", () => {
     });
 
     it("should re-render when state changes", async () => {
-      const [counter, useCounter] = define({
+      const [counter, useCounter] = create({
         state: { count: 0 },
         setup({ state }) {
           return {
@@ -127,7 +127,7 @@ describe("define", () => {
     });
 
     it("should provide actions in selector", async () => {
-      const [, useCounter] = define({
+      const [, useCounter] = create({
         state: { count: 0 },
         setup({ state }) {
           return {
@@ -161,7 +161,7 @@ describe("define", () => {
     });
 
     it("should not re-render when unrelated state changes", async () => {
-      const [counter, useCounter] = define({
+      const [counter, useCounter] = create({
         state: { count: 0, name: "test" },
         setup({ state }) {
           return {
@@ -204,7 +204,7 @@ describe("define", () => {
     });
 
     it("should work without StoreProvider", () => {
-      const [, useCounter] = define({
+      const [, useCounter] = create({
         state: { count: 42 },
         setup() {
           return {};
@@ -223,8 +223,8 @@ describe("define", () => {
   });
 
   describe("isolation", () => {
-    it("should create isolated instances for each define call", () => {
-      const [counter1] = define({
+    it("should create isolated instances for each create call", () => {
+      const [counter1] = create({
         state: { count: 0 },
         setup({ state }) {
           return {
@@ -235,7 +235,7 @@ describe("define", () => {
         },
       });
 
-      const [counter2] = define({
+      const [counter2] = create({
         state: { count: 0 },
         setup({ state }) {
           return {
@@ -254,7 +254,7 @@ describe("define", () => {
     });
 
     it("should share state between instance and hook", async () => {
-      const [counter, useCounter] = define({
+      const [counter, useCounter] = create({
         state: { count: 0 },
         setup({ state }) {
           return {
