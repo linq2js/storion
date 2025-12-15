@@ -1,19 +1,22 @@
 import { memo, useMemo } from "react";
-import { ExpenseCalculator, CategoryBreakdown as CategoryBreakdownType } from "@/domain/services";
-import { getCategory } from "@/domain/value-objects";
+import {
+  ExpenseCalculator,
+  CategoryBreakdown as CategoryBreakdownType,
+} from "@/domain/services";
+import { getCategory, CategoryType } from "@/domain/value-objects";
 import { useStore } from "storion/react";
 import { expenseStore, filterStore } from "../stores";
 import { formatCompact } from "./StatsPanel";
 
 export const CategoryBreakdown = memo(function CategoryBreakdown() {
-  const { expenses } = useStore(({ resolve }) => {
-    const [state] = resolve(expenseStore);
-    return { expenses: state.expenses };
-  });
-
-  const { dateRange } = useStore(({ resolve }) => {
-    const [state] = resolve(filterStore);
-    return { dateRange: state.dateRange };
+  const { expenses, dateRange, setCategory } = useStore(({ resolve }) => {
+    const [expenseState] = resolve(expenseStore);
+    const [filterState, filterActions] = resolve(filterStore);
+    return {
+      expenses: expenseState.expenses,
+      dateRange: filterState.dateRange,
+      setCategory: filterActions.setCategory,
+    };
   });
 
   const breakdown = useMemo(() => {
@@ -22,6 +25,10 @@ export const CategoryBreakdown = memo(function CategoryBreakdown() {
   }, [expenses, dateRange]);
 
   if (breakdown.length === 0) return null;
+
+  const handleCategoryClick = (category: CategoryType) => {
+    setCategory(category);
+  };
 
   return (
     <div className="card p-5 sm:p-6 mb-6">
@@ -33,7 +40,12 @@ export const CategoryBreakdown = memo(function CategoryBreakdown() {
       </div>
       <div className="space-y-4">
         {breakdown.slice(0, 5).map((item, index) => (
-          <CategoryBar key={item.category} item={item} delay={index * 50} />
+          <CategoryBar
+            key={item.category}
+            item={item}
+            delay={index * 50}
+            onClick={() => handleCategoryClick(item.category)}
+          />
         ))}
       </div>
     </div>
@@ -43,9 +55,11 @@ export const CategoryBreakdown = memo(function CategoryBreakdown() {
 const CategoryBar = memo(function CategoryBar({
   item,
   delay = 0,
+  onClick,
 }: {
   item: CategoryBreakdownType;
   delay?: number;
+  onClick?: () => void;
 }) {
   const category = getCategory(item.category);
 
@@ -62,8 +76,10 @@ const CategoryBar = memo(function CategoryBar({
   const colors = colorMap[category.color] ?? colorMap["expense-other"];
 
   return (
-    <div
-      className="animate-slide-up"
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left animate-slide-up hover:bg-surface-50 -mx-2 px-2 py-1 rounded-lg transition-colors cursor-pointer"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-center gap-3 mb-2">
@@ -75,7 +91,10 @@ const CategoryBar = memo(function CategoryBar({
         <span className="flex-1 text-sm font-medium text-surface-700 truncate">
           {category.label}
         </span>
-        <span className="money-sm text-surface-600" title={item.amount.format()}>
+        <span
+          className="money-sm text-surface-600"
+          title={item.amount.format()}
+        >
           {formatCompact(item.amount.format())}
         </span>
         <span className="text-xs text-surface-400 w-12 text-right">
@@ -91,7 +110,6 @@ const CategoryBar = memo(function CategoryBar({
           }}
         />
       </div>
-    </div>
+    </button>
   );
 });
-
