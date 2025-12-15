@@ -5,7 +5,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { store } from "./store";
 import { container } from "./container";
-import { batch, effect, untrack } from "./tracking";
+import { batch, untrack } from "./tracking";
+import { effect } from "./effect";
 
 describe("store()", () => {
   it("should create a store spec", () => {

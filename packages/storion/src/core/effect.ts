@@ -8,7 +8,12 @@
 import type { StoreResolver } from "../types";
 import type { Emitter } from "../emitter";
 import { emitter } from "../emitter";
-import { withHooks, getHooks, scheduleNotification } from "./tracking";
+import {
+  withHooks,
+  getHooks,
+  scheduleNotification,
+  type Hooks,
+} from "./tracking";
 
 // =============================================================================
 // Effect Error Handling Types
@@ -57,8 +62,8 @@ export interface EffectOptions {
  * Options passed from store to effect via scheduleEffect hook.
  */
 export interface RunEffectOptions {
-  /** Store-level error handler (fallback if effect doesn't specify) */
-  onError?: EffectErrorStrategy;
+  /** Store-level error callback - always called when effect errors */
+  onError?: (error: unknown) => void;
 }
 
 // =============================================================================
@@ -152,7 +157,7 @@ export interface EffectContext {
 function createEffectContext(
   nth: number,
   isStale: () => boolean
-): EffectContext {
+): EffectContext & { _runCleanups: () => void } {
   // Lazy initialization - only create when actually used
   let cleanupEmitter: Emitter | null = null;
   let abortController: AbortController | null = null;
@@ -234,14 +239,13 @@ function createEffectContext(
 export type EffectFn = (ctx: EffectContext) => void;
 
 /**
- * Resolve error strategy from effect options or store options.
+ * Resolve error strategy from effect options.
  * Default: "keepAlive" - effect stays reactive even on error.
  */
 function resolveErrorStrategy(
-  effectOptions?: EffectOptions,
-  runOptions?: RunEffectOptions
+  effectOptions?: EffectOptions
 ): EffectErrorStrategy {
-  return effectOptions?.onError ?? runOptions?.onError ?? "keepAlive";
+  return effectOptions?.onError ?? "keepAlive";
 }
 
 /**
@@ -303,14 +307,21 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
  * }});
  */
 export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
+  // ==========================================================================
+  // Effect State (shared across all runs)
+  // ==========================================================================
+
   let currentContext: (EffectContext & { _runCleanups: () => void }) | null =
     null;
-  let subscriptionEmitter: Emitter | null = null; // Lazy - holds unsubscribe functions
+  let subscriptionEmitter: Emitter | null = null;
+  let isStarted = false;
   let isRunning = false;
   let isDisposed = false;
-  let runGeneration = 0; // Track effect generations for staleness
+  let runGeneration = 0;
   let retryCount = 0;
   let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+  let errorStrategy: EffectErrorStrategy = "keepAlive";
+  let onErrorCallback: ((error: unknown) => void) | null = null;
 
   // Previous successful state (for keepAlive strategy)
   let prevTrackedDeps = new Map<
@@ -319,7 +330,23 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
   >();
   let prevSubscriptionEmitter: Emitter | null = null;
 
-  // Lazy getter for subscription emitter
+  // Current tracked dependencies
+  let trackedDeps = new Map<
+    string,
+    { storeId: string; prop: string; resolver: StoreResolver }
+  >();
+  const writtenProps = new Set<string>();
+
+  // For tracking during execution
+  let newTrackedDeps: Map<
+    string,
+    { storeId: string; prop: string; resolver: StoreResolver }
+  > | null = null;
+
+  // ==========================================================================
+  // Helper Functions
+  // ==========================================================================
+
   const getSubscriptionEmitter = () => {
     if (!subscriptionEmitter) {
       subscriptionEmitter = emitter();
@@ -327,288 +354,253 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
     return subscriptionEmitter;
   };
 
-  // Unsubscribe all and clear
   const clearSubscriptions = () => {
     if (subscriptionEmitter && subscriptionEmitter.size > 0) {
       subscriptionEmitter.emitAndClear();
     }
   };
 
-  const runEffect = (runOptions?: RunEffectOptions): VoidFunction => {
-    const errorStrategy = resolveErrorStrategy(options, runOptions);
+  const areDepsChanged = (
+    prev: Map<string, unknown>,
+    next: Map<string, unknown>
+  ): boolean => {
+    if (prev.size !== next.size) return true;
+    for (const key of next.keys()) {
+      if (!prev.has(key)) return true;
+    }
+    return false;
+  };
 
-    // Dispose function
-    const dispose = () => {
-      if (isDisposed) return;
-      isDisposed = true;
-      runGeneration++; // Mark all pending async as stale
+  const subscribeToTrackedDeps = () => {
+    for (const [key, dep] of trackedDeps) {
+      if (writtenProps.has(key)) continue;
 
-      // Cancel pending retry
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
-        retryTimeout = null;
+      const instance = dep.resolver.get(dep.storeId);
+      if (instance) {
+        const subscribeMethod =
+          (instance as any)._subscribeInternal ??
+          ((prop: string, listener: () => void) =>
+            instance.subscribe(prop as any, listener));
+
+        const unsub = subscribeMethod(dep.prop, () => {
+          scheduleNotification(execute, fn);
+        });
+        getSubscriptionEmitter().on(unsub);
+      }
+    }
+  };
+
+  const handleError = (error: unknown) => {
+    // Always notify store-level callback if provided
+    onErrorCallback?.(error);
+
+    if (errorStrategy === "failFast") {
+      throw error;
+    }
+
+    if (errorStrategy === "keepAlive") {
+      console.error("Effect error (keepAlive):", error);
+
+      if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
+        trackedDeps = new Map(prevTrackedDeps);
+        subscriptionEmitter = prevSubscriptionEmitter;
+        prevSubscriptionEmitter = null;
+        return;
       }
 
-      // Run context cleanups
+      if (newTrackedDeps && newTrackedDeps.size > 0) {
+        trackedDeps = newTrackedDeps;
+      }
+      subscribeToTrackedDeps();
+      return;
+    }
+
+    if (typeof errorStrategy === "function") {
+      const retry = () => {
+        retryCount++;
+        execute();
+      };
+      errorStrategy({ error, retry, retryCount });
+      return;
+    }
+
+    const retryConfig = errorStrategy as EffectRetryConfig;
+    if (retryCount < retryConfig.maxRetries) {
+      const delay = getRetryDelay(retryConfig, retryCount);
+      retryCount++;
+      retryTimeout = setTimeout(() => {
+        retryTimeout = null;
+        execute();
+      }, delay);
+    } else {
+      console.error(
+        `Effect failed after ${retryConfig.maxRetries} retries:`,
+        error
+      );
+    }
+  };
+
+  // Pre-allocated hooks
+  let cachedHooks: import("./tracking").Hooks | null = null;
+
+  const getTrackingHooks = (current: Hooks): Hooks => {
+    if (!cachedHooks) {
+      cachedHooks = {
+        ...current,
+        onRead: (event) => {
+          current.onRead?.(event);
+          const key = `${event.storeId}.${event.prop}`;
+          if (!newTrackedDeps!.has(key)) {
+            newTrackedDeps!.set(key, {
+              storeId: event.storeId,
+              prop: event.prop,
+              resolver: event.resolver,
+            });
+          }
+        },
+        onWrite: (event) => {
+          current.onWrite?.(event);
+          const key = `${event.storeId}.${event.prop}`;
+          writtenProps.add(key);
+        },
+        scheduleNotification: current.scheduleNotification,
+        scheduleEffect: current.scheduleEffect,
+      };
+    }
+    return cachedHooks;
+  };
+
+  // ==========================================================================
+  // Execute - runs the effect (initial or re-run)
+  // ==========================================================================
+
+  const execute = () => {
+    if (isDisposed || isRunning) return;
+    isRunning = true;
+
+    const currentGeneration = ++runGeneration;
+
+    try {
+      // Run previous context cleanups
       currentContext?._runCleanups();
       currentContext = null;
 
-      // Unsubscribe all current subscriptions
-      clearSubscriptions();
-
-      // Also cleanup previous subscriptions (keepAlive)
-      if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
-        prevSubscriptionEmitter.emitAndClear();
+      // Save current state for keepAlive recovery
+      if (subscriptionEmitter && subscriptionEmitter.size > 0) {
+        prevTrackedDeps = new Map(trackedDeps);
+        prevSubscriptionEmitter = subscriptionEmitter;
+        subscriptionEmitter = null;
       }
-    };
 
-    // Track dependencies and written props
-    let trackedDeps = new Map<
-      string,
-      { storeId: string; prop: string; resolver: StoreResolver }
-    >();
-    const writtenProps = new Set<string>();
+      // Reset for this run
+      newTrackedDeps = new Map();
+      writtenProps.clear();
 
-    // Check if dependencies changed (by comparing keys)
-    const areDepsChanged = (
-      prev: Map<string, unknown>,
-      next: Map<string, unknown>
-    ): boolean => {
-      if (prev.size !== next.size) return true;
-      for (const key of next.keys()) {
-        if (!prev.has(key)) return true;
-      }
-      return false;
-    };
+      // Lazy context creation
+      const isStale = () => isDisposed || runGeneration !== currentGeneration;
+      let lazyContext: (EffectContext & { _runCleanups: () => void }) | null =
+        null;
 
-    const subscribeToTrackedDeps = () => {
-      // Subscribe to tracked dependencies (excluding written props)
-      for (const [key, dep] of trackedDeps) {
-        // Skip properties that were written by this effect
-        if (writtenProps.has(key)) {
-          continue;
+      const getOrCreateContext = () => {
+        if (!lazyContext) {
+          lazyContext = createEffectContext(currentGeneration, isStale);
         }
+        return lazyContext;
+      };
 
-        const instance = dep.resolver.get(dep.storeId);
-        if (instance) {
-          // Use internal subscription if available (doesn't affect refCount)
-          const subscribeMethod =
-            (instance as any)._subscribeInternal ??
-            ((prop: string, listener: () => void) =>
-              instance.subscribe(prop as any, listener));
+      const lazyContextProxy = new Proxy({} as EffectContext, {
+        get(_, prop) {
+          return getOrCreateContext()[prop as keyof EffectContext];
+        },
+      });
 
-          const unsub = subscribeMethod(dep.prop, () => {
-            // Re-run effect when dependency changes
-            scheduleNotification(executeEffect, fn);
-          });
-          // Store unsubscribe function in emitter
-          getSubscriptionEmitter().on(unsub);
+      // Run effect with tracking
+      withHooks(getTrackingHooks, () => {
+        const result: unknown = fn(lazyContextProxy);
+
+        if (
+          result !== null &&
+          result !== undefined &&
+          typeof (result as PromiseLike<unknown>).then === "function"
+        ) {
+          throw new Error(
+            "Effect function must be synchronous. " +
+              "Use ctx.safe(promise) for async operations instead of returning a Promise."
+          );
         }
-      }
-    };
+      });
 
-    const handleError = (error: unknown) => {
-      if (errorStrategy === "failFast") {
-        // Default: let error propagate, effect becomes inactive
-        throw error;
-      }
+      currentContext = lazyContext;
+      retryCount = 0;
 
-      if (errorStrategy === "keepAlive") {
-        console.error("Effect error (keepAlive):", error);
+      // Handle subscription updates
+      const depsChanged = areDepsChanged(trackedDeps, newTrackedDeps!);
 
-        // If we have previous subscriptions, restore them (swap emitters back)
+      if (depsChanged) {
         if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
-          trackedDeps = new Map(prevTrackedDeps);
-          // Swap: restore prev emitter as current, discard new one
-          subscriptionEmitter = prevSubscriptionEmitter;
-          prevSubscriptionEmitter = null;
-          return;
+          prevSubscriptionEmitter.emitAndClear();
         }
-
-        // First run failed - subscribe to whatever deps were tracked before error
-        // This keeps the effect reactive so it can retry when deps change
-        // Update trackedDeps from newTrackedDeps before subscribing
-        if (newTrackedDeps && newTrackedDeps.size > 0) {
-          trackedDeps = newTrackedDeps;
-        }
+        trackedDeps = newTrackedDeps!;
         subscribeToTrackedDeps();
-        return;
-      }
-
-      if (typeof errorStrategy === "function") {
-        // Custom error handler
-        const retry = () => {
-          retryCount++;
-          executeEffect();
-        };
-        errorStrategy({ error, retry, retryCount });
-        return;
-      }
-
-      // Retry config
-      const retryConfig = errorStrategy as EffectRetryConfig;
-      if (retryCount < retryConfig.maxRetries) {
-        const delay = getRetryDelay(retryConfig, retryCount);
-        retryCount++;
-        retryTimeout = setTimeout(() => {
-          retryTimeout = null;
-          executeEffect();
-        }, delay);
       } else {
-        // Max retries reached
-        console.error(
-          `Effect failed after ${retryConfig.maxRetries} retries:`,
-          error
-        );
-      }
-    };
-
-    // Pre-allocate hooks object to avoid creating new object on each run
-    let cachedHooks: import("./tracking").Hooks | null = null;
-    let newTrackedDeps: Map<
-      string,
-      { storeId: string; prop: string; resolver: StoreResolver }
-    > | null = null;
-
-    const getTrackingHooks = (
-      current: import("./tracking").Hooks
-    ): import("./tracking").Hooks => {
-      if (!cachedHooks) {
-        cachedHooks = {
-          ...current,
-          onRead: (event) => {
-            current.onRead?.(event);
-            const key = `${event.storeId}.${event.prop}`;
-            if (!newTrackedDeps!.has(key)) {
-              newTrackedDeps!.set(key, {
-                storeId: event.storeId,
-                prop: event.prop,
-                resolver: event.resolver,
-              });
-            }
-          },
-          onWrite: (event) => {
-            current.onWrite?.(event);
-            const key = `${event.storeId}.${event.prop}`;
-            writtenProps.add(key);
-          },
-          scheduleNotification: current.scheduleNotification,
-          scheduleEffect: current.scheduleEffect,
-        };
-      }
-      return cachedHooks;
-    };
-
-    const executeEffect = () => {
-      if (isDisposed || isRunning) return;
-      isRunning = true;
-
-      // Increment generation to mark previous async operations as stale
-      const currentGeneration = ++runGeneration;
-
-      try {
-        // Run previous context cleanups (this handles onCleanup registrations)
-        currentContext?._runCleanups();
-        currentContext = null;
-
-        // Save current emitter to prev for keepAlive recovery (swap, don't clear)
-        if (subscriptionEmitter && subscriptionEmitter.size > 0) {
-          prevTrackedDeps = new Map(trackedDeps);
-          prevSubscriptionEmitter = subscriptionEmitter;
-          subscriptionEmitter = null; // Will be lazily created if needed
+        if (prevSubscriptionEmitter) {
+          subscriptionEmitter = prevSubscriptionEmitter;
         }
-
-        // Reset tracked deps for this run (using new map to compare after)
-        newTrackedDeps = new Map();
-        writtenProps.clear();
-
-        // Create context LAZILY - only when effect actually accesses ctx properties
-        // This avoids creating AbortController and cleanup arrays for simple effects
-        const isStale = () => isDisposed || runGeneration !== currentGeneration;
-        let lazyContext: (EffectContext & { _runCleanups: () => void }) | null =
-          null;
-        const getOrCreateContext = () => {
-          if (!lazyContext) {
-            lazyContext = createEffectContext(
-              currentGeneration,
-              isStale
-            ) as EffectContext & {
-              _runCleanups: () => void;
-            };
-          }
-          return lazyContext;
-        };
-
-        // Proxy that lazily creates context on first property access
-        const lazyContextProxy = new Proxy({} as EffectContext, {
-          get(_, prop) {
-            return getOrCreateContext()[prop as keyof EffectContext];
-          },
-        });
-
-        // Run effect with tracking (using pre-allocated hooks)
-        withHooks(getTrackingHooks, () => {
-          const result: unknown = fn(lazyContextProxy);
-
-          // Prevent async effects - they cause tracking issues
-          if (
-            result !== null &&
-            result !== undefined &&
-            typeof (result as PromiseLike<unknown>).then === "function"
-          ) {
-            throw new Error(
-              "Effect function must be synchronous. " +
-                "Use ctx.safe(promise) for async operations instead of returning a Promise."
-            );
-          }
-        });
-
-        // Store lazy context for cleanup on next run (only if it was actually created)
-        currentContext = lazyContext;
-
-        // Success - reset retry count
-        retryCount = 0;
-
-        // Check if dependencies changed - only recreate subscriptions if they did
-        const depsChanged = areDepsChanged(trackedDeps, newTrackedDeps!);
-
-        if (depsChanged) {
-          // Unsubscribe previous (call all unsubscribes via emitter)
-          if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
-            prevSubscriptionEmitter.emitAndClear();
-          }
-
-          // Update tracked deps and subscribe to new ones
-          trackedDeps = newTrackedDeps!;
-          subscribeToTrackedDeps();
-        } else {
-          // Deps unchanged - restore prev subscriptions, discard new empty emitter
-          if (prevSubscriptionEmitter) {
-            subscriptionEmitter = prevSubscriptionEmitter;
-          }
-        }
-
-        // Clear previous state after successful run
-        prevTrackedDeps.clear();
-        prevSubscriptionEmitter = null;
-      } catch (error) {
-        handleError(error);
-      } finally {
-        isRunning = false;
       }
-    };
 
-    // Initial run
-    executeEffect();
+      prevTrackedDeps.clear();
+      prevSubscriptionEmitter = null;
+    } catch (error) {
+      handleError(error);
+    } finally {
+      isRunning = false;
+    }
+  };
 
+  // ==========================================================================
+  // Dispose - stops the effect permanently
+  // ==========================================================================
+
+  const dispose = () => {
+    if (isDisposed) return;
+    isDisposed = true;
+    runGeneration++;
+
+    if (retryTimeout) {
+      clearTimeout(retryTimeout);
+      retryTimeout = null;
+    }
+
+    currentContext?._runCleanups();
+    currentContext = null;
+
+    clearSubscriptions();
+
+    if (prevSubscriptionEmitter && prevSubscriptionEmitter.size > 0) {
+      prevSubscriptionEmitter.emitAndClear();
+    }
+  };
+
+  // ==========================================================================
+  // Start - called by scheduleEffect hook (only once)
+  // ==========================================================================
+
+  const start = (runOptions?: RunEffectOptions) => {
+    if (isStarted) return;
+    isStarted = true;
+    errorStrategy = resolveErrorStrategy(options);
+    onErrorCallback = runOptions?.onError ?? null;
+    execute();
+  };
+
+  // ==========================================================================
+  // Schedule via hooks
+  // ==========================================================================
+
+  getHooks().scheduleEffect((runOptions?: RunEffectOptions) => {
+    start(runOptions);
     return dispose;
-  };
+  });
 
-  // Schedule effect via hooks (store can defer until after instance creation)
-  getHooks().scheduleEffect(runEffect);
-
-  // Return dispose (may not work if scheduleEffect defers)
-  return () => {
-    // This will be handled by the scheduled effect's dispose
-  };
+  return dispose;
 }

@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { store } from "./store";
 import { container } from "./container";
-import { effect } from "./tracking";
+import { effect } from "./effect";
 
 describe("container()", () => {
   it("should create a container", () => {
@@ -522,6 +522,28 @@ describe("autoDispose lifetime", () => {
     vi.useRealTimers();
   });
 
+  it("should NOT auto-dispose if store never had subscribers", async () => {
+    vi.useFakeTimers();
+
+    const counter = store({
+      name: "counter",
+      state: { count: 0 },
+      lifetime: "autoDispose",
+      setup: () => ({}),
+    });
+
+    const stores = container();
+    stores.get(counter); // Create instance but don't subscribe
+
+    // After grace period - should NOT dispose because refCount was never > 0
+    await vi.advanceTimersByTimeAsync(100);
+
+    // Should still exist - autoDispose only triggers when refCount drops TO zero
+    expect(stores.has(counter)).toBe(true);
+
+    vi.useRealTimers();
+  });
+
   it("should NOT count internal effects as subscribers", async () => {
     vi.useFakeTimers();
 
@@ -539,9 +561,12 @@ describe("autoDispose lifetime", () => {
     });
 
     const stores = container();
-    stores.get(counter);
+    const instance = stores.get(counter);
 
-    // No external subscribers, only internal effect
+    // Subscribe then unsubscribe to trigger autoDispose
+    const unsub = instance.subscribe(() => {});
+    unsub();
+
     // After grace period, should be disposed
     await vi.advanceTimersByTimeAsync(100);
 

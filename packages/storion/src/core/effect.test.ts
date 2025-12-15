@@ -600,38 +600,70 @@ describe("effect", () => {
   });
 
   describe("RunEffectOptions (store-level)", () => {
-    it("should use store-level error strategy when effect has none", () => {
+    it("should call store-level onError callback when effect errors", () => {
       const error = new Error("Test error");
+      const storeErrorCallback = vi.fn();
 
       withHooks(
         {
           scheduleEffect: (runEffect) => {
-            // Simulate store passing error strategy
-            runEffect({ onError: "failFast" });
+            // Simulate store passing error callback
+            runEffect({ onError: storeErrorCallback });
+          },
+        },
+        () => {
+          effect(() => {
+            throw error;
+          });
+        }
+      );
+
+      // Store callback should be called
+      expect(storeErrorCallback).toHaveBeenCalledWith(error);
+      // Default keepAlive strategy should also log
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "Effect error (keepAlive):",
+        error
+      );
+    });
+
+    it("should call store callback AND apply effect strategy (failFast)", () => {
+      const error = new Error("Test error");
+      const storeErrorCallback = vi.fn();
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect({ onError: storeErrorCallback });
           },
         },
         () => {
           expect(() => {
-            effect(() => {
-              throw error;
-            });
+            effect(
+              () => {
+                throw error;
+              },
+              { onError: "failFast" }
+            );
           }).toThrow("Test error");
         }
       );
+
+      // Store callback should be called before throw
+      expect(storeErrorCallback).toHaveBeenCalledWith(error);
     });
 
-    it("should prefer effect-level strategy over store-level", () => {
+    it("should call store callback AND apply effect strategy (keepAlive)", () => {
       const error = new Error("Test error");
+      const storeErrorCallback = vi.fn();
 
       withHooks(
         {
           scheduleEffect: (runEffect) => {
-            // Store says failFast
-            runEffect({ onError: "failFast" });
+            runEffect({ onError: storeErrorCallback });
           },
         },
         () => {
-          // Effect says keepAlive - should win
           effect(
             () => {
               throw error;
@@ -641,7 +673,8 @@ describe("effect", () => {
         }
       );
 
-      // Should log instead of throw
+      // Both should be called
+      expect(storeErrorCallback).toHaveBeenCalledWith(error);
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         "Effect error (keepAlive):",
         error

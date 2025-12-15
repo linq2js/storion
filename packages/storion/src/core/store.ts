@@ -53,9 +53,6 @@ export function store<TState extends StateBase, TActions extends ActionsBase>(
 // Store Instance Factory
 // =============================================================================
 
-/** Re-export StoreResolver from types */
-export type { StoreResolver };
-
 /** Property change event payload */
 interface PropertyChangeEvent {
   newValue: unknown;
@@ -65,8 +62,8 @@ interface PropertyChangeEvent {
 /** Options for creating store instance */
 export interface CreateStoreInstanceOptions {
   /** Called when refCount drops to 0 (after grace period) for autoDispose stores */
-  onZeroRefs?: () => void;
-  /** Grace period in ms before calling onZeroRefs (default: 100) */
+  onUnused?: () => void;
+  /** Grace period in ms before calling onUnused (default: 100) */
   gracePeriodMs?: number;
 }
 
@@ -101,6 +98,10 @@ export function createStoreInstance<
   let disposeTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const incrementRef = (): void => {
+    if (!isAutoDispose || isSetupPhase) {
+      return;
+    }
+
     refCount++;
     // Cancel pending dispose if new subscriber joins
     if (disposeTimeout) {
@@ -110,14 +111,18 @@ export function createStoreInstance<
   };
 
   const decrementRef = (): void => {
+    if (!isAutoDispose || isSetupPhase) {
+      return;
+    }
+
     refCount--;
-    if (refCount <= 0 && isAutoDispose && instanceOptions.onZeroRefs) {
+    if (refCount <= 0 && instanceOptions.onUnused) {
       // Schedule disposal after grace period
       disposeTimeout = setTimeout(() => {
         disposeTimeout = null;
         // Double-check still zero refs (in case of race)
         if (refCount <= 0 && !disposed) {
-          instanceOptions.onZeroRefs!();
+          instanceOptions.onUnused!();
         }
       }, gracePeriodMs);
     }
@@ -147,7 +152,7 @@ export function createStoreInstance<
   };
 
   // Effect dispose functions (collected via scheduleEffect hook)
-  const effectDisposers: VoidFunction[] = [];
+  const disposeEffectsEmitter = emitter();
 
   // Property equality - resolve from options
   const equalityOption = options.equality;
@@ -282,13 +287,10 @@ export function createStoreInstance<
       }
 
       // Dispose all effects
-      for (const dispose of effectDisposers) {
-        dispose();
-      }
-      effectDisposers.length = 0;
-
+      disposeEffectsEmitter.emitAndClear();
       // Clear subscribers (using emitter.clear())
       changeEmitter.clear();
+
       for (const em of propertyEmitters.values()) {
         em.clear();
       }
@@ -340,92 +342,63 @@ export function createStoreInstance<
   const localResolver: StoreResolver = {
     get(specOrId: any): any {
       // If looking up by ID and it's our store, return our instance
-      if (typeof specOrId === "string" && specOrId === storeId) {
+      if (specOrId === storeId) {
         return instance;
       }
       // Otherwise delegate to the container resolver
       return resolver.get(specOrId);
     },
-    has(spec: any) {
-      return resolver.has(spec);
-    },
+    has: resolver.has,
   };
 
   // ==========================================================================
-  // State Proxies (immutable - create new state object on each write)
+  // State Objects with defineProperty (faster reads than Proxy)
   // ==========================================================================
 
-  // Mutable proxy for setup context (internal use)
-  const mutableState = new Proxy({} as TState, {
-    get(_, prop) {
-      if (typeof prop !== "string") return undefined;
-      const value = currentState[prop as keyof TState];
-      // Only call trackRead if there's an active hook (perf optimization)
-      if (hasReadHook()) {
-        trackRead(storeId, prop, value, localResolver);
-      }
-      return value;
-    },
-    set(_, prop, value) {
-      if (typeof prop !== "string") return false;
-      const oldValue = currentState[prop as keyof TState];
-      // Only call trackWrite if there's an active hook (perf optimization)
-      if (hasWriteHook()) {
-        trackWrite(storeId, prop, value, oldValue);
-      }
-      // Fast path: skip equality function call when no custom equality configured
-      if (isEqual(prop, oldValue, value)) return true;
-      // Immutable update - create new state object
-      currentState = { ...currentState, [prop]: value };
-      handlePropertyChange(prop, oldValue, value);
-      return true;
-    },
-    has(_, prop) {
-      return prop in currentState;
-    },
-    ownKeys() {
-      return Reflect.ownKeys(currentState);
-    },
-    getOwnPropertyDescriptor(_, prop) {
-      if (typeof prop !== "string") return undefined;
-      const descriptor = Reflect.getOwnPropertyDescriptor(currentState, prop);
-      if (descriptor) {
-        return { ...descriptor, configurable: true, enumerable: true };
-      }
-      return undefined;
-    },
-  });
+  // Create reactive state object using Object.defineProperty
+  // Since we know all props upfront, this is faster than Proxy for reads
+  function createReactiveState(writable: boolean): TState {
+    const obj = {} as TState;
 
-  // Readonly proxy for external access
-  const readonlyState = new Proxy({} as TState, {
-    get(_, prop) {
-      if (typeof prop !== "string") return undefined;
-      const value = currentState[prop as keyof TState];
-      // Only call trackRead if there's an active hook (perf optimization)
-      if (hasReadHook()) {
-        trackRead(storeId, prop, value, localResolver);
-      }
-      return value;
-    },
-    set(_, prop) {
-      console.warn(`Cannot set property "${String(prop)}" on readonly state`);
-      return false;
-    },
-    has(_, prop) {
-      return prop in currentState;
-    },
-    ownKeys() {
-      return Reflect.ownKeys(currentState);
-    },
-    getOwnPropertyDescriptor(_, prop) {
-      if (typeof prop !== "string") return undefined;
-      const descriptor = Reflect.getOwnPropertyDescriptor(currentState, prop);
-      if (descriptor) {
-        return { ...descriptor, configurable: true, enumerable: true };
-      }
-      return undefined;
-    },
-  });
+    for (const prop of Object.keys(currentState) as Array<keyof TState>) {
+      Object.defineProperty(obj, prop, {
+        enumerable: true,
+        configurable: false,
+        get() {
+          const value = currentState[prop];
+          // Only call trackRead if there's an active hook (perf optimization)
+          if (hasReadHook()) {
+            trackRead(storeId, prop as string, value, localResolver);
+          }
+          return value;
+        },
+        set: writable
+          ? (value: unknown) => {
+              const oldValue = currentState[prop];
+              // Only call trackWrite if there's an active hook (perf optimization)
+              if (hasWriteHook()) {
+                trackWrite(storeId, prop as string, value, oldValue);
+              }
+              // Fast path: skip equality function call when no custom equality configured
+              if (isEqual(prop as string, oldValue, value)) return;
+              // Immutable update - create new state object
+              currentState = { ...currentState, [prop]: value };
+              handlePropertyChange(prop as string, oldValue, value);
+            }
+          : () => {
+              // Readonly - ignore writes silently
+            },
+      });
+    }
+
+    return obj;
+  }
+
+  // Mutable state for setup context (internal use)
+  const mutableState = createReactiveState(true);
+
+  // Readonly state for external access
+  const readonlyState = createReactiveState(false);
 
   // ==========================================================================
   // Setup Context
@@ -591,9 +564,7 @@ export function createStoreInstance<
     );
   } catch (error) {
     // Cleanup any effects that were already scheduled
-    for (const dispose of effectDisposers) {
-      dispose();
-    }
+    disposeEffectsEmitter.emitAndClear();
     throw error;
   } finally {
     // End setup phase - effect() calls after this will throw
@@ -603,7 +574,7 @@ export function createStoreInstance<
   // Now run all scheduled effects and collect their dispose functions
   for (const runEffect of scheduledEffects) {
     const dispose = runEffect();
-    effectDisposers.push(dispose);
+    disposeEffectsEmitter.on(dispose);
   }
 
   // Capture initial state - dirty tracking starts now
@@ -642,20 +613,6 @@ export function createStoreInstance<
 
   // Assign wrapped actions to instance
   instanceActions = wrappedActions;
-
-  // ==========================================================================
-  // Initial AutoDispose Check
-  // ==========================================================================
-
-  // For autoDispose stores with no initial subscribers, start the disposal timer
-  if (isAutoDispose && refCount === 0 && instanceOptions.onZeroRefs) {
-    disposeTimeout = setTimeout(() => {
-      disposeTimeout = null;
-      if (refCount <= 0 && !disposed) {
-        instanceOptions.onZeroRefs!();
-      }
-    }, gracePeriodMs);
-  }
 
   return instance;
 }

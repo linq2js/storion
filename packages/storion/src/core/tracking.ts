@@ -7,18 +7,6 @@
 
 import type { StoreResolver } from "../types";
 
-// Re-export effect types and function
-export type {
-  EffectRetryConfig,
-  EffectErrorContext,
-  EffectErrorStrategy,
-  EffectOptions,
-  RunEffectOptions,
-  EffectContext,
-  EffectFn,
-} from "./effect";
-export { effect } from "./effect";
-
 // =============================================================================
 // Hooks
 // =============================================================================

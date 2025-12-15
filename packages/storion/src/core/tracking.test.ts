@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { store } from "./store";
 import { container } from "./container";
-import { withHooks, getHooks, effect } from "./tracking";
+import { withHooks, getHooks } from "./tracking";
+import { effect } from "./effect";
 
 describe("hooks", () => {
   describe("withHooks()", () => {

@@ -78,7 +78,7 @@ export function container(options: ContainerOptions = {}): StoreContainer {
 
     if (spec.options.lifetime === "autoDispose") {
       // When refCount drops to 0, auto-dispose this store
-      instanceOptions.onZeroRefs = () => {
+      instanceOptions.onUnused = () => {
         containerApi.dispose(spec);
       };
     }
