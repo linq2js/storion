@@ -6,10 +6,12 @@
  */
 
 import { emitter } from "../emitter";
-import { getHooks, hasReadHook, withHooks, type ReadEvent } from "./tracking";
+import { Equality } from "../types";
+import { resolveEquality } from "./equality";
+import { getHooks, withHooks, type ReadEvent } from "./tracking";
 
 /** Equality function type */
-export type PickEquality<T> = (prev: T, next: T) => boolean;
+export type PickEquality<T> = Equality<T>;
 
 /** Auto-increment counter for unique pick keys */
 let pickIdCounter = 0;
@@ -53,33 +55,40 @@ let pickIdCounter = 0;
  * @throws Error if called outside of effect/useStore context
  */
 export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
+  const parentHooks = getHooks();
+
   // Must be inside an onRead context (effect or useStore)
-  if (!hasReadHook()) {
+  if (!parentHooks.onRead) {
     throw new Error(
       "pick() must be called inside an effect or useStore selector. " +
         "It requires an active hooks.onRead context."
     );
   }
 
-  const parentHooks = getHooks();
+  const equalityFn = resolveEquality<T>(equality);
+
+  const evaluate = () => {
+    const reads: ReadEvent[] = [];
+    // Run selector with our own onRead to capture dependencies
+    // Don't propagate to parent - we handle subscriptions ourselves
+    const value = withHooks(
+      {
+        onRead: (event) => {
+          reads.push(event);
+        },
+      },
+      selector
+    );
+
+    return [reads, value] as const;
+  };
 
   // Collect reads from the selector
-  const collectedReads: ReadEvent[] = [];
-
-  // Run selector with our own onRead to capture dependencies
-  // Don't propagate to parent - we handle subscriptions ourselves
-  const value = withHooks(
-    {
-      onRead: (event) => {
-        collectedReads.push(event);
-      },
-    },
-    selector
-  );
+  const [collectedReads, value] = evaluate();
 
   // If no reads were collected, just return the value
   // (selector doesn't depend on any reactive state)
-  if (collectedReads.length === 0) {
+  if (!collectedReads.length) {
     return value;
   }
 
@@ -114,20 +123,10 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
     // Handler for any dependency change
     const handleChange = () => {
       // Re-track dependencies (they can change with conditional logic)
-      const newReads: ReadEvent[] = [];
-      const newValue = withHooks(
-        {
-          onRead: (event) => {
-            newReads.push(event);
-          },
-        },
-        selector
-      );
+      const [newReads, newValue] = evaluate();
 
       // Check equality
-      const isEqual = equality
-        ? equality(cachedValue, newValue)
-        : cachedValue === newValue;
+      const isEqual = equalityFn(cachedValue, newValue);
 
       // Check if dependencies changed
       const depsChanged =
