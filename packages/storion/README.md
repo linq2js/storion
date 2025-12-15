@@ -527,13 +527,14 @@ import { store } from "storion";
 const myStore = store({
   name: "myStore", // Optional, auto-generated if omitted
   state: { count: 0 }, // Initial state (required)
-  setup({ state, resolve, update, dirty, reset, use }) {
+  setup({ state, resolve, update, dirty, reset, use, focus }) {
     // state     - Mutable proxy, writes notify subscribers
     // resolve   - Access other stores: [state, actions]
     // update    - Immer-style or partial updates
     // dirty     - Check if state modified: dirty() or dirty("prop")
     // reset     - Reset to initial state
     // use       - Apply mixins: use(mixin, ...args)
+    // focus     - Lens-like setter: focus("path.to.prop")
 
     return {
       increment: () => state.count++,
@@ -631,6 +632,45 @@ import { pick } from "storion";
 const fullName = pick(() => `${state.first} ${state.last}`);
 const total = pick(() => state.items.reduce((s, i) => s + i.price, 0), "deep");
 ```
+
+### `focus(path)` — Lens-Like Setters
+
+Create setters for nested state paths. Auto-creates intermediate objects when null/undefined.
+
+```ts
+const userStore = store({
+  state: {
+    profile: {
+      name: "John",
+      address: { city: "NYC", street: "" },
+    },
+  },
+  setup({ focus }) {
+    // Create setter for nested path
+    const setCity = focus("profile.address.city");
+
+    // Chain with .to() for sub-paths
+    const setAddress = focus("profile.address");
+    const setStreet = setAddress.to("street");
+
+    // Return as actions
+    return { setCity, setAddress, setStreet };
+  },
+});
+
+// Usage
+instance.actions.setCity("LA");
+instance.actions.setAddress({ city: "SF", street: "Market St" });
+instance.actions.setStreet("5th Ave");
+```
+
+**Features:**
+
+- 🔗 Dot-notation paths: `"profile.address.city"`
+- 🔄 Chainable with `.to()`: `setAddress.to("city")`
+- 🏗️ Auto-creates objects: handles `null`/`undefined` parents
+- ⚡ Reactive: triggers proper change notifications
+- 🚫 No array indices (only object properties)
 
 ### Store Instance
 

@@ -43,6 +43,72 @@ export type EqualityMap<T> = {
 };
 
 // =============================================================================
+// Focus (Lens-like state setters)
+// =============================================================================
+
+/**
+ * Extracts nested object paths as dot-notation strings.
+ * Stops at arrays (no index support).
+ *
+ * @example
+ * type State = { profile: { name: string; address: { city: string } } };
+ * type P = StatePath<State>; // "profile" | "profile.name" | "profile.address" | "profile.address.city"
+ */
+export type StatePath<T, Prefix extends string = ""> = T extends object
+  ? T extends unknown[]
+    ? never // Stop at arrays
+    : {
+        [K in keyof T & string]: T[K] extends object
+          ? T[K] extends unknown[]
+            ? `${Prefix}${K}` // Stop at arrays
+            : `${Prefix}${K}` | StatePath<NonNullable<T[K]>, `${Prefix}${K}.`>
+          : `${Prefix}${K}`;
+      }[keyof T & string]
+  : never;
+
+/**
+ * Gets the type at a nested path.
+ *
+ * @example
+ * type State = { profile: { address: { city: string } } };
+ * type City = PathValue<State, "profile.address.city">; // string
+ */
+export type PathValue<
+  T,
+  P extends string
+> = P extends `${infer K}.${infer Rest}`
+  ? K extends keyof T
+    ? PathValue<NonNullable<T[K]>, Rest>
+    : never
+  : P extends keyof T
+  ? T[P]
+  : never;
+
+/**
+ * A focus setter for a nested state path.
+ * Can be used as an action and chained with .to() for sub-paths.
+ *
+ * @example
+ * const setAddress = focus("profile.address");
+ * setAddress({ city: "NYC" }); // Set the whole address
+ *
+ * const setCity = setAddress.to("city");
+ * setCity("LA"); // Set just the city
+ */
+export interface FocusSetter<T> {
+  /** Set the value at this path. Auto-creates intermediate objects if null/undefined. */
+  (value: T): void;
+
+  /**
+   * Create a sub-focus for a nested property.
+   * @param key - Property key to focus on
+   */
+  to<K extends keyof NonNullable<T> & string>(
+    key: K
+  ): FocusSetter<NonNullable<T>[K]>;
+}
+
+// =============================================================================
 // Lifetime
 // =============================================================================
 
@@ -269,6 +335,26 @@ export interface StoreContext<TState extends StateBase> {
     mixin: StoreMixin<TState, TResult, TArgs>,
     ...args: TArgs
   ): TResult;
+
+  /**
+   * Create a lens-like setter for a nested state path.
+   * Auto-creates intermediate objects when null/undefined.
+   * Does not support array indices, only object properties.
+   *
+   * @example
+   * const setAddress = focus("profile.address");
+   * setAddress({ city: "NYC", street: "5th Ave" });
+   *
+   * // Chain with .to() for sub-paths
+   * const setCity = setAddress.to("city");
+   * setCity("LA");
+   *
+   * // Can be returned as actions
+   * return { setAddress, setCity };
+   */
+  focus<P extends StatePath<TState>>(
+    path: P
+  ): FocusSetter<PathValue<TState, P>>;
 }
 
 // =============================================================================

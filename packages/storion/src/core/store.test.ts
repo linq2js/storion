@@ -1664,3 +1664,166 @@ describe("StoreContext.use()", () => {
     expect(() => instance.actions.badAction()).toThrow(/setup phase/i);
   });
 });
+
+describe("focus()", () => {
+  it("should create a setter for a nested path", () => {
+    interface State {
+      profile: {
+        name: string;
+        address: {
+          city: string;
+          street: string;
+        };
+      };
+    }
+
+    const userStore = store({
+      state: {
+        profile: {
+          name: "John",
+          address: {
+            city: "NYC",
+            street: "5th Ave",
+          },
+        },
+      } as State,
+      setup: ({ focus }) => {
+        const setCity = focus("profile.address.city");
+        const setAddress = focus("profile.address");
+        return { setCity, setAddress };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(userStore);
+
+    // Test setting a deep property
+    instance.actions.setCity("LA");
+    expect(instance.state.profile.address.city).toBe("LA");
+
+    // Test setting an object
+    instance.actions.setAddress({ city: "SF", street: "Market St" });
+    expect(instance.state.profile.address.city).toBe("SF");
+    expect(instance.state.profile.address.street).toBe("Market St");
+  });
+
+  it("should support .to() for sub-paths", () => {
+    interface State {
+      profile: {
+        address: {
+          city: string;
+          zip: string;
+        };
+      };
+    }
+
+    const userStore = store({
+      state: {
+        profile: {
+          address: {
+            city: "NYC",
+            zip: "10001",
+          },
+        },
+      } as State,
+      setup: ({ focus }) => {
+        const setAddress = focus("profile.address");
+        const setCity = setAddress.to("city");
+        const setZip = setAddress.to("zip");
+        return { setAddress, setCity, setZip };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(userStore);
+
+    instance.actions.setCity("Boston");
+    expect(instance.state.profile.address.city).toBe("Boston");
+
+    instance.actions.setZip("02101");
+    expect(instance.state.profile.address.zip).toBe("02101");
+  });
+
+  it("should auto-create intermediate objects when null", () => {
+    interface State {
+      user: {
+        profile?: {
+          settings?: {
+            theme: string;
+          };
+        };
+      };
+    }
+
+    const settingsStore = store({
+      state: {
+        user: {},
+      } as State,
+      setup: ({ focus }) => {
+        const setTheme = focus("user.profile.settings.theme");
+        return { setTheme };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(settingsStore);
+
+    // profile and settings don't exist yet
+    expect(instance.state.user.profile).toBeUndefined();
+
+    // Setting should auto-create the path
+    instance.actions.setTheme("dark");
+
+    expect(instance.state.user.profile).toBeDefined();
+    expect(instance.state.user.profile?.settings).toBeDefined();
+    expect(instance.state.user.profile?.settings?.theme).toBe("dark");
+  });
+
+  it("should trigger reactivity when setting values", () => {
+    const listener = vi.fn();
+
+    const userStore = store({
+      state: {
+        profile: {
+          name: "John",
+        },
+      },
+      setup: ({ focus }) => {
+        const setName = focus("profile.name");
+        return { setName };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(userStore);
+
+    instance.subscribe(listener);
+    instance.actions.setName("Jane");
+
+    expect(listener).toHaveBeenCalled();
+    expect(instance.state.profile.name).toBe("Jane");
+  });
+
+  it("should work with top-level properties", () => {
+    const userStore = store({
+      state: {
+        name: "John",
+        age: 30,
+      },
+      setup: ({ focus }) => {
+        const setName = focus("name");
+        const setAge = focus("age");
+        return { setName, setAge };
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(userStore);
+
+    instance.actions.setName("Jane");
+    expect(instance.state.name).toBe("Jane");
+
+    instance.actions.setAge(25);
+    expect(instance.state.age).toBe(25);
+  });
+});

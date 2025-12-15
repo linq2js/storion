@@ -30,6 +30,10 @@ export type {
   Selector,
   StableResult,
   PickEquality,
+  // Focus (lens-like setters)
+  StatePath,
+  PathValue,
+  FocusSetter,
 } from "./types";
 
 // Core functions

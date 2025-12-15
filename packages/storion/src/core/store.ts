@@ -737,7 +737,47 @@ export function createStoreInstance<
       }
       return mixin(setupContext, ...args);
     },
+
+    focus(path: string): any {
+      return createFocusSetter(path);
+    },
   };
+
+  /**
+   * Create a focus setter for a nested path.
+   * Auto-creates intermediate objects when null/undefined.
+   * Uses Immer for proper reactivity.
+   */
+  function createFocusSetter(path: string): any {
+    const segments = path.split(".");
+
+    const setter = (value: unknown): void => {
+      // Use Immer to ensure proper change tracking
+      setupContext.update((draft: any) => {
+        let current = draft;
+
+        // Navigate to parent, auto-creating objects along the way
+        for (let i = 0; i < segments.length - 1; i++) {
+          const key = segments[i];
+          if (current[key] == null) {
+            current[key] = {};
+          }
+          current = current[key];
+        }
+
+        // Set the final value
+        const lastKey = segments[segments.length - 1];
+        current[lastKey] = value;
+      });
+    };
+
+    // Add .to() method for sub-focusing
+    setter.to = (subKey: string) => {
+      return createFocusSetter(`${path}.${subKey}`);
+    };
+
+    return setter;
+  }
 
   // ==========================================================================
   // Run Setup
