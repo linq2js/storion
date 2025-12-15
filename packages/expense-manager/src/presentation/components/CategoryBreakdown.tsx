@@ -1,34 +1,30 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import {
   ExpenseCalculator,
   CategoryBreakdown as CategoryBreakdownType,
 } from "@/domain/services";
-import { getCategory, CategoryType } from "@/domain/value-objects";
-import { useStore } from "storion/react";
+import { getCategory } from "@/domain/value-objects";
+import { pick, useStore } from "storion/react";
 import { expenseStore, filterStore } from "../stores";
 import { formatCompact } from "./StatsPanel";
 
 export const CategoryBreakdown = memo(function CategoryBreakdown() {
-  const { expenses, dateRange, setCategory } = useStore(({ resolve }) => {
+  const { breakdown } = useStore(({ resolve }) => {
     const [expenseState] = resolve(expenseStore);
-    const [filterState, filterActions] = resolve(filterStore);
+    const [filterState] = resolve(filterStore);
     return {
-      expenses: expenseState.expenses,
-      dateRange: filterState.dateRange,
-      setCategory: filterActions.setCategory,
+      breakdown: pick(() => {
+        const filtered = ExpenseCalculator.filterByDateRange(
+          expenseState.expenses,
+          filterState.dateRange
+        );
+
+        return ExpenseCalculator.getCategoryBreakdown(filtered);
+      }, "shallow3"),
     };
   });
 
-  const breakdown = useMemo(() => {
-    const filtered = ExpenseCalculator.filterByDateRange(expenses, dateRange);
-    return ExpenseCalculator.getCategoryBreakdown(filtered);
-  }, [expenses, dateRange]);
-
   if (breakdown.length === 0) return null;
-
-  const handleCategoryClick = (category: CategoryType) => {
-    setCategory(category);
-  };
 
   return (
     <div className="card p-5 sm:p-6 mb-6">
@@ -40,12 +36,7 @@ export const CategoryBreakdown = memo(function CategoryBreakdown() {
       </div>
       <div className="space-y-4">
         {breakdown.slice(0, 5).map((item, index) => (
-          <CategoryBar
-            key={item.category}
-            item={item}
-            delay={index * 50}
-            onClick={() => handleCategoryClick(item.category)}
-          />
+          <CategoryBar key={item.category} item={item} delay={index * 50} />
         ))}
       </div>
     </div>
@@ -55,13 +46,17 @@ export const CategoryBreakdown = memo(function CategoryBreakdown() {
 const CategoryBar = memo(function CategoryBar({
   item,
   delay = 0,
-  onClick,
 }: {
   item: CategoryBreakdownType;
   delay?: number;
-  onClick?: () => void;
 }) {
   const category = getCategory(item.category);
+  const { onClick } = useStore(({ resolve }) => {
+    const [, actions] = resolve(filterStore);
+    return {
+      onClick: () => actions.setCategory(item.category),
+    };
+  });
 
   const colorMap: Record<string, { bar: string; bg: string }> = {
     "expense-food": { bar: "bg-rose-500", bg: "bg-rose-50" },

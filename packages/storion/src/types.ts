@@ -26,7 +26,12 @@ export interface ActionsBase {
 // Equality
 // =============================================================================
 
-export type EqualityShorthand = "strict" | "shallow" | "deep";
+export type EqualityShorthand =
+  | "strict"
+  | "shallow" // 1 level: compare keys/length, Object.is per item
+  | "shallow2" // 2 levels: compare keys/length, shallow per item
+  | "shallow3" // 3 levels: compare keys/length, shallow2 per item
+  | "deep";
 
 /**
  * Equality strategies for change detection.

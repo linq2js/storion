@@ -15,14 +15,6 @@ export const ExpenseList = memo(function ExpenseList({
   expenses,
   isLoading,
 }: ExpenseListProps) {
-  const { openEditModal, openDeleteModal } = useStore(({ resolve }) => {
-    const [, actions] = resolve(uiStore);
-    return {
-      openEditModal: actions.openEditModal,
-      openDeleteModal: actions.openDeleteModal,
-    };
-  });
-
   if (isLoading) {
     return (
       <div className="card divide-y divide-surface-100">
@@ -89,12 +81,7 @@ export const ExpenseList = memo(function ExpenseList({
           {/* Expense Rows */}
           <div className="divide-y divide-surface-50">
             {dayExpenses.map((expense) => (
-              <ExpenseRow
-                key={expense.id}
-                expense={expense}
-                onEdit={() => openEditModal(expense)}
-                onDelete={() => openDeleteModal(expense)}
-              />
+              <ExpenseRow key={expense.id} expense={expense} />
             ))}
           </div>
         </div>
@@ -105,16 +92,17 @@ export const ExpenseList = memo(function ExpenseList({
 
 interface ExpenseRowProps {
   expense: Expense;
-  onEdit: () => void;
-  onDelete: () => void;
 }
 
-const ExpenseRow = memo(function ExpenseRow({
-  expense,
-  onEdit,
-  onDelete,
-}: ExpenseRowProps) {
+const ExpenseRow = memo(function ExpenseRow({ expense }: ExpenseRowProps) {
   const category = getCategory(expense.category);
+  const { onEdit, onDelete } = useStore(({ resolve }) => {
+    const [, actions] = resolve(uiStore);
+    return {
+      onEdit: () => actions.openEditModal(expense),
+      onDelete: () => actions.openDeleteModal(expense),
+    };
+  });
 
   const colorMap: Record<string, string> = {
     "expense-food": "category-food",

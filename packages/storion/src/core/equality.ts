@@ -14,8 +14,15 @@ export function strictEqual<T>(a: T, b: T): boolean {
 
 /**
  * Shallow equality for objects/arrays.
+ * Compares by reference for each top-level key/index.
+ *
+ * @param itemEqual - Optional comparator for each item/value (defaults to Object.is)
  */
-export function shallowEqual<T>(a: T, b: T): boolean {
+export function shallowEqual<T>(
+  a: T,
+  b: T,
+  itemEqual: (a: unknown, b: unknown) => boolean = Object.is
+): boolean {
   if (Object.is(a, b)) return true;
   if (typeof a !== "object" || a === null) return false;
   if (typeof b !== "object" || b === null) return false;
@@ -27,10 +34,32 @@ export function shallowEqual<T>(a: T, b: T): boolean {
 
   for (const key of keysA) {
     if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
-    if (!Object.is((a as any)[key], (b as any)[key])) return false;
+    if (!itemEqual((a as any)[key], (b as any)[key])) return false;
   }
 
   return true;
+}
+
+/**
+ * 2-level shallow equality.
+ * Compares keys/length, then shallow compares each item/value.
+ *
+ * @example
+ * [{ id: 1, data: obj }] vs [{ id: 1, data: obj }] // true (same obj ref)
+ */
+export function shallow2Equal<T>(a: T, b: T): boolean {
+  return shallowEqual(a, b, shallowEqual);
+}
+
+/**
+ * 3-level shallow equality.
+ * Compares keys/length, then shallow2 compares each item/value.
+ *
+ * @example
+ * [{ id: 1, nested: { data: obj } }] vs [{ id: 1, nested: { data: obj } }] // true
+ */
+export function shallow3Equal<T>(a: T, b: T): boolean {
+  return shallowEqual(a, b, shallow2Equal);
 }
 
 /**
@@ -46,6 +75,8 @@ export function resolveEquality<T>(
 ): (a: T, b: T) => boolean {
   if (!equality || equality === "strict") return strictEqual;
   if (equality === "shallow") return shallowEqual;
+  if (equality === "shallow2") return shallow2Equal;
+  if (equality === "shallow3") return shallow3Equal;
   if (equality === "deep") return deepEqual;
   return equality;
 }
