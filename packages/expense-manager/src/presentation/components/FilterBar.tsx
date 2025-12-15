@@ -52,7 +52,7 @@ export const FilterBar = memo(function FilterBar() {
         </div>
 
         {/* Category Dropdown + Clear */}
-        <div className={`flex items-end gap-2 ${hasFilters ? "sm:w-56" : "sm:w-44"}`}>
+        <div className="flex items-end gap-2 sm:w-[40%]">
           <div className="flex-1">
             <label className="section-title block mb-3">Category</label>
             <div className="relative">

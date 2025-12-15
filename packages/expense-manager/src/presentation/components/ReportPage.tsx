@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { useStore } from "storion/react";
-import { expenseStore, filterStore } from "../stores";
+import { expenseStore, filterStore, uiStore } from "../stores";
 import { ExpenseCalculator } from "@/domain/services";
 import { DateRange, getCategory, Money } from "@/domain/value-objects";
 import { Expense } from "@/domain/entities";
@@ -70,7 +70,7 @@ const BarChart = memo(function BarChart({
             <div className="text-xs text-surface-500 font-medium">
               {formatCompact(item.amount.amount)}
             </div>
-            <div className="w-full flex justify-center" style={{ height: "100px" }}>
+            <div className="w-full flex justify-center items-end" style={{ height: "100px" }}>
               <div
                 className={`w-full max-w-12 rounded-t-lg transition-all duration-500 ${
                   isCurrentMonth
@@ -140,14 +140,19 @@ const CategoryBar = memo(function CategoryBar({
 const TopExpenseItem = memo(function TopExpenseItem({
   expense,
   rank,
+  onClick,
 }: {
   expense: Expense;
   rank: number;
+  onClick?: () => void;
 }) {
   const info = getCategory(expense.category);
 
   return (
-    <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-surface-50 transition-colors">
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-4 p-3 rounded-lg hover:bg-surface-50 transition-colors cursor-pointer text-left"
+    >
       <div
         className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
           rank === 1
@@ -178,7 +183,7 @@ const TopExpenseItem = memo(function TopExpenseItem({
       <div className="text-sm font-semibold text-surface-800">
         {expense.amount.format()}
       </div>
-    </div>
+    </button>
   );
 });
 
@@ -201,7 +206,7 @@ const InsightCard = memo(function InsightCard({
       <div className="flex items-start gap-3">
         <div className="text-2xl">{icon}</div>
         <div className="flex-1">
-          <div className="text-xs text-surface-500 uppercase tracking-wide mb-1">
+          <div className="text-xs text-surface-500 uppercase tracking-wide mb-1 truncate">
             {label}
           </div>
           <div className="flex items-baseline gap-2">
@@ -230,14 +235,15 @@ const InsightCard = memo(function InsightCard({
 });
 
 export const ReportPage = memo(function ReportPage() {
-  const { expenses } = useStore(({ resolve }) => {
-    const [state] = resolve(expenseStore);
-    return { expenses: state.expenses };
-  });
-
-  const { dateRange } = useStore(({ resolve }) => {
-    const [state] = resolve(filterStore);
-    return { dateRange: state.dateRange };
+  const { expenses, dateRange, openEditModal } = useStore(({ resolve }) => {
+    const [expenseState] = resolve(expenseStore);
+    const [filterState] = resolve(filterStore);
+    const [, uiActions] = resolve(uiStore);
+    return {
+      expenses: expenseState.expenses,
+      dateRange: filterState.dateRange,
+      openEditModal: uiActions.openEditModal,
+    };
   });
 
   // Monthly trend data
@@ -380,6 +386,7 @@ export const ReportPage = memo(function ReportPage() {
                   key={expense.id}
                   expense={expense}
                   rank={index + 1}
+                  onClick={() => openEditModal(expense)}
                 />
               ))}
             </div>

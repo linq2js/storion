@@ -3,7 +3,7 @@ import { useStore } from "storion/react";
 import { Expense } from "@/domain/entities";
 import { getCategory } from "@/domain/value-objects";
 import { ExpenseCalculator } from "@/domain/services";
-import { uiStore } from "../stores";
+import { uiStore, filterStore } from "../stores";
 
 interface StatsPanelProps {
   expenses: Expense[];
@@ -14,9 +14,13 @@ export const StatsPanel = memo(function StatsPanel({
   expenses,
   isLoading,
 }: StatsPanelProps) {
-  const { openEditModal } = useStore(({ resolve }) => {
-    const [, actions] = resolve(uiStore);
-    return { openEditModal: actions.openEditModal };
+  const { openEditModal, setDateRangePreset } = useStore(({ resolve }) => {
+    const [, uiActions] = resolve(uiStore);
+    const [, filterActions] = resolve(filterStore);
+    return {
+      openEditModal: uiActions.openEditModal,
+      setDateRangePreset: filterActions.setDateRangePreset,
+    };
   });
 
   // Calculate stats
@@ -117,6 +121,7 @@ export const StatsPanel = memo(function StatsPanel({
           }
           color="amber"
           isEmpty={todayCount === 0}
+          onClick={() => setDateRangePreset("today")}
         />
         <QuickStat
           label="This Month"
@@ -129,6 +134,7 @@ export const StatsPanel = memo(function StatsPanel({
           }
           color="purple"
           isEmpty={monthCount === 0}
+          onClick={() => setDateRangePreset("month")}
         />
       </div>
     </div>
@@ -187,6 +193,7 @@ interface QuickStatProps {
   icon: React.ReactNode;
   color: "purple" | "amber" | "rose" | "teal";
   isEmpty?: boolean;
+  onClick?: () => void;
 }
 
 const QuickStat = memo(function QuickStat({
@@ -196,6 +203,7 @@ const QuickStat = memo(function QuickStat({
   icon,
   color,
   isEmpty,
+  onClick,
 }: QuickStatProps) {
   const colorClasses = {
     purple: "text-purple-200",
@@ -205,7 +213,10 @@ const QuickStat = memo(function QuickStat({
   };
 
   return (
-    <div className="stat-card relative overflow-hidden">
+    <button
+      onClick={onClick}
+      className="stat-card relative overflow-hidden text-left cursor-pointer hover:shadow-md transition-shadow duration-200"
+    >
       {/* Background icon decoration */}
       <div className={`absolute top-2 right-2 w-16 h-16 ${colorClasses[color]} opacity-40 [&>svg]:w-full [&>svg]:h-full`}>
         {icon}
@@ -219,6 +230,6 @@ const QuickStat = memo(function QuickStat({
         <p className="stat-label">{label}</p>
         <p className="text-[10px] text-surface-400 mt-0.5">{subtext}</p>
       </div>
-    </div>
+    </button>
   );
 });

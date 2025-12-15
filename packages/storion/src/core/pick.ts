@@ -6,12 +6,9 @@
  */
 
 import { emitter } from "../emitter";
-import { Equality } from "../types";
+import type { PickEquality } from "../types";
 import { resolveEquality } from "./equality";
 import { getHooks, withHooks, type ReadEvent } from "./tracking";
-
-/** Equality function type */
-export type PickEquality<T> = Equality<T>;
 
 /** Auto-increment counter for unique pick keys */
 let pickIdCounter = 0;
@@ -66,30 +63,31 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
   }
 
   const equalityFn = resolveEquality<T>(equality);
+  const currentReads: ReadEvent[] = [];
 
   const evaluate = () => {
-    const reads: ReadEvent[] = [];
+    currentReads.length = 0;
     // Run selector with our own onRead to capture dependencies
     // Don't propagate to parent - we handle subscriptions ourselves
     const value = withHooks(
       {
         onRead: (event) => {
-          reads.push(event);
+          currentReads.push(event);
         },
       },
       selector
     );
 
-    return [reads, value] as const;
+    return value;
   };
 
   // Collect reads from the selector
-  const [collectedReads, value] = evaluate();
+  let currentValue = evaluate();
 
   // If no reads were collected, just return the value
   // (selector doesn't depend on any reactive state)
-  if (!collectedReads.length) {
-    return value;
+  if (!currentReads.length) {
+    return currentValue;
   }
 
   // Generate a unique key for this pick call
@@ -103,8 +101,6 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
   // 3. Re-tracks dependencies (they can change with conditional logic)
   // 4. Only notifies parent if value changed
   const subscribe = (listener: VoidFunction): VoidFunction => {
-    let cachedValue = value;
-    let currentReads = collectedReads.slice(); // Copy to avoid mutation issues
     const onCleanup = emitter();
 
     // Subscribe to current reads
@@ -122,27 +118,25 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
 
     // Handler for any dependency change
     const handleChange = () => {
-      // Re-track dependencies (they can change with conditional logic)
-      const [newReads, newValue] = evaluate();
+      try {
+        const prevValue = currentValue;
 
-      // Check equality
-      const isEqual = equalityFn(cachedValue, newValue);
-
-      // Check if dependencies changed
-      const depsChanged =
-        newReads.length !== currentReads.length ||
-        newReads.some((r, i) => r.key !== currentReads[i]?.key);
-
-      if (depsChanged) {
-        // Re-subscribe to new dependencies
+        // Clear old subscriptions before re-evaluating
         clearSubscriptions();
-        currentReads = newReads;
-        setupSubscriptions();
-      }
 
-      if (!isEqual) {
-        cachedValue = newValue;
-        listener(); // Notify parent
+        // Re-evaluate (may change dependencies with conditional logic)
+        currentValue = evaluate();
+
+        // Re-subscribe to current dependencies
+        setupSubscriptions();
+
+        // Notify parent if value changed
+        if (!equalityFn(prevValue, currentValue)) {
+          listener();
+        }
+      } catch (error) {
+        clearSubscriptions();
+        throw error;
       }
     };
 
@@ -156,9 +150,9 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
   // Notify parent's onRead with our virtual dependency
   parentHooks.onRead?.({
     key: pickKey,
-    value,
+    value: currentValue,
     subscribe,
   });
 
-  return value;
+  return currentValue;
 }

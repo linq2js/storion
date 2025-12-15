@@ -9,6 +9,7 @@ export { StoreProvider, useContainer } from "./context";
 
 // Hooks
 export { useStore } from "./useStore";
+export { type LocalStoreResult } from "./useLocalStore";
 
 // Shorthand
 export {

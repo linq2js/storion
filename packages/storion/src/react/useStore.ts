@@ -14,10 +14,10 @@ import type {
   SelectorContext,
   Selector,
   StableResult,
-  TrackedDependency,
 } from "../types";
-import { withHooks } from "../core/tracking";
+import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
+import { useLocalStore, type LocalStoreResult } from "./useLocalStore";
 
 /**
  * React hook to consume stores with automatic optimization.
@@ -33,7 +33,7 @@ import { useContainer } from "./context";
 interface UseStoreRefs<T> {
   selector: Selector<T>;
   stableFns: Map<string, Function>;
-  trackedDeps: Map<string, TrackedDependency>;
+  trackedDeps: Map<string, ReadEvent>;
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
 }
 
@@ -164,11 +164,54 @@ export function useStoreWithContainer<T extends object>(
 
 /**
  * React hook to consume stores with automatic optimization.
- * Uses the container from React context (StoreProvider).
+ *
+ * @overload With selector - Uses the container from React context (StoreProvider).
+ * Access multiple stores, compute derived values, with fine-grained re-renders.
+ *
+ * @overload With spec - Creates a component-local store instance (like useLocalStore).
+ * The store is isolated, disposed on unmount, and cannot have dependencies.
+ *
+ * @example
+ * ```tsx
+ * // With selector - access global stores
+ * const { count, increment } = useStore(({ resolve }) => {
+ *   const [state, actions] = resolve(counterSpec);
+ *   return { count: state.count, increment: actions.increment };
+ * });
+ *
+ * // With spec - local store (shorthand for useLocalStore)
+ * const [state, actions, { dirty, reset }] = useStore(formSpec);
+ * ```
  */
 export function useStore<T extends object>(
   selector: Selector<T>
-): StableResult<T> {
+): StableResult<T>;
+export function useStore<
+  TState extends StateBase,
+  TActions extends ActionsBase
+>(spec: StoreSpec<TState, TActions>): LocalStoreResult<TState, TActions>;
+export function useStore<
+  T extends object,
+  TState extends StateBase = StateBase,
+  TActions extends ActionsBase = ActionsBase
+>(
+  selectorOrSpec: Selector<T> | StoreSpec<TState, TActions>
+): StableResult<T> | LocalStoreResult<TState, TActions> {
+  // Detect if it's a spec (object with 'options' property) vs selector (function)
+  const isSpec =
+    typeof selectorOrSpec === "object" &&
+    selectorOrSpec !== null &&
+    "options" in selectorOrSpec;
+
+  // For spec, use local store
+  if (isSpec) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useLocalStore(selectorOrSpec as StoreSpec<TState, TActions>);
+  }
+
+  // For selector, use container-based store
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const container = useContainer();
-  return useStoreWithContainer(selector, container);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useStoreWithContainer(selectorOrSpec as Selector<T>, container);
 }

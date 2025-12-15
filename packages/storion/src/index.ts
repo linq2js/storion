@@ -29,6 +29,7 @@ export type {
   SelectorMixin,
   Selector,
   StableResult,
+  PickEquality,
 } from "./types";
 
 // Core functions
@@ -37,7 +38,7 @@ export { container } from "./core/container";
 export { batch, untrack } from "./core/tracking";
 
 // Fine-grained reactivity
-export { pick, type PickEquality } from "./core/pick";
+export { pick } from "./core/pick";
 
 export {
   effect,

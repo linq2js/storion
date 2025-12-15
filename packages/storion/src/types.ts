@@ -668,19 +668,10 @@ export type SingleOrMultipleListeners<T> =
   | ((value: T) => Listener<T> | Listener<T>[] | undefined);
 
 // =============================================================================
-// Tracked Dependency
+// Pick Equality
 // =============================================================================
 
 /**
- * Represents a tracked dependency for fine-grained updates.
+ * Equality function type for pick().
  */
-export interface TrackedDependency {
-  /** Unique key for this dependency (storeId.prop) */
-  key: string;
-
-  /** Value at the time of access */
-  value: unknown;
-
-  /** Subscribe to changes - returns cleanup function */
-  subscribe: (listener: VoidFunction) => VoidFunction;
-}
+export type PickEquality<T> = Equality<T>;
