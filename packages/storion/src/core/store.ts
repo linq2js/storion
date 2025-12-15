@@ -15,6 +15,8 @@ import type {
   DispatchEvent,
   ActionDispatchEvent,
   ReactiveActions,
+  Equality,
+  AutoDisposeOptions,
 } from "../types";
 
 import { produce } from "immer";
@@ -64,10 +66,7 @@ interface PropertyChangeEvent {
 
 /** Options for creating store instance */
 export interface CreateStoreInstanceOptions {
-  /** Called when refCount drops to 0 (after grace period) for autoDispose stores */
-  onUnused?: () => void;
-  /** Grace period in ms before calling onUnused (default: 100) */
-  gracePeriodMs?: number;
+  autoDispose?: AutoDisposeOptions;
 }
 
 /**
@@ -96,7 +95,7 @@ export function createStoreInstance<
   // ==========================================================================
 
   const isAutoDispose = options.lifetime === "autoDispose";
-  const gracePeriodMs = instanceOptions.gracePeriodMs ?? 100;
+  const gracePeriodMs = instanceOptions.autoDispose?.gracePeriodMs ?? 100;
   let refCount = 0;
   let disposeTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -117,15 +116,15 @@ export function createStoreInstance<
     if (!isAutoDispose || isSetupPhase) {
       return;
     }
-
+    disposeTimeout && clearTimeout(disposeTimeout);
     refCount--;
-    if (refCount <= 0 && instanceOptions.onUnused) {
+    if (refCount <= 0) {
       // Schedule disposal after grace period
       disposeTimeout = setTimeout(() => {
         disposeTimeout = null;
         // Double-check still zero refs (in case of race)
-        if (refCount <= 0 && !disposed) {
-          instanceOptions.onUnused!();
+        if (refCount <= 0) {
+          instance?.dispose();
         }
       }, gracePeriodMs);
     }
@@ -222,7 +221,7 @@ export function createStoreInstance<
       }
       for (const [key, eq] of Object.entries(propEqualities)) {
         if (eq) {
-          propertyEquality.set(key, resolveEquality(eq));
+          propertyEquality.set(key, resolveEquality(eq as Equality));
         }
       }
     }

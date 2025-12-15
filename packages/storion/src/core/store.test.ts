@@ -1758,7 +1758,7 @@ describe("focus()", () => {
     const settingsStore = store({
       state: {
         user: {},
-      } as State,
+      } as unknown as State,
       setup: ({ focus }) => {
         const setTheme = focus("user.profile.settings.theme");
         return { setTheme };

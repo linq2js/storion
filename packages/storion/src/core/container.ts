@@ -15,7 +15,7 @@ import type {
   StoreMiddleware,
 } from "../types";
 
-import { createStoreInstance, CreateStoreInstanceOptions } from "./store";
+import { createStoreInstance } from "./store";
 import { emitter } from "../emitter";
 import { untrack } from "./tracking";
 
@@ -73,18 +73,27 @@ export function container(options: ContainerOptions = {}): StoreContainer {
   function createInstance<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): StoreInstance<S, A> {
-    // Prepare instance options for autoDispose
-    const instanceOptions: CreateStoreInstanceOptions = {};
-
-    if (spec.options.lifetime === "autoDispose") {
-      // When refCount drops to 0, auto-dispose this store
-      instanceOptions.onUnused = () => {
-        containerApi.dispose(spec);
-      };
-    }
-
     // Create instance
-    return createStoreInstance(spec, resolver, instanceOptions);
+    const instance = createStoreInstance(spec, resolver, {
+      autoDispose: options.autoDispose,
+    });
+
+    instance.onDispose(() => {
+      // Notify listeners via emitter
+      disposeEmitter.emit(instance);
+
+      // Remove from caches
+      instancesBySpec.delete(spec);
+      instancesById.delete(instance.id);
+
+      // Remove from creation order
+      const index = creationOrder.indexOf(spec);
+      if (index !== -1) {
+        creationOrder.splice(index, 1);
+      }
+    });
+
+    return instance;
   }
 
   // ==========================================================================
@@ -112,7 +121,7 @@ export function container(options: ContainerOptions = {}): StoreContainer {
     // Return function that starts the chain
     return <S extends StateBase, A extends ActionsBase>(
       spec: StoreSpec<S, A>
-    ) => chain(spec, createInstance as any) as StoreInstance<S, A>;
+    ) => chain(spec, createInstance) as StoreInstance<S, A>;
   }
 
   const createWithMiddleware = buildMiddlewareChain();
@@ -196,9 +205,6 @@ export function container(options: ContainerOptions = {}): StoreContainer {
       for (const spec of specs) {
         const instance = instancesBySpec.get(spec);
         if (instance) {
-          // Notify listeners before disposal via emitter
-          disposeEmitter.emit(instance);
-
           instance.dispose();
 
           // Remove from id map
@@ -214,21 +220,8 @@ export function container(options: ContainerOptions = {}): StoreContainer {
       const instance = instancesBySpec.get(spec);
       if (!instance) return false;
 
-      // Notify listeners via emitter
-      disposeEmitter.emit(instance);
-
       // Dispose instance
       instance.dispose();
-
-      // Remove from caches
-      instancesBySpec.delete(spec);
-      instancesById.delete(instance.id);
-
-      // Remove from creation order
-      const index = creationOrder.indexOf(spec);
-      if (index !== -1) {
-        creationOrder.splice(index, 1);
-      }
 
       return true;
     },

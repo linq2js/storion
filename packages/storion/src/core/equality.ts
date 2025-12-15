@@ -2,7 +2,7 @@
  * Equality utilities for comparing values.
  */
 
-import type { Equality } from "../types";
+import type { Equality, EqualityShorthand } from "../types";
 import isEqual from "lodash/isEqual";
 
 /**
@@ -71,12 +71,16 @@ export const deepEqual = isEqual;
  * Resolve equality strategy to a function.
  */
 export function resolveEquality<T>(
-  equality: Equality<T> | undefined
+  e: Equality<T> | undefined
 ): (a: T, b: T) => boolean {
-  if (!equality || equality === "strict") return strictEqual;
-  if (equality === "shallow") return shallowEqual;
-  if (equality === "shallow2") return shallow2Equal;
-  if (equality === "shallow3") return shallow3Equal;
-  if (equality === "deep") return deepEqual;
-  return equality;
+  if (!e || e === "strict") return strictEqual;
+  if (e === "shallow") return shallowEqual;
+  if (e === "shallow2") return shallow2Equal;
+  if (e === "shallow3") return shallow3Equal;
+  if (e === "deep") return deepEqual;
+  return e;
+}
+
+export function equality(shorthand: EqualityShorthand) {
+  return resolveEquality(shorthand);
 }

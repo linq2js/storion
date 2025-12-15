@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { useStore } from "storion/react";
+import { equality, useStore } from "storion/react";
 import { expenseStore, filterStore, uiStore } from "../stores";
 import { ExpenseCalculator } from "@/domain/services";
 import { DateRange, getCategory, Money } from "@/domain/value-objects";
@@ -12,21 +12,34 @@ interface MonthlyData {
   count: number;
 }
 
-function getMonthlyTrend(expenses: Expense[], months: number = 6): MonthlyData[] {
+function getMonthlyTrend(
+  expenses: Expense[],
+  months: number = 6
+): MonthlyData[] {
   const result: MonthlyData[] = [];
   const now = new Date();
 
   for (let i = months - 1; i >= 0; i--) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-    const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
+    const monthEnd = new Date(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      0,
+      23,
+      59,
+      59
+    );
 
     const monthExpenses = expenses.filter(
       (e) => e.date >= monthStart && e.date <= monthEnd
     );
 
     result.push({
-      month: date.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      month: date.toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      }),
       shortMonth: date.toLocaleDateString("en-US", { month: "short" }),
       amount: ExpenseCalculator.calculateTotal(monthExpenses),
       count: monthExpenses.length,
@@ -70,7 +83,10 @@ const BarChart = memo(function BarChart({
             <div className="text-xs text-surface-500 font-medium">
               {formatCompact(item.amount.amount)}
             </div>
-            <div className="w-full flex justify-center items-end" style={{ height: "100px" }}>
+            <div
+              className="w-full flex justify-center items-end"
+              style={{ height: "100px" }}
+            >
               <div
                 className={`w-full max-w-12 rounded-t-lg transition-all duration-500 ${
                   isCurrentMonth
@@ -158,10 +174,10 @@ const TopExpenseItem = memo(function TopExpenseItem({
           rank === 1
             ? "bg-amber-100 text-amber-700"
             : rank === 2
-              ? "bg-slate-100 text-slate-600"
-              : rank === 3
-                ? "bg-orange-100 text-orange-700"
-                : "bg-surface-100 text-surface-600"
+            ? "bg-slate-100 text-slate-600"
+            : rank === 3
+            ? "bg-orange-100 text-orange-700"
+            : "bg-surface-100 text-surface-600"
         }`}
       >
         {rank}
@@ -217,8 +233,8 @@ const InsightCard = memo(function InsightCard({
                   trend === "up"
                     ? "text-rose-500"
                     : trend === "down"
-                      ? "text-emerald-500"
-                      : "text-surface-400"
+                    ? "text-emerald-500"
+                    : "text-surface-400"
                 }`}
               >
                 {trend === "up" ? "↑" : trend === "down" ? "↓" : "→"}
@@ -289,14 +305,19 @@ export const ReportPage = memo(function ReportPage() {
     const prevEnd = new Date(dateRange.start);
     prevEnd.setDate(prevEnd.getDate() - 1);
     const prevRange = DateRange.create(prevStart, prevEnd);
-    const prevExpenses = ExpenseCalculator.filterByDateRange(expenses, prevRange);
+    const prevExpenses = ExpenseCalculator.filterByDateRange(
+      expenses,
+      prevRange
+    );
     return ExpenseCalculator.calculateStats(prevExpenses, prevRange);
   }, [expenses, dateRange]);
 
   // Trend calculation
   const spendingTrend = useMemo(() => {
     if (previousPeriodStats.total.amount === 0) return "neutral";
-    return stats.total.amount > previousPeriodStats.total.amount ? "up" : "down";
+    return stats.total.amount > previousPeriodStats.total.amount
+      ? "up"
+      : "down";
   }, [stats, previousPeriodStats]);
 
   const trendPercentage = useMemo(() => {
@@ -334,7 +355,9 @@ export const ReportPage = memo(function ReportPage() {
         <InsightCard
           icon="📈"
           label="vs Previous"
-          value={`${trendPercentage >= 0 ? "+" : ""}${trendPercentage.toFixed(1)}%`}
+          value={`${trendPercentage >= 0 ? "+" : ""}${trendPercentage.toFixed(
+            1
+          )}%`}
           subtext={previousPeriodStats.total.format()}
           trend={spendingTrend as "up" | "down" | "neutral"}
         />
@@ -431,4 +454,3 @@ export const ReportPage = memo(function ReportPage() {
     </div>
   );
 });
-

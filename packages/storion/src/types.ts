@@ -11,9 +11,7 @@
 /**
  * Base constraint for state objects.
  */
-export interface StateBase {
-  [key: string]: unknown;
-}
+export type StateBase = object | Record<string, unknown>;
 
 /**
  * Base constraint for actions.
@@ -63,8 +61,8 @@ export type StatePath<T, Prefix extends string = ""> = T extends object
   ? T extends unknown[]
     ? never // Stop at arrays
     : {
-        [K in keyof T & string]: T[K] extends object
-          ? T[K] extends unknown[]
+        [K in keyof T & string]: NonNullable<T[K]> extends object
+          ? NonNullable<T[K]> extends unknown[]
             ? `${Prefix}${K}` // Stop at arrays
             : `${Prefix}${K}` | StatePath<NonNullable<T[K]>, `${Prefix}${K}.`>
           : `${Prefix}${K}`;
@@ -624,7 +622,10 @@ export interface StoreInstance<
  *   return instance;
  * };
  */
-export type StoreMiddleware = <S extends StateBase, A extends ActionsBase>(
+export type StoreMiddleware = <
+  S extends StateBase = StateBase,
+  A extends ActionsBase = ActionsBase
+>(
   spec: StoreSpec<S, A>,
   next: (spec: StoreSpec<S, A>) => StoreInstance<S, A>
 ) => StoreInstance<S, A>;
@@ -633,11 +634,8 @@ export type StoreMiddleware = <S extends StateBase, A extends ActionsBase>(
  * Container options.
  */
 export interface ContainerOptions {
-  /** Default lifetime for stores */
-  defaultLifetime?: Lifetime;
-
-  /** Default equality for stores */
-  defaultEquality?: Equality;
+  /** Auto dispose options for all stores */
+  autoDispose?: AutoDisposeOptions;
 
   /** Middleware chain for intercepting store creation */
   middleware?: StoreMiddleware[];
@@ -666,6 +664,11 @@ export interface StoreResolver {
    */
   has(spec: StoreSpec<any, any>): boolean;
 }
+
+export type AutoDisposeOptions = {
+  /** Grace period in ms before disposing the store (default: 100) */
+  gracePeriodMs?: number;
+};
 
 /**
  * Store container - manages store instances.

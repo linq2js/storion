@@ -61,3 +61,11 @@ export {
   compose,
   type SpecPattern,
 } from "./core/middleware";
+
+// Equality utilities
+export {
+  equality,
+  shallowEqual,
+  deepEqual,
+  strictEqual,
+} from "./core/equality";
