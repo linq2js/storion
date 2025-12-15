@@ -1,7 +1,7 @@
 {
   "name": "storion",
   "version": "0.1.0",
-  "description": "A lightweight, type-safe reactive state management library with automatic dependency tracking, fine-grained subscriptions, and first-class React support",
+  "description": "Reactive stores for modern apps. Type-safe. Auto-tracked. Effortlessly composable",
   "type": "module",
   "main": "./dist/storion.js",
   "module": "./dist/storion.js",
