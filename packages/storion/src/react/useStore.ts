@@ -10,6 +10,7 @@ import type {
   StateBase,
   ActionsBase,
   StoreSpec,
+  StoreContainer,
   SelectorContext,
   Selector,
   StableResult,
@@ -35,10 +36,14 @@ interface UseStoreRefs<T> {
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
 }
 
-export function useStore<T extends object>(
-  selector: Selector<T>
+/**
+ * Core hook implementation that accepts container as parameter.
+ * Use this when you have direct access to a container.
+ */
+export function useStoreWithContainer<T extends object>(
+  selector: Selector<T>,
+  container: StoreContainer
 ): StableResult<T> {
-  const container = useContainer();
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
 
   // Combined ref for all mutable values
@@ -158,4 +163,15 @@ export function useStore<T extends object>(
   }, [trackedKeysToken]);
 
   return output;
+}
+
+/**
+ * React hook to consume stores with automatic optimization.
+ * Uses the container from React context (StoreProvider).
+ */
+export function useStore<T extends object>(
+  selector: Selector<T>
+): StableResult<T> {
+  const container = useContainer();
+  return useStoreWithContainer(selector, container);
 }

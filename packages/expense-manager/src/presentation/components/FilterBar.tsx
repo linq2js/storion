@@ -51,46 +51,48 @@ export const FilterBar = memo(function FilterBar() {
           </div>
         </div>
 
-        {/* Category Dropdown */}
-        <div className="sm:w-44">
-          <label className="section-title block mb-3">Category</label>
-          <div className="relative">
-            <select
-              value={category ?? ""}
-              onChange={(e) =>
-                setCategory(
-                  e.target.value ? (e.target.value as CategoryType) : null
-                )
-              }
-              className="input py-2 pr-10 text-sm appearance-none cursor-pointer"
-            >
-              <option value="">All</option>
-              {categories.map((cat) => (
-                <option key={cat.type} value={cat.type}>
-                  {cat.icon} {cat.label}
-                </option>
-              ))}
-            </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-surface-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+        {/* Category Dropdown + Clear */}
+        <div className={`flex items-end gap-2 ${hasFilters ? "sm:w-56" : "sm:w-44"}`}>
+          <div className="flex-1">
+            <label className="section-title block mb-3">Category</label>
+            <div className="relative">
+              <select
+                value={category ?? ""}
+                onChange={(e) =>
+                  setCategory(
+                    e.target.value ? (e.target.value as CategoryType) : null
+                  )
+                }
+                className="input w-full py-2 pr-10 text-sm appearance-none cursor-pointer"
+              >
+                <option value="">All</option>
+                {categories.map((cat) => (
+                  <option key={cat.type} value={cat.type}>
+                    {cat.icon} {cat.label}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-surface-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Reset */}
-        {hasFilters && (
-          <button
-            onClick={reset}
-            className="btn btn-ghost text-sm gap-1.5 text-surface-500 hover:text-surface-700"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            Clear
-          </button>
-        )}
+          {/* Clear button */}
+          {hasFilters && (
+            <button
+              onClick={reset}
+              className="btn btn-ghost text-sm gap-1.5 text-surface-500 hover:text-surface-700 mb-px shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Clear
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
