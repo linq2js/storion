@@ -357,7 +357,7 @@ export function createStoreInstance<
   instance = {
     id: storeId,
     spec,
-
+    deps: [],
     get state() {
       return readonlyState as Readonly<TState>;
     },
@@ -603,7 +603,7 @@ export function createStoreInstance<
 
   // Track setup phase to prevent effect() calls outside setup
   let isSetupPhase = true;
-
+  const deps = new Set<StoreInstance<any, any>>();
   // Current store's lifetime (default is keepAlive)
   const currentLifetime = options.lifetime ?? "keepAlive";
 
@@ -639,6 +639,7 @@ export function createStoreInstance<
 
       // Get full instance from resolver
       const instance = resolver.get(depSpec);
+      deps.add(instance);
       // Return tuple [readonlyState, actions]
       return [instance.state, instance.actions] as const;
     },
@@ -777,6 +778,9 @@ export function createStoreInstance<
   // Capture initial state - dirty tracking starts now
   // After this, any write creates a new currentState object
   initialState = currentState;
+
+  Object.assign(instance, { deps: Array.from(deps) });
+  deps.clear();
 
   // ==========================================================================
   // Wrap Actions with dispatch tracking and .last() method

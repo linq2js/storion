@@ -35,6 +35,7 @@ export type {
 export { store } from "./core/store";
 export { container } from "./core/container";
 export { batch, untrack } from "./core/tracking";
+export { pick, type PickEquality } from "./core/pick";
 
 export {
   effect,
