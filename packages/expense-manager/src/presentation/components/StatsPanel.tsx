@@ -1,7 +1,9 @@
 import { memo, useMemo } from "react";
+import { useStore } from "storion/react";
 import { Expense } from "@/domain/entities";
 import { getCategory } from "@/domain/value-objects";
 import { ExpenseCalculator } from "@/domain/services";
+import { uiStore } from "../stores";
 
 interface StatsPanelProps {
   expenses: Expense[];
@@ -12,6 +14,11 @@ export const StatsPanel = memo(function StatsPanel({
   expenses,
   isLoading,
 }: StatsPanelProps) {
+  const { openEditModal } = useStore(({ resolve }) => {
+    const [, actions] = resolve(uiStore);
+    return { openEditModal: actions.openEditModal };
+  });
+
   // Calculate stats
   const { lastExpense, todayTotal, monthTotal, todayCount, monthCount } = useMemo(() => {
     const now = new Date();
@@ -63,32 +70,39 @@ export const StatsPanel = memo(function StatsPanel({
   return (
     <div className="mb-6 space-y-4">
       {/* Last Expense Card */}
-      <div className="card p-5 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div className="relative">
-          <p className="section-title mb-2">Last Expense</p>
-          {lastExpense ? (
-            <>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">{getCategory(lastExpense.category).icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-surface-900 truncate">
-                    {lastExpense.description}
-                  </p>
-                  <p className="text-xs text-surface-500">
-                    {formatRelativeDate(lastExpense.date)}
-                  </p>
-                </div>
-                <p className="money-md text-surface-900">
-                  {lastExpense.amount.format()}
+      {lastExpense ? (
+        <button
+          onClick={() => openEditModal(lastExpense)}
+          className="card p-5 relative overflow-hidden w-full text-left cursor-pointer hover:shadow-md transition-shadow duration-200 group"
+        >
+          <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:from-primary-200/50 transition-colors duration-200" />
+          <div className="relative">
+            <p className="section-title mb-2">Last Expense</p>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-2xl">{getCategory(lastExpense.category).icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-surface-900 truncate">
+                  {lastExpense.description}
+                </p>
+                <p className="text-xs text-surface-500">
+                  {formatRelativeDate(lastExpense.date)}
                 </p>
               </div>
-            </>
-          ) : (
+              <p className="money-md text-surface-900">
+                {lastExpense.amount.format()}
+              </p>
+            </div>
+          </div>
+        </button>
+      ) : (
+        <div className="card p-5 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-primary-100/50 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="relative">
+            <p className="section-title mb-2">Last Expense</p>
             <p className="text-surface-500 text-sm">No expenses yet</p>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Quick Stats Grid */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 animate-stagger">

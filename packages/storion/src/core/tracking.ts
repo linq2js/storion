@@ -5,8 +5,6 @@
  * selector tracking are implemented by consumers via withHooks().
  */
 
-import type { StoreResolver } from "../types";
-
 // =============================================================================
 // Hooks
 // =============================================================================
@@ -15,24 +13,20 @@ import type { StoreResolver } from "../types";
  * Hook event for property read.
  */
 export interface ReadEvent {
-  /** Store ID (use container.get(id) to get full instance) */
-  storeId: string;
-  /** Property name */
-  prop: string;
+  /** Unique key for this dependency (storeId.prop) */
+  key: string;
   /** Value read */
   value: unknown;
-  /** Store resolver - use to get instance and subscribe */
-  resolver: StoreResolver;
+  /** Subscribe to changes - returns cleanup function */
+  subscribe: (listener: VoidFunction) => VoidFunction;
 }
 
 /**
  * Hook event for property write.
  */
 export interface WriteEvent {
-  /** Store ID (use container.get(id) to get full instance) */
-  storeId: string;
-  /** Property name */
-  prop: string;
+  /** Unique key for this property (storeId.prop) */
+  key: string;
   /** New value */
   next: unknown;
   /** Previous value */
@@ -163,17 +157,26 @@ export function withHooks<T>(
 // Track Functions (called by proxies)
 // =============================================================================
 
+/** Subscribe function type for trackRead */
+export type SubscribeFn = (listener: VoidFunction) => VoidFunction;
+
 /**
  * Track a property read.
  * Called by state proxies when a property is accessed.
+ *
+ * @param storeId - Store instance ID
+ * @param prop - Property name
+ * @param value - Value read
+ * @param subscribe - Function to subscribe to changes for this property
  */
 export function trackRead(
   storeId: string,
   prop: string,
   value: unknown,
-  resolver: StoreResolver
+  subscribe: SubscribeFn
 ): void {
-  globalHooks.onRead?.({ storeId, prop, value, resolver });
+  const key = `${storeId}.${prop}`;
+  globalHooks.onRead?.({ key, value, subscribe });
 }
 
 /**
@@ -186,7 +189,8 @@ export function trackWrite(
   next: unknown,
   prev: unknown
 ): void {
-  globalHooks.onWrite?.({ storeId, prop, next, prev });
+  const key = `${storeId}.${prop}`;
+  globalHooks.onWrite?.({ key, next, prev });
 }
 
 // =============================================================================

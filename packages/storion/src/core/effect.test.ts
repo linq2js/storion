@@ -477,11 +477,13 @@ describe("effect", () => {
         (current) => ({
           ...current,
           onRead: (event) => {
-            trackedReads.push(event.prop);
+            // Extract prop name from key (format: "storeId.prop")
+            trackedReads.push(event.key);
             current.onRead?.(event);
           },
           onWrite: (event) => {
-            trackedWrites.push(event.prop);
+            // Extract prop name from key (format: "storeId.prop")
+            trackedWrites.push(event.key);
             current.onWrite?.(event);
           },
         }),

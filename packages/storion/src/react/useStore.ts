@@ -84,9 +84,8 @@ export function useStoreWithContainer<T extends object>(
   // Run selector with hooks to track dependencies
   const result = withHooks(
     {
-      onRead: ({ storeId, prop, value }) => {
-        const key = `${storeId}.${prop}`;
-        refs.trackedDeps.set(key, { storeId, propKey: prop, value });
+      onRead: (event) => {
+        refs.trackedDeps.set(event.key, event);
       },
     },
     () => selector(selectorContext)
@@ -143,11 +142,8 @@ export function useStoreWithContainer<T extends object>(
     // Note: subscription only fires when value actually changes (store handles equality)
     for (const [key, dep] of currentKeys) {
       if (!prevSubscriptions.has(key)) {
-        const instance = container.get(dep.storeId);
-        if (instance) {
-          const unsub = instance.subscribe(dep.propKey as any, forceUpdate);
-          prevSubscriptions.set(key, unsub);
-        }
+        const unsub = dep.subscribe(forceUpdate);
+        prevSubscriptions.set(key, unsub);
       }
     }
 

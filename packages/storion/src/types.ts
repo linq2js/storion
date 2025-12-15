@@ -495,8 +495,8 @@ export interface StoreInstance<
    * Used by the effect system to track dependencies without preventing
    * autoDispose from working.
    */
-  _subscribeInternal?<K extends keyof TState>(
-    propKey: K,
+  _subscribeInternal<K extends keyof TState>(
+    propKey: K | string,
     listener: () => void
   ): VoidFunction;
 }
@@ -672,12 +672,12 @@ export type SingleOrMultipleListeners<T> =
  * Represents a tracked dependency for fine-grained updates.
  */
 export interface TrackedDependency {
-  /** Store instance ID */
-  storeId: string;
-
-  /** Property key that was accessed */
-  propKey: string;
+  /** Unique key for this dependency (storeId.prop) */
+  key: string;
 
   /** Value at the time of access */
   value: unknown;
+
+  /** Subscribe to changes - returns cleanup function */
+  subscribe: (listener: VoidFunction) => VoidFunction;
 }

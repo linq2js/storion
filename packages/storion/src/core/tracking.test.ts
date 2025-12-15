@@ -114,15 +114,15 @@ describe("hooks", () => {
 
         expect(onRead).toHaveBeenCalledWith(
           expect.objectContaining({
-            storeId: expect.any(String),
-            prop: "count",
+            key: expect.stringContaining(".count"),
             value: 0,
+            subscribe: expect.any(Function),
           })
         );
       });
     });
 
-    it("should include storeId in event for container lookup", () => {
+    it("should include key in event with storeId and prop", () => {
       const onRead = vi.fn();
 
       const counter = store({
@@ -139,9 +139,9 @@ describe("hooks", () => {
 
         expect(onRead).toHaveBeenCalledWith(
           expect.objectContaining({
-            storeId: instance.id,
-            prop: "count",
+            key: `${instance.id}.count`,
             value: 42,
+            subscribe: expect.any(Function),
           })
         );
       });
@@ -172,8 +172,7 @@ describe("hooks", () => {
 
         expect(onWrite).toHaveBeenCalledWith(
           expect.objectContaining({
-            storeId: expect.any(String),
-            prop: "count",
+            key: expect.stringContaining(".count"),
             next: 5,
             prev: 0,
           })
@@ -181,7 +180,7 @@ describe("hooks", () => {
       });
     });
 
-    it("should include storeId in event for container lookup", () => {
+    it("should include key in event with storeId and prop", () => {
       const onWrite = vi.fn();
 
       const counter = store({
@@ -200,8 +199,7 @@ describe("hooks", () => {
         instance.actions.setCount(10);
 
         const call = onWrite.mock.calls[0][0];
-        expect(call.storeId).toBe(instance.id);
-        expect(call.prop).toBe("count");
+        expect(call.key).toBe(`${instance.id}.count`);
         expect(call.next).toBe(10);
         expect(call.prev).toBe(0);
       });
@@ -232,7 +230,7 @@ describe("hooks", () => {
         // onWrite is still called (but equality check prevents actual update)
         expect(onWrite).toHaveBeenCalledWith(
           expect.objectContaining({
-            prop: "count",
+            key: `${instance.id}.count`,
             next: 5,
             prev: 5,
           })
@@ -274,7 +272,7 @@ describe("hooks", () => {
 
         // onWrite should be called for count
         expect(onWrite).toHaveBeenCalledWith(
-          expect.objectContaining({ prop: "count", next: 1, prev: 0 })
+          expect.objectContaining({ key: expect.stringContaining(".count"), next: 1, prev: 0 })
         );
       });
     });

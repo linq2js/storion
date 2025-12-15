@@ -119,8 +119,8 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const stores = container();
       const instance = stores.get(counter);
 
-      // Spy on subscribe
-      const subscribeSpy = vi.spyOn(instance, "subscribe");
+      // Spy on _subscribeInternal (used internally via ReadEvent.subscribe)
+      const subscribeSpy = vi.spyOn(instance, "_subscribeInternal");
 
       const { rerender } = renderHook(
         () =>
@@ -154,7 +154,8 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const stores = container();
       const instance = stores.get(user);
-      const subscribeSpy = vi.spyOn(instance, "subscribe");
+      // Now we use _subscribeInternal directly via ReadEvent.subscribe
+      const subscribeSpy = vi.spyOn(instance, "_subscribeInternal");
 
       let trackCity = false;
 

@@ -2,8 +2,7 @@
  * Proxy utilities for state access and dependency tracking.
  */
 
-import type { StoreResolver } from "../types";
-import { trackRead, trackWrite } from "./tracking";
+import { trackRead, trackWrite, type SubscribeFn } from "./tracking";
 
 // =============================================================================
 // Types
@@ -13,8 +12,8 @@ export interface StateProxyOptions {
   /** Unique store ID for tracking */
   storeId: string;
 
-  /** Store resolver for hooks */
-  resolver: StoreResolver;
+  /** Factory that creates subscribe function for a property */
+  createSubscribe: (prop: string) => SubscribeFn;
 
   /** Whether the proxy allows writes */
   mutable: boolean;
@@ -34,8 +33,8 @@ export interface TrackingProxyOptions {
   /** Unique store ID for tracking */
   storeId: string;
 
-  /** Store resolver for hooks */
-  resolver: StoreResolver;
+  /** Factory that creates subscribe function for a property */
+  createSubscribe: (prop: string) => SubscribeFn;
 
   /** Callback when a property is accessed */
   onAccess?: (storeId: string, propKey: string, value: unknown) => void;
@@ -56,7 +55,8 @@ export function createStateProxy<T extends Record<string, unknown>>(
   rawState: T,
   options: StateProxyOptions
 ): T {
-  const { storeId, resolver, mutable, getEquality, onPropertyChange } = options;
+  const { storeId, createSubscribe, mutable, getEquality, onPropertyChange } =
+    options;
 
   const proxy = new Proxy(rawState, {
     get(target, prop) {
@@ -65,7 +65,7 @@ export function createStateProxy<T extends Record<string, unknown>>(
       const value = target[prop as keyof T];
 
       // Track read for reactive effects
-      trackRead(storeId, prop, value, resolver);
+      trackRead(storeId, prop, value, createSubscribe(prop));
 
       return value;
     },
@@ -113,7 +113,7 @@ export function createStateProxy<T extends Record<string, unknown>>(
       const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
       if (descriptor) {
         const value = target[prop as keyof T];
-        trackRead(storeId, prop, value, resolver);
+        trackRead(storeId, prop, value, createSubscribe(prop));
       }
       return descriptor;
     },
@@ -129,12 +129,12 @@ export function createStateProxy<T extends Record<string, unknown>>(
 export function createReadonlyStateProxy<T extends Record<string, unknown>>(
   rawState: T,
   storeId: string,
-  resolver: StoreResolver,
+  createSubscribe: (prop: string) => SubscribeFn,
   getEquality: (key: string) => (a: unknown, b: unknown) => boolean
 ): Readonly<T> {
   return createStateProxy(rawState, {
     storeId,
-    resolver,
+    createSubscribe,
     mutable: false,
     getEquality,
   }) as Readonly<T>;
@@ -158,7 +158,7 @@ export function createTrackingProxy<T extends Record<string, unknown>>(
   state: Readonly<T>,
   options: TrackingProxyOptions
 ): Readonly<T> {
-  const { storeId, resolver, onAccess } = options;
+  const { storeId, createSubscribe, onAccess } = options;
 
   return new Proxy(state as T, {
     get(target, prop) {
@@ -167,7 +167,7 @@ export function createTrackingProxy<T extends Record<string, unknown>>(
       const value = target[prop as keyof T];
 
       // Track read via hooks
-      trackRead(storeId, prop, value, resolver);
+      trackRead(storeId, prop, value, createSubscribe(prop));
 
       // Also call legacy onAccess callback
       onAccess?.(storeId, prop, value);
@@ -189,7 +189,7 @@ export function createTrackingProxy<T extends Record<string, unknown>>(
       const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
       if (descriptor) {
         const value = target[prop as keyof T];
-        trackRead(storeId, prop, value, resolver);
+        trackRead(storeId, prop, value, createSubscribe(prop));
         onAccess?.(storeId, prop, value);
       }
       return descriptor;

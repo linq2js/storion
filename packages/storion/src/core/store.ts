@@ -261,6 +261,17 @@ export function createStoreInstance<
   }
 
   // ==========================================================================
+  // Forward declarations for closures
+  // ==========================================================================
+
+  // Declare instance variable early so closures can capture it.
+  // Assigned later in "Instance" section.
+  let instance: StoreInstance<TState, TActions> | null = null;
+
+  // Helper for closures - instance is always assigned before this is called
+  const getInst = () => instance as StoreInstance<TState, TActions>;
+
+  // ==========================================================================
   // Action Dispatch Handler
   // ==========================================================================
 
@@ -323,7 +334,11 @@ export function createStoreInstance<
 
     // Trigger reactive tracking if inside effect
     if (hasReadHook()) {
-      trackRead(storeId, propKey, invocation, localResolver);
+      // Create subscribe function that captures instance via closure
+      // instance is guaranteed to be assigned before this is called
+      const subscribeFn = (listener: VoidFunction) =>
+        getInst()._subscribeInternal(propKey, listener);
+      trackRead(storeId, propKey, invocation, subscribeFn);
     }
 
     return invocation as ActionDispatchEvent<TActions, K> | undefined;
@@ -338,7 +353,8 @@ export function createStoreInstance<
   let instanceActions: ReactiveActions<TActions> =
     {} as ReactiveActions<TActions>;
 
-  const instance: StoreInstance<TState, TActions> = {
+  // Assign instance object (instance declared earlier in forward declarations)
+  instance = {
     id: storeId,
     spec,
 
@@ -527,20 +543,6 @@ export function createStoreInstance<
   // Local Resolver (includes current instance)
   // ==========================================================================
 
-  // Create a local resolver that includes the current instance
-  // This allows effects to subscribe to the current store via storeId
-  const localResolver: StoreResolver = {
-    get(specOrId: any): any {
-      // If looking up by ID and it's our store, return our instance
-      if (specOrId === storeId) {
-        return instance;
-      }
-      // Otherwise delegate to the container resolver
-      return resolver.get(specOrId);
-    },
-    has: resolver.has,
-  };
-
   // ==========================================================================
   // State Objects with defineProperty (faster reads than Proxy)
   // ==========================================================================
@@ -551,6 +553,11 @@ export function createStoreInstance<
     const obj = {} as TState;
 
     for (const prop of Object.keys(currentState) as Array<keyof TState>) {
+      // Create subscribe function for this property (closure captures prop)
+      // Note: instance is guaranteed to be defined when this getter is called
+      const subscribeFn = (listener: VoidFunction) =>
+        getInst()._subscribeInternal(prop as string, listener);
+
       Object.defineProperty(obj, prop, {
         enumerable: true,
         configurable: false,
@@ -558,7 +565,7 @@ export function createStoreInstance<
           const value = currentState[prop];
           // Only call trackRead if there's an active hook (perf optimization)
           if (hasReadHook()) {
-            trackRead(storeId, prop as string, value, localResolver);
+            trackRead(storeId, prop as string, value, subscribeFn);
           }
           return value;
         },

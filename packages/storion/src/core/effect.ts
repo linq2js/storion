@@ -5,7 +5,6 @@
  * Dependencies are automatically tracked when state properties are read.
  */
 
-import type { StoreResolver } from "../types";
 import type { Emitter } from "../emitter";
 import { emitter } from "../emitter";
 import {
@@ -323,25 +322,23 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
   let errorStrategy: EffectErrorStrategy = "keepAlive";
   let onErrorCallback: ((error: unknown) => void) | null = null;
 
+  // Tracked dependency type
+  type TrackedDep = {
+    key: string;
+    value: unknown;
+    subscribe: (listener: VoidFunction) => VoidFunction;
+  };
+
   // Previous successful state (for keepAlive strategy)
-  let prevTrackedDeps = new Map<
-    string,
-    { storeId: string; prop: string; resolver: StoreResolver }
-  >();
+  let prevTrackedDeps = new Map<string, TrackedDep>();
   let prevSubscriptionEmitter: Emitter | null = null;
 
   // Current tracked dependencies
-  let trackedDeps = new Map<
-    string,
-    { storeId: string; prop: string; resolver: StoreResolver }
-  >();
+  let trackedDeps = new Map<string, TrackedDep>();
   const writtenProps = new Set<string>();
 
   // For tracking during execution
-  let newTrackedDeps: Map<
-    string,
-    { storeId: string; prop: string; resolver: StoreResolver }
-  > | null = null;
+  let newTrackedDeps: Map<string, TrackedDep> | null = null;
 
   // ==========================================================================
   // Helper Functions
@@ -375,18 +372,10 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
     for (const [key, dep] of trackedDeps) {
       if (writtenProps.has(key)) continue;
 
-      const instance = dep.resolver.get(dep.storeId);
-      if (instance) {
-        const subscribeMethod =
-          (instance as any)._subscribeInternal ??
-          ((prop: string, listener: () => void) =>
-            instance.subscribe(prop as any, listener));
-
-        const unsub = subscribeMethod(dep.prop, () => {
-          scheduleNotification(execute, fn);
-        });
-        getSubscriptionEmitter().on(unsub);
-      }
+      const unsub = dep.subscribe(() => {
+        scheduleNotification(execute, fn);
+      });
+      getSubscriptionEmitter().on(unsub);
     }
   };
 
@@ -449,19 +438,17 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
         ...current,
         onRead: (event) => {
           current.onRead?.(event);
-          const key = `${event.storeId}.${event.prop}`;
-          if (!newTrackedDeps!.has(key)) {
-            newTrackedDeps!.set(key, {
-              storeId: event.storeId,
-              prop: event.prop,
-              resolver: event.resolver,
+          if (!newTrackedDeps!.has(event.key)) {
+            newTrackedDeps!.set(event.key, {
+              key: event.key,
+              value: event.value,
+              subscribe: event.subscribe,
             });
           }
         },
         onWrite: (event) => {
           current.onWrite?.(event);
-          const key = `${event.storeId}.${event.prop}`;
-          writtenProps.add(key);
+          writtenProps.add(event.key);
         },
         scheduleNotification: current.scheduleNotification,
         scheduleEffect: current.scheduleEffect,
