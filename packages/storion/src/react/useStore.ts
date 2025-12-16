@@ -6,14 +6,15 @@
 
 import { useReducer, useEffect, useMemo, useState } from "react";
 
-import type {
-  StateBase,
-  ActionsBase,
-  StoreSpec,
-  StoreContainer,
-  SelectorContext,
-  Selector,
-  StableResult,
+import {
+  STORION_TYPE,
+  type StateBase,
+  type ActionsBase,
+  type StoreSpec,
+  type StoreContainer,
+  type SelectorContext,
+  type Selector,
+  type StableResult,
 } from "../types";
 import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
@@ -64,6 +65,8 @@ export function useStoreWithContainer<T extends object>(
   // Create selector context (no tracking proxy needed - hooks handle it)
   const selectorContext: SelectorContext = useMemo(() => {
     const ctx: SelectorContext = {
+      [STORION_TYPE]: "selector.context",
+
       resolve<S extends StateBase, A extends ActionsBase>(
         spec: StoreSpec<S, A>
       ): readonly [Readonly<S>, A] {

@@ -1,56 +1,88 @@
 /**
  * CSS styles for devtools panel.
- * Using CSS-in-JS for portability.
+ * shadcn UI inspired theme with clean, minimal design.
+ *
+ * Font strategy:
+ * - Sans-serif (Inter/system) for UI labels, buttons, headings
+ * - Monospace for data values, timestamps, code, inputs
  */
 
 export const colors = {
-  // Dark theme
+  // Dark theme - zinc palette inspired by shadcn
   bg: {
-    primary: "#0f172a", // slate-900
-    secondary: "#1e293b", // slate-800
-    tertiary: "#334155", // slate-700
-    hover: "#475569", // slate-600
+    base: "#09090b", // zinc-950
+    card: "#18181b", // zinc-900
+    elevated: "#27272a", // zinc-800
+    hover: "#3f3f46", // zinc-700
+    muted: "#52525b", // zinc-600
   },
   text: {
-    primary: "#f8fafc", // slate-50
-    secondary: "#94a3b8", // slate-400
-    muted: "#64748b", // slate-500
+    primary: "#fafafa", // zinc-50
+    secondary: "#a1a1aa", // zinc-400
+    muted: "#71717a", // zinc-500
+    dim: "#52525b", // zinc-600
   },
+  border: {
+    default: "#27272a", // zinc-800
+    subtle: "#3f3f46", // zinc-700
+    focus: "#a1a1aa", // zinc-400
+  },
+  // Accent colors for syntax highlighting
+  syntax: {
+    key: "#e879f9", // fuchsia-400
+    string: "#fbbf24", // amber-400
+    number: "#60a5fa", // blue-400
+    boolean: "#f472b6", // pink-400
+    null: "#71717a", // zinc-500
+  },
+  // UI accents
   accent: {
-    purple: "#a78bfa", // violet-400
-    blue: "#60a5fa", // blue-400
-    green: "#4ade80", // green-400
-    yellow: "#facc15", // yellow-400
-    red: "#f87171", // red-400
-    cyan: "#22d3ee", // cyan-400
+    primary: "#a1a1aa", // zinc-400
+    success: "#4ade80", // green-400
+    warning: "#fbbf24", // amber-400
+    danger: "#f87171", // red-400
+    info: "#38bdf8", // sky-400
   },
-  border: "#334155", // slate-700
+};
+
+// Font stacks
+const fonts = {
+  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
 };
 
 export const panelStyles = `
+  /* ============================================
+     Base & Reset
+     ============================================ */
   .storion-devtools {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: ${fonts.sans};
     font-size: 12px;
+    line-height: 1.4;
     color: ${colors.text.primary};
-    background: ${colors.bg.primary};
+    background: ${colors.bg.base};
     height: 100%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   .storion-devtools * {
     box-sizing: border-box;
   }
 
-  /* Header */
+  /* ============================================
+     Header
+     ============================================ */
   .sdt-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-bottom: 1px solid ${colors.border};
-    background: ${colors.bg.secondary};
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid ${colors.border.default};
+    background: ${colors.bg.card};
     flex-shrink: 0;
   }
 
@@ -61,48 +93,83 @@ export const panelStyles = `
   }
 
   .sdt-logo-icon {
-    width: 20px;
-    height: 20px;
-    background: linear-gradient(135deg, ${colors.accent.purple}, ${colors.accent.blue});
+    width: 18px;
+    height: 18px;
+    background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-weight: bold;
     font-size: 10px;
+    font-weight: 600;
   }
 
   .sdt-title {
+    font-size: 12px;
     font-weight: 600;
     color: ${colors.text.primary};
+    letter-spacing: -0.01em;
   }
 
   .sdt-header-actions {
     margin-left: auto;
     display: flex;
-    gap: 4px;
+    gap: 2px;
   }
 
+  /* ============================================
+     Buttons
+     ============================================ */
   .sdt-btn {
     background: transparent;
-    border: none;
+    border: 1px solid transparent;
     color: ${colors.text.secondary};
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 3px 5px;
     border-radius: 4px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
-    font-size: 12px;
+    font-family: ${fonts.sans};
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.15s ease;
   }
 
   .sdt-btn:hover {
-    background: ${colors.bg.tertiary};
+    background: ${colors.bg.elevated};
     color: ${colors.text.primary};
   }
 
-  /* Tab Content Container */
+  .sdt-btn:active {
+    background: ${colors.bg.hover};
+  }
+
+  .sdt-btn-primary {
+    background: ${colors.text.primary};
+    color: ${colors.bg.base};
+  }
+
+  .sdt-btn-primary:hover {
+    background: ${colors.text.secondary};
+    color: ${colors.bg.base};
+  }
+
+  .sdt-btn-ghost {
+    background: transparent;
+    border-color: ${colors.border.subtle};
+  }
+
+  .sdt-btn-ghost:hover {
+    background: ${colors.bg.elevated};
+    border-color: ${colors.border.focus};
+  }
+
+  /* ============================================
+     Tab Content Container
+     ============================================ */
   .sdt-tab-content {
     display: flex;
     flex-direction: column;
@@ -110,54 +177,68 @@ export const panelStyles = `
     overflow: hidden;
   }
 
-  /* Search */
+  /* ============================================
+     Search Input
+     ============================================ */
   .sdt-search {
-    padding: 8px 12px;
-    border-bottom: 1px solid ${colors.border};
+    padding: 6px 8px;
+    border-bottom: 1px solid ${colors.border.default};
     flex-shrink: 0;
   }
 
   .sdt-search-input {
     width: 100%;
-    padding: 8px 12px;
-    background: ${colors.bg.secondary};
-    border: 1px solid ${colors.border};
-    border-radius: 6px;
+    padding: 4px 8px;
+    background: ${colors.bg.card};
+    border: 1px solid ${colors.border.default};
+    border-radius: 4px;
     color: ${colors.text.primary};
-    font-size: 12px;
+    font-family: ${fonts.mono};
+    font-size: 11px;
     outline: none;
+    transition: all 0.15s ease;
+  }
+
+  .sdt-search-input:hover {
+    border-color: ${colors.border.subtle};
   }
 
   .sdt-search-input:focus {
-    border-color: ${colors.accent.purple};
+    border-color: ${colors.border.focus};
+    box-shadow: 0 0 0 1px rgba(161, 161, 170, 0.1);
   }
 
   .sdt-search-input::placeholder {
-    color: ${colors.text.muted};
+    color: ${colors.text.dim};
+    font-family: ${fonts.sans};
   }
 
-  /* Filter Bar */
+  /* ============================================
+     Filter Bar
+     ============================================ */
   .sdt-filter-bar {
     display: flex;
-    gap: 6px;
-    padding: 8px 12px;
-    border-bottom: 1px solid ${colors.border};
+    gap: 4px;
+    padding: 5px 8px;
+    border-bottom: 1px solid ${colors.border.default};
     flex-wrap: wrap;
     flex-shrink: 0;
   }
 
   .sdt-filter-item {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 10px;
+    padding: 2px 6px;
     border-radius: 4px;
-    font-size: 11px;
-    background: ${colors.bg.tertiary};
+    font-family: ${fonts.sans};
+    font-size: 10px;
+    font-weight: 500;
+    background: ${colors.bg.elevated};
     color: ${colors.text.secondary};
-    border: none;
+    border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
   }
 
   .sdt-filter-item:hover {
@@ -166,82 +247,115 @@ export const panelStyles = `
   }
 
   .sdt-filter-item.active {
-    background: ${colors.accent.purple};
-    color: white;
+    background: ${colors.text.primary};
+    color: ${colors.bg.base};
   }
 
   .sdt-filter-item .count {
-    background: rgba(0,0,0,0.2);
-    padding: 1px 6px;
+    font-family: ${fonts.mono};
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0px 4px;
     border-radius: 3px;
+    font-size: 10px;
     font-weight: 600;
   }
 
-  /* Action Bar */
+  /* ============================================
+     Action Bar
+     ============================================ */
   .sdt-action-bar {
     display: flex;
-    gap: 6px;
-    padding: 8px 12px;
-    border-bottom: 1px solid ${colors.border};
+    gap: 4px;
+    padding: 5px 8px;
+    border-bottom: 1px solid ${colors.border.default};
     flex-shrink: 0;
   }
 
   .sdt-action-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 6px 12px;
+    padding: 3px 8px;
     border-radius: 4px;
-    font-size: 11px;
-    background: ${colors.bg.tertiary};
+    font-family: ${fonts.sans};
+    font-size: 10px;
+    font-weight: 500;
+    background: ${colors.bg.elevated};
     color: ${colors.text.secondary};
-    border: none;
+    border: 1px solid ${colors.border.default};
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
   }
 
   .sdt-action-btn:hover:not(:disabled) {
     background: ${colors.bg.hover};
+    border-color: ${colors.border.subtle};
     color: ${colors.text.primary};
   }
 
   .sdt-action-btn:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
   }
 
-  /* Main Content */
+  /* ============================================
+     Main Content
+     ============================================ */
   .sdt-main-content {
     flex: 1;
     overflow-y: auto;
-    padding: 8px;
+    padding: 6px 8px;
   }
 
-  /* Store List */
+  /* Custom scrollbar */
+  .sdt-main-content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sdt-main-content::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sdt-main-content::-webkit-scrollbar-thumb {
+    background: ${colors.bg.muted};
+    border-radius: 3px;
+  }
+
+  .sdt-main-content::-webkit-scrollbar-thumb:hover {
+    background: ${colors.text.muted};
+  }
+
+  /* ============================================
+     Store Entry Card
+     ============================================ */
   .sdt-store-entry {
-    background: ${colors.bg.secondary};
-    border-radius: 8px;
-    margin-bottom: 8px;
+    background: ${colors.bg.card};
+    border-radius: 6px;
+    margin-bottom: 4px;
     overflow: hidden;
-    border: 1px solid ${colors.border};
+    border: 1px solid ${colors.border.default};
     transition: all 0.15s ease;
   }
 
   .sdt-store-entry:hover {
-    border-color: ${colors.accent.purple};
+    border-color: ${colors.border.subtle};
   }
 
   .sdt-store-entry.selected {
-    border-color: ${colors.accent.purple};
-    box-shadow: 0 0 0 1px ${colors.accent.purple};
+    border-color: ${colors.accent.primary};
   }
 
   .sdt-store-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 6px;
+    padding: 6px 8px;
     cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .sdt-store-header:hover {
+    background: ${colors.bg.elevated};
   }
 
   .sdt-expand-btn {
@@ -253,16 +367,18 @@ export const panelStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: all 0.15s;
+    border-radius: 3px;
+    transition: all 0.15s ease;
   }
 
   .sdt-expand-btn:hover {
-    background: ${colors.bg.tertiary};
+    background: ${colors.bg.hover};
     color: ${colors.text.primary};
   }
 
   .sdt-store-name {
+    font-family: ${fonts.sans};
+    font-size: 12px;
     font-weight: 600;
     color: ${colors.text.primary};
     flex: 1;
@@ -270,148 +386,197 @@ export const panelStyles = `
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .sdt-store-id {
+    font-family: ${fonts.mono};
+    font-size: 10px;
+    font-weight: 400;
+    color: ${colors.text.muted};
   }
 
   .sdt-store-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s ease;
   }
 
   .sdt-store-header:hover .sdt-store-actions {
     opacity: 1;
   }
 
-  /* Store Details */
+  /* ============================================
+     Store Details
+     ============================================ */
   .sdt-store-details {
-    padding: 12px;
-    border-top: 1px solid ${colors.border};
-    background: ${colors.bg.primary};
+    padding: 8px;
+    border-top: 1px solid ${colors.border.default};
+    background: ${colors.bg.base};
   }
 
   .sdt-section-title {
+    font-family: ${fonts.sans};
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: ${colors.text.muted};
-    margin-bottom: 8px;
-    letter-spacing: 0.5px;
+    margin-bottom: 6px;
   }
 
+  /* ============================================
+     State Tree (Mono font for values)
+     ============================================ */
   .sdt-state-tree {
-    font-family: inherit;
+    font-family: ${fonts.mono};
+    font-size: 11px;
+    line-height: 1.5;
   }
 
   .sdt-state-key {
-    color: ${colors.accent.purple};
+    color: ${colors.syntax.key};
   }
 
   .sdt-state-value {
-    color: ${colors.accent.green};
+    color: ${colors.syntax.string};
   }
 
-  .sdt-state-value.string { color: ${colors.accent.yellow}; }
-  .sdt-state-value.number { color: ${colors.accent.blue}; }
-  .sdt-state-value.boolean { color: ${colors.accent.red}; }
-  .sdt-state-value.null { color: ${colors.text.muted}; }
+  .sdt-state-value.string {
+    color: ${colors.syntax.string};
+  }
 
-  /* History */
+  .sdt-state-value.number {
+    color: ${colors.syntax.number};
+  }
+
+  .sdt-state-value.boolean {
+    color: ${colors.syntax.boolean};
+  }
+
+  .sdt-state-value.null {
+    color: ${colors.syntax.null};
+    font-style: italic;
+  }
+
+  .sdt-state-value.object {
+    color: ${colors.text.secondary};
+  }
+
+  /* ============================================
+     History
+     ============================================ */
   .sdt-history {
-    margin-top: 12px;
+    margin-top: 8px;
   }
 
   .sdt-history-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 6px;
+    padding: 4px 6px;
     border-radius: 4px;
-    cursor: pointer;
-    margin-bottom: 4px;
-    transition: background 0.15s;
+    margin-bottom: 2px;
+    transition: background 0.15s ease;
+    border: 1px solid transparent;
   }
 
   .sdt-history-item:hover {
-    background: ${colors.bg.tertiary};
+    background: ${colors.bg.elevated};
   }
 
-  .sdt-history-item.init {
-    background: ${colors.bg.tertiary};
-    border-left: 2px solid ${colors.accent.green};
+  .sdt-history-index {
+    font-family: ${fonts.mono};
+    font-size: 10px;
+    color: ${colors.text.dim};
+    min-width: 24px;
   }
 
   .sdt-history-time {
+    font-family: ${fonts.mono};
+    font-size: 10px;
     color: ${colors.text.secondary};
-    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .sdt-history-props {
+    font-family: ${fonts.mono};
+    font-size: 10px;
+    color: ${colors.text.muted};
     flex: 1;
-  }
-
-  .sdt-history-item.init .sdt-history-time {
-    color: ${colors.accent.green};
-    font-weight: 600;
-  }
-
-  .sdt-history-badge {
-    font-size: 9px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: ${colors.accent.green};
-    color: #000;
-    font-weight: 600;
-    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .sdt-history-revert {
-    background: ${colors.accent.purple};
-    color: white;
-    border: none;
-    padding: 2px 8px;
-    border-radius: 4px;
-    cursor: pointer;
+    font-family: ${fonts.sans};
     font-size: 10px;
+    font-weight: 500;
+    background: ${colors.bg.hover};
+    color: ${colors.text.primary};
+    border: 1px solid ${colors.border.subtle};
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: all 0.15s ease;
   }
 
   .sdt-history-item:hover .sdt-history-revert {
     opacity: 1;
   }
 
+  .sdt-history-revert:hover {
+    background: ${colors.text.primary};
+    color: ${colors.bg.base};
+    border-color: ${colors.text.primary};
+  }
+
   .sdt-history-expand {
     display: flex;
     justify-content: center;
-    padding: 8px;
+    padding: 4px;
   }
 
   .sdt-history-expand-btn {
-    background: ${colors.bg.tertiary};
-    border: none;
+    font-family: ${fonts.sans};
+    font-size: 10px;
+    font-weight: 500;
+    background: transparent;
+    border: 1px solid ${colors.border.default};
     color: ${colors.text.secondary};
-    padding: 6px 16px;
+    padding: 3px 10px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 11px;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
   }
 
   .sdt-history-expand-btn:hover {
-    background: ${colors.bg.hover};
+    background: ${colors.bg.elevated};
+    border-color: ${colors.border.subtle};
     color: ${colors.text.primary};
   }
 
-  /* Metadata Section */
+  /* ============================================
+     Metadata Section
+     ============================================ */
   .sdt-metadata {
-    margin-top: 12px;
-    padding: 10px;
-    background: ${colors.bg.tertiary};
-    border-radius: 6px;
+    margin-top: 8px;
+    padding: 6px 8px;
+    background: ${colors.bg.elevated};
+    border-radius: 4px;
+    border: 1px solid ${colors.border.default};
   }
 
   .sdt-metadata-row {
     display: flex;
-    margin-bottom: 6px;
-    font-size: 11px;
+    align-items: baseline;
+    margin-bottom: 3px;
+    font-size: 10px;
   }
 
   .sdt-metadata-row:last-child {
@@ -419,101 +584,103 @@ export const panelStyles = `
   }
 
   .sdt-metadata-label {
+    font-family: ${fonts.sans};
+    font-weight: 500;
     color: ${colors.text.muted};
-    min-width: 80px;
+    min-width: 60px;
     flex-shrink: 0;
   }
 
   .sdt-metadata-value {
+    font-family: ${fonts.mono};
     color: ${colors.text.secondary};
     word-break: break-all;
   }
 
   .sdt-metadata-value.code-location {
-    color: ${colors.accent.cyan};
+    color: ${colors.accent.info};
     font-size: 10px;
   }
 
-  /* Resize Handle */
+  /* ============================================
+     Resize Handle
+     ============================================ */
   .sdt-resize-handle {
     position: absolute;
     background: transparent;
     z-index: 10;
-    transition: background 0.15s;
+    transition: background 0.15s ease;
   }
 
   .sdt-resize-handle:hover,
   .sdt-resize-handle.active {
-    background: ${colors.accent.purple};
+    background: ${colors.accent.primary};
   }
 
   .sdt-resize-handle.horizontal {
-    width: 4px;
+    width: 3px;
     height: 100%;
     top: 0;
     cursor: ew-resize;
   }
 
   .sdt-resize-handle.vertical {
-    height: 4px;
+    height: 3px;
     width: 100%;
     left: 0;
     cursor: ns-resize;
   }
 
-  .sdt-resize-handle.left {
-    left: 0;
-  }
+  .sdt-resize-handle.left { left: 0; }
+  .sdt-resize-handle.right { right: 0; }
+  .sdt-resize-handle.top { top: 0; }
+  .sdt-resize-handle.bottom { bottom: 0; }
 
-  .sdt-resize-handle.right {
-    right: 0;
-  }
-
-  .sdt-resize-handle.top {
-    top: 0;
-  }
-
-  .sdt-resize-handle.bottom {
-    bottom: 0;
-  }
-
-  /* Code Location */
-  .sdt-code-location {
-    margin-top: 12px;
-    padding: 8px;
-    background: ${colors.bg.tertiary};
-    border-radius: 4px;
-    font-size: 10px;
-    color: ${colors.text.muted};
-    word-break: break-all;
-  }
-
-  /* Empty State */
+  /* ============================================
+     Empty State
+     ============================================ */
   .sdt-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 40px 20px;
+    padding: 24px 12px;
     color: ${colors.text.muted};
     text-align: center;
   }
 
   .sdt-empty-icon {
-    font-size: 32px;
-    margin-bottom: 12px;
+    font-size: 28px;
+    margin-bottom: 8px;
     opacity: 0.5;
   }
 
-  /* Collapsed Panel */
+  .sdt-empty-message {
+    font-family: ${fonts.sans};
+    font-size: 12px;
+    font-weight: 500;
+    color: ${colors.text.secondary};
+    margin-bottom: 4px;
+  }
+
+  .sdt-empty-hint {
+    font-family: ${fonts.sans};
+    font-size: 11px;
+    color: ${colors.text.muted};
+  }
+
+  /* ============================================
+     Collapsed State
+     ============================================ */
   .storion-devtools.collapsed {
-    width: 40px !important;
-    min-width: 40px !important;
+    width: 36px !important;
+    min-width: 36px !important;
   }
 
   .storion-devtools.collapsed .sdt-header {
     flex-direction: column;
-    padding: 8px 4px;
+    padding: 6px 4px;
+    gap: 4px;
   }
 
   .storion-devtools.collapsed .sdt-title,
@@ -526,14 +693,16 @@ export const panelStyles = `
     flex-direction: column;
   }
 
-  /* Position-specific styles */
+  /* ============================================
+     Position Variants
+     ============================================ */
   .storion-devtools.position-bottom {
     flex-direction: column;
   }
 
   .storion-devtools.position-bottom.collapsed {
-    height: 40px !important;
-    min-height: 40px !important;
+    height: 36px !important;
+    min-height: 36px !important;
     width: 100% !important;
   }
 
@@ -545,50 +714,32 @@ export const panelStyles = `
     flex-direction: row;
   }
 
-  /* Mobile responsive */
+  /* ============================================
+     Responsive
+     ============================================ */
   @media (max-width: 768px) {
     .storion-devtools {
       font-size: 11px;
     }
-    
+
     .sdt-header {
-      padding: 6px 8px;
+      padding: 5px 6px;
     }
 
     .sdt-search {
-      padding: 6px 8px;
-    }
-
-    .sdt-search-input {
-      padding: 6px 10px;
+      padding: 5px 6px;
     }
 
     .sdt-main-content {
-      padding: 6px;
+      padding: 5px 6px;
     }
 
     .sdt-store-header {
-      padding: 8px 10px;
+      padding: 5px 6px;
     }
 
     .sdt-store-details {
-      padding: 10px;
-    }
-
-    .sdt-history-item {
-      padding: 5px 6px;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .sdt-title {
-      font-size: 11px;
-    }
-
-    .sdt-logo-icon {
-      width: 16px;
-      height: 16px;
-      font-size: 8px;
+      padding: 6px;
     }
   }
 `;

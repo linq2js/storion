@@ -9,7 +9,6 @@
  */
 
 import { memo, type ReactNode } from "react";
-import { colors } from "../styles";
 
 // ============================================================================
 // Search Bar
@@ -140,14 +139,8 @@ export const MainContent = memo(function MainContent({
       <div className="sdt-main-content">
         <div className="sdt-empty">
           <div className="sdt-empty-icon">{emptyIcon}</div>
-          <div>{emptyMessage}</div>
-          {emptyHint && (
-            <div
-              style={{ fontSize: 11, marginTop: 4, color: colors.text.muted }}
-            >
-              {emptyHint}
-            </div>
-          )}
+          <div className="sdt-empty-message">{emptyMessage}</div>
+          {emptyHint && <div className="sdt-empty-hint">{emptyHint}</div>}
         </div>
       </div>
     );
@@ -182,4 +175,3 @@ export const TabContent = memo(function TabContent({
     </div>
   );
 });
-

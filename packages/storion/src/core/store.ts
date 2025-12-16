@@ -4,18 +4,19 @@
  * Creates store specs and instances with the setup() pattern.
  */
 
-import type {
-  StateBase,
-  ActionsBase,
-  StoreSpec,
-  StoreOptions,
-  StoreInstance,
-  StoreResolver,
-  DispatchEvent,
-  ActionDispatchEvent,
-  ReactiveActions,
-  Equality,
-  AutoDisposeOptions,
+import {
+  STORION_TYPE,
+  type StateBase,
+  type ActionsBase,
+  type StoreSpec,
+  type StoreOptions,
+  type StoreInstance,
+  type StoreResolver,
+  type DispatchEvent,
+  type ActionDispatchEvent,
+  type ReactiveActions,
+  type Equality,
+  type AutoDisposeOptions,
 } from "../types";
 
 import { produce } from "immer";
@@ -49,6 +50,7 @@ export function store<TState extends StateBase, TActions extends ActionsBase>(
 ): StoreSpec<TState, TActions> {
   const name = options.name ?? generateSpecName();
   return {
+    [STORION_TYPE]: "store.spec",
     name,
     options,
   };
@@ -362,6 +364,7 @@ export function createStoreInstance<
 
   // Assign instance object (instance declared earlier in forward declarations)
   instance = {
+    [STORION_TYPE]: "store" as const,
     id: storeId,
     spec,
     deps: [],

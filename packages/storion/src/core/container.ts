@@ -4,15 +4,16 @@
  * Manages store instances - creation, caching, disposal.
  */
 
-import type {
-  StateBase,
-  ActionsBase,
-  StoreSpec,
-  StoreInstance,
-  StoreContainer,
-  StoreResolver,
-  ContainerOptions,
-  StoreMiddleware,
+import {
+  STORION_TYPE,
+  type StateBase,
+  type ActionsBase,
+  type StoreSpec,
+  type StoreInstance,
+  type StoreContainer,
+  type StoreResolver,
+  type ContainerOptions,
+  type StoreMiddleware,
 } from "../types";
 
 import { createStoreInstance } from "./store";
@@ -185,6 +186,8 @@ export function container(options: ContainerOptions = {}): StoreContainer {
   // ==========================================================================
 
   const containerApi: StoreContainer = {
+    [STORION_TYPE]: "container",
+
     get<S extends StateBase, A extends ActionsBase>(
       specOrId: StoreSpec<S, A> | string
     ): any {

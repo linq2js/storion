@@ -33,20 +33,24 @@ const IconChevron = ({ open }: { open: boolean }) => (
   </svg>
 );
 
-const IconCollapse = ({ collapsed }: { collapsed: boolean }) => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    style={{
-      transform: collapsed ? "rotate(180deg)" : "rotate(0)",
-      transition: "transform 0.15s",
-    }}
-  >
-    <path d="M15 18l-6-6 6-6" />
+const IconMinimize = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+// Position icons
+const IconDockLeft = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <line x1="9" y1="3" x2="9" y2="21" />
+  </svg>
+);
+
+const IconDockBottom = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <line x1="3" y1="15" x2="21" y2="15" />
   </svg>
 );
 
@@ -129,17 +133,53 @@ const StoreEntry = memo(function StoreEntry({
     : Math.min(totalHistory, DEFAULT_HISTORY_COUNT);
   const displayHistory = entry.history.slice(-displayCount).reverse();
 
-  // Check if a snapshot is the init snapshot (first one)
-  const isInitSnapshot = (snapshotId: number) => {
-    return entry.history.length > 0 && entry.history[0].id === snapshotId;
-  };
+  // Get changed props by comparing with previous snapshot
+  const getChangedProps = useCallback(
+    (snapshotIndex: number): string[] => {
+      const snapshot = entry.history[snapshotIndex];
+      if (!snapshot) return [];
+
+      // First snapshot - show all keys
+      if (snapshotIndex === 0) {
+        return Object.keys(snapshot.state);
+      }
+
+      const prevSnapshot = entry.history[snapshotIndex - 1];
+      if (!prevSnapshot) return Object.keys(snapshot.state);
+
+      const changedKeys: string[] = [];
+      const allKeys = new Set([
+        ...Object.keys(snapshot.state),
+        ...Object.keys(prevSnapshot.state),
+      ]);
+
+      for (const key of allKeys) {
+        const curr = snapshot.state[key];
+        const prev = prevSnapshot.state[key];
+        if (curr !== prev) {
+          changedKeys.push(key);
+        }
+      }
+
+      return changedKeys;
+    },
+    [entry.history]
+  );
+
+  // Get the actual index in history array for a snapshot
+  const getSnapshotIndex = useCallback(
+    (snapshotId: number): number => {
+      return entry.history.findIndex((s) => s.id === snapshotId);
+    },
+    [entry.history]
+  );
 
   // Meta entries
   const metaEntries = entry.meta ? Object.entries(entry.meta) : [];
 
   return (
     <div className="sdt-store-entry">
-      {/* Header: expand/collapse -> name -> actions */}
+      {/* Header: expand/collapse -> name + id -> actions */}
       <div className="sdt-store-header" onClick={toggleExpand}>
         <button
           className="sdt-expand-btn"
@@ -150,7 +190,10 @@ const StoreEntry = memo(function StoreEntry({
         >
           <IconChevron open={expanded} />
         </button>
-        <div className="sdt-store-name">{entry.name}</div>
+        <div className="sdt-store-name">
+          {entry.name}
+          <span className="sdt-store-id">{entry.id}</span>
+        </div>
         <div className="sdt-store-actions">
           {/* Store actions will be added later */}
         </div>
@@ -181,16 +224,17 @@ const StoreEntry = memo(function StoreEntry({
             <div className="sdt-history">
               <div className="sdt-section-title">History ({totalHistory})</div>
               {displayHistory.map((snapshot) => {
-                const isInit = isInitSnapshot(snapshot.id);
+                const historyIndex = getSnapshotIndex(snapshot.id);
+                const changedProps = getChangedProps(historyIndex);
                 return (
-                  <div
-                    key={snapshot.id}
-                    className={`sdt-history-item ${isInit ? "init" : ""}`}
-                  >
+                  <div key={snapshot.id} className="sdt-history-item">
+                    <span className="sdt-history-index">[{historyIndex}]</span>
                     <span className="sdt-history-time">
                       {formatTime(snapshot.timestamp)}
                     </span>
-                    {isInit && <span className="sdt-history-badge">Init</span>}
+                    <span className="sdt-history-props">
+                      {changedProps.join(", ")}
+                    </span>
                     <button
                       className="sdt-history-revert"
                       onClick={(e) => {
@@ -338,25 +382,32 @@ function ResizeHandle({ position, onResize }: ResizeHandleProps) {
 // Main Panel
 // ============================================================================
 
+export type PanelPosition = "left" | "bottom";
+
 export interface DevtoolsPanelProps {
   controller: DevtoolsController;
-  position?: "left" | "right" | "bottom";
+  position?: PanelPosition;
+  onPositionChange?: (position: PanelPosition) => void;
   onCollapsedChange?: (collapsed: boolean) => void;
   onResize?: (size: number) => void;
   initialSize?: number;
+  initialCollapsed?: boolean;
 }
 
 export function DevtoolsPanel({
   controller,
-  position = "right",
+  position: initialPosition = "left",
+  onPositionChange,
   onCollapsedChange,
   onResize,
   initialSize = 360,
+  initialCollapsed = false,
 }: DevtoolsPanelProps) {
   const [stores, setStores] = useState<DevtoolsStoreEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [size, setSize] = useState(initialSize);
+  const [position, setPosition] = useState<PanelPosition>(initialPosition);
 
   // Subscribe to controller updates
   useEffect(() => {
@@ -393,6 +444,14 @@ export function DevtoolsPanel({
     });
   }, [onCollapsedChange]);
 
+  const togglePosition = useCallback(() => {
+    setPosition((prev) => {
+      const next: PanelPosition = prev === "left" ? "bottom" : "left";
+      onPositionChange?.(next);
+      return next;
+    });
+  }, [onPositionChange]);
+
   const handleResize = useCallback(
     (delta: number) => {
       setSize((prev) => {
@@ -425,15 +484,22 @@ export function DevtoolsPanel({
         <div className="sdt-header">
           <div className="sdt-logo">
             <div className="sdt-logo-icon">⚡</div>
-            {!collapsed && <span className="sdt-title">Storion Devtools</span>}
+            {!collapsed && <span className="sdt-title">Storion</span>}
           </div>
           <div className="sdt-header-actions">
             <button
               className="sdt-btn"
-              onClick={toggleCollapsed}
-              title={collapsed ? "Expand" : "Collapse"}
+              onClick={togglePosition}
+              title={position === "left" ? "Dock to bottom" : "Dock to left"}
             >
-              <IconCollapse collapsed={collapsed} />
+              {position === "left" ? <IconDockBottom /> : <IconDockLeft />}
+            </button>
+            <button
+              className="sdt-btn"
+              onClick={toggleCollapsed}
+              title="Minimize"
+            >
+              <IconMinimize />
             </button>
           </div>
         </div>

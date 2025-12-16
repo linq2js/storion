@@ -22,7 +22,11 @@ export default defineConfig({
         storion: resolve(__dirname, "src/index.ts"),
         "react/index": resolve(__dirname, "src/react/index.ts"),
         "devtools/index": resolve(__dirname, "src/devtools/index.ts"),
-        "devtools-panel/index": resolve(__dirname, "src/devtools-panel/index.ts"),
+        "devtools-panel/index": resolve(
+          __dirname,
+          "src/devtools-panel/index.ts"
+        ),
+        "async/index": resolve(__dirname, "src/async/index.ts"),
       },
       formats: ["es"],
     },

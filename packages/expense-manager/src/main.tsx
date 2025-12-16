@@ -19,7 +19,7 @@ const app = container({
 // Mount devtools panel in development
 if (import.meta.env.DEV) {
   mountDevtoolsPanel({
-    position: "right",
+    position: "left",
     size: 360,
   });
 }

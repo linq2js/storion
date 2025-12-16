@@ -19,7 +19,11 @@
  * ```
  */
 
-export { DevtoolsPanel, type DevtoolsPanelProps } from "./DevtoolsPanel";
+export {
+  DevtoolsPanel,
+  type DevtoolsPanelProps,
+  type PanelPosition,
+} from "./DevtoolsPanel";
 export {
   mountDevtoolsPanel,
   unmountDevtoolsPanel,

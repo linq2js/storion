@@ -136,7 +136,8 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
         }
       } catch (error) {
         clearSubscriptions();
-        throw error;
+        listener();
+        // Don't throw - let re-render handle the error properly
       }
     };
 

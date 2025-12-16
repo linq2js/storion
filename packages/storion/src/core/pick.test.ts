@@ -58,6 +58,151 @@ describe("pick", () => {
         });
       }).not.toThrow();
     });
+
+    it("should call listener when evaluate throws during re-evaluation", async () => {
+      const userStore = store({
+        state: { shouldThrow: false, value: "initial" },
+        setup({ state }) {
+          return {
+            triggerThrow() {
+              state.shouldThrow = true;
+            },
+            setValue(v: string) {
+              state.value = v;
+            },
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      let effectCallCount = 0;
+      let lastError: Error | null = null;
+
+      effect(() => {
+        effectCallCount++;
+        try {
+          pick(() => {
+            if (instance.state.shouldThrow) {
+              throw new Error("Intentional error");
+            }
+            return instance.state.value;
+          });
+        } catch (e) {
+          lastError = e as Error;
+        }
+      });
+
+      expect(effectCallCount).toBe(1);
+      expect(lastError).toBeNull();
+
+      // Trigger the throw - should cause re-evaluation which throws
+      instance.actions.triggerThrow();
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Effect should have been called again due to listener()
+      expect(effectCallCount).toBe(2);
+      // On re-render, pick() throws and effect catches it
+      expect(lastError?.message).toBe("Intentional error");
+    });
+
+    it("should clean up subscriptions when evaluate throws", async () => {
+      const userStore = store({
+        state: { shouldThrow: false, value: "initial" },
+        setup({ state }) {
+          return {
+            triggerThrow() {
+              state.shouldThrow = true;
+            },
+            setValue(v: string) {
+              state.value = v;
+            },
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      let effectCallCount = 0;
+
+      effect(() => {
+        effectCallCount++;
+        try {
+          pick(() => {
+            if (instance.state.shouldThrow) {
+              throw new Error("Intentional error");
+            }
+            return instance.state.value;
+          });
+        } catch {
+          // Swallow error
+        }
+      });
+
+      expect(effectCallCount).toBe(1);
+
+      // Trigger throw
+      instance.actions.triggerThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(effectCallCount).toBe(2);
+
+      // After error, subscriptions should be cleared
+      // Changing value should NOT trigger effect again (subscriptions cleared)
+      instance.actions.setValue("new value");
+      await new Promise((r) => setTimeout(r, 10));
+      // Effect should NOT be called again because subscriptions were cleared
+      expect(effectCallCount).toBe(2);
+    });
+
+    it("should notify listener immediately when evaluate throws", async () => {
+      const userStore = store({
+        state: { value: "initial" },
+        setup({ state }) {
+          return {
+            setValue(v: string) {
+              state.value = v;
+            },
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      let effectCallCount = 0;
+      let shouldThrow = false;
+
+      effect(() => {
+        effectCallCount++;
+        try {
+          pick(() => {
+            // Access value to set up subscription
+            const val = instance.state.value;
+            if (shouldThrow) {
+              throw new Error("Test error");
+            }
+            return val;
+          });
+        } catch {
+          // Swallow error
+        }
+      });
+
+      expect(effectCallCount).toBe(1);
+
+      // Set flag to throw on next evaluation
+      shouldThrow = true;
+
+      // Change state to trigger re-evaluation
+      instance.actions.setValue("new value");
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Effect runs once for the state change, then listener() calls it again
+      // First re-eval throws, calls listener(), which triggers another effect run
+      expect(effectCallCount).toBeGreaterThanOrEqual(2);
+    });
   });
 
   describe("value computation", () => {

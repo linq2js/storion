@@ -4,17 +4,18 @@
  * Provides the setup context for store initialization with focus() support.
  */
 
-import type {
-  StateBase,
-  ActionsBase,
-  StoreSpec,
-  StoreInstance,
-  StoreResolver,
-  StoreContext,
-  StoreMixin,
-  Focus,
-  FocusOptions,
-  Equality,
+import {
+  STORION_TYPE,
+  type StateBase,
+  type ActionsBase,
+  type StoreSpec,
+  type StoreInstance,
+  type StoreResolver,
+  type StoreContext,
+  type StoreMixin,
+  type Focus,
+  type FocusOptions,
+  type Equality,
 } from "../types";
 
 import { resolveEquality } from "./equality";
@@ -132,7 +133,9 @@ export function createFocus<TState extends StateBase, TValue>(
       const lastKey = segments[segments.length - 1];
 
       // Get current value for reducer or to apply fallback
-      let currentValue = (current as Record<string, unknown>)[lastKey] as TValue;
+      let currentValue = (current as Record<string, unknown>)[
+        lastKey
+      ] as TValue;
 
       // Apply fallback if current value is nullish
       if ((currentValue === null || currentValue === undefined) && fallback) {
@@ -175,7 +178,12 @@ export function createFocus<TState extends StateBase, TValue>(
 
   // Create tuple with on() method
   const focus = [getter, setter] as Focus<TValue>;
-  (focus as unknown as { on: typeof on }).on = on;
+  const focusObj = focus as unknown as {
+    [STORION_TYPE]: "focus";
+    on: typeof on;
+  };
+  focusObj[STORION_TYPE] = "focus";
+  focusObj.on = on;
 
   return focus;
 }
@@ -216,6 +224,8 @@ export function createStoreContext<
   const currentLifetime = spec.options.lifetime ?? "keepAlive";
 
   const ctx: StoreContext<TState> = {
+    [STORION_TYPE]: "store.context",
+
     get state() {
       return getMutableState();
     },
@@ -302,4 +312,3 @@ export function createStoreContext<
 
   return ctx;
 }
-

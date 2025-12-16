@@ -5,17 +5,19 @@ import path from "path";
 // Plugin to watch storion source and trigger HMR
 function watchStorion(): Plugin {
   const storionSrc = path.resolve(__dirname, "../storion/src");
-  
+
   return {
     name: "watch-storion",
     configureServer(server) {
       // Watch storion source directory
       server.watcher.add(storionSrc);
-      
+
       // Trigger full reload when storion changes
       server.watcher.on("change", (file) => {
         if (file.startsWith(storionSrc)) {
-          console.log(`[storion] ${path.relative(storionSrc, file)} changed, reloading...`);
+          console.log(
+            `[storion] ${path.relative(storionSrc, file)} changed, reloading...`
+          );
           server.ws.send({ type: "full-reload" });
         }
       });
@@ -28,10 +30,32 @@ export default defineConfig({
   resolve: {
     alias: [
       // More specific paths first
-      { find: "storion/devtools-panel", replacement: path.resolve(__dirname, "../storion/src/devtools-panel/index.ts") },
-      { find: "storion/devtools", replacement: path.resolve(__dirname, "../storion/src/devtools/index.ts") },
-      { find: "storion/react", replacement: path.resolve(__dirname, "../storion/src/react/index.ts") },
-      { find: "storion", replacement: path.resolve(__dirname, "../storion/src/index.ts") },
+      {
+        find: "storion/devtools-panel",
+        replacement: path.resolve(
+          __dirname,
+          "../storion/src/devtools-panel/index.ts"
+        ),
+      },
+      {
+        find: "storion/devtools",
+        replacement: path.resolve(
+          __dirname,
+          "../storion/src/devtools/index.ts"
+        ),
+      },
+      {
+        find: "storion/async",
+        replacement: path.resolve(__dirname, "../storion/src/async/index.ts"),
+      },
+      {
+        find: "storion/react",
+        replacement: path.resolve(__dirname, "../storion/src/react/index.ts"),
+      },
+      {
+        find: "storion",
+        replacement: path.resolve(__dirname, "../storion/src/index.ts"),
+      },
       { find: "@", replacement: "/src" },
     ],
   },
@@ -52,4 +76,3 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
   },
 });
-

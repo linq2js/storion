@@ -1,3 +1,26 @@
+export const STORION_TYPE = Symbol("STORION");
+
+/**
+ * Kind identifiers for Storion objects.
+ * Used with STORION_SYMBOL for runtime type discrimination.
+ */
+export type StorionKind =
+  | "store.spec"
+  | "store.action"
+  | "container"
+  | "store"
+  | "focus"
+  | "store.context"
+  | "selector.context"
+  | "async.meta";
+
+/**
+ * Base interface for all Storion objects with runtime type discrimination.
+ */
+export interface StorionObject<K extends StorionKind = StorionKind> {
+  readonly [STORION_TYPE]: K;
+}
+
 /**
  * Storion - Type-safe reactive state management
  *
@@ -158,6 +181,7 @@ export type Focus<TValue> = [
   /** Set the value at the focused path (accepts value or reducer) */
   setter: (valueOrReducer: TValue | ((prev: TValue) => TValue)) => void
 ] & {
+  readonly [STORION_TYPE]: "focus";
   /**
    * Subscribe to changes at the focused path.
    * Uses the configured equality to determine if value has changed.
@@ -272,7 +296,7 @@ export type ReactiveActions<TActions extends ActionsBase> = {
 export interface StoreSpec<
   TState extends StateBase = StateBase,
   TActions extends ActionsBase = ActionsBase
-> {
+> extends StorionObject<"store.spec"> {
   /** Store name for debugging */
   readonly name: string;
 
@@ -324,7 +348,8 @@ export type SelectorMixin<TResult, TArgs extends unknown[] = []> = (
 /**
  * Context provided to the setup() function.
  */
-export interface StoreContext<TState extends StateBase = StateBase> {
+export interface StoreContext<TState extends StateBase = StateBase>
+  extends StorionObject<"store.context"> {
   /**
    * Mutable reactive state proxy.
    * Writes trigger subscriber notifications.
@@ -545,7 +570,7 @@ export interface StoreOptions<
 export interface StoreInstance<
   TState extends StateBase = StateBase,
   TActions extends ActionsBase = ActionsBase
-> {
+> extends StorionObject<"store"> {
   /** Unique identifier for this instance */
   readonly id: string;
 
@@ -756,7 +781,9 @@ export type AutoDisposeOptions = {
  * - Resolving dependencies between stores
  * - Managing lifetime and disposal
  */
-export interface StoreContainer extends StoreResolver {
+export interface StoreContainer
+  extends StoreResolver,
+    StorionObject<"container"> {
   /**
    * Dispose all cached instances.
    */
@@ -790,7 +817,7 @@ export interface StoreContainer extends StoreResolver {
  * Provides access to stores within a selector function.
  * Returns tuple [readonlyState, actions] with tracking proxy.
  */
-export interface SelectorContext {
+export interface SelectorContext extends StorionObject<"selector.context"> {
   /**
    * Get a store's state and actions.
    *

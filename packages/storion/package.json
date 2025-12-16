@@ -22,6 +22,10 @@
     "./devtools-panel": {
       "types": "./dist/devtools-panel/index.d.ts",
       "default": "./dist/devtools-panel/index.js"
+    },
+    "./async": {
+      "types": "./dist/async/index.d.ts",
+      "default": "./dist/async/index.js"
     }
   },
   "files": [
