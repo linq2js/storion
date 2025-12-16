@@ -28,6 +28,8 @@ export default defineConfig({
   resolve: {
     alias: [
       // More specific paths first
+      { find: "storion/devtools-panel", replacement: path.resolve(__dirname, "../storion/src/devtools-panel/index.ts") },
+      { find: "storion/devtools", replacement: path.resolve(__dirname, "../storion/src/devtools/index.ts") },
       { find: "storion/react", replacement: path.resolve(__dirname, "../storion/src/react/index.ts") },
       { find: "storion", replacement: path.resolve(__dirname, "../storion/src/index.ts") },
       { find: "@", replacement: "/src" },

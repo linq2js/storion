@@ -622,6 +622,46 @@ describe("subscriptions", () => {
     instance.actions.increment();
     expect(listener).toHaveBeenCalledTimes(1);
   });
+
+  it("should not emit change events during setup", () => {
+    const setupListener = vi.fn();
+
+    const counter = store({
+      state: { count: 0, name: "test" },
+      setup: ({ state }) => {
+        // Modify state during setup
+        state.count = 10;
+        state.name = "updated";
+
+        return {
+          increment: () => {
+            state.count++;
+          },
+        };
+      },
+    });
+
+    const stores = container();
+
+    // Subscribe to onCreate to attach listener immediately when store is created
+    stores.onCreate((instance) => {
+      instance.subscribe(setupListener);
+    });
+
+    // Get the store - this triggers setup
+    const instance = stores.get(counter);
+
+    // Verify state was updated during setup
+    expect(instance.state.count).toBe(10);
+    expect(instance.state.name).toBe("updated");
+
+    // But no change events should have been emitted during setup
+    expect(setupListener).not.toHaveBeenCalled();
+
+    // Now after setup, changes should emit events
+    instance.actions.increment();
+    expect(setupListener).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("batching", () => {
@@ -1666,7 +1706,7 @@ describe("StoreContext.use()", () => {
 });
 
 describe("focus()", () => {
-  it("should create a setter for a nested path", () => {
+  it("should create a getter/setter tuple for a nested path", () => {
     interface State {
       profile: {
         name: string;
@@ -1688,26 +1728,33 @@ describe("focus()", () => {
         },
       } as State,
       setup: ({ focus }) => {
-        const setCity = focus("profile.address.city");
-        const setAddress = focus("profile.address");
-        return { setCity, setAddress };
+        const [getCity, setCity] = focus("profile.address.city");
+        const [, setAddress] = focus("profile.address");
+        return { getCity, setCity, setAddress };
       },
     });
 
     const stores = container();
     const instance = stores.get(userStore);
 
+    // Test getting a deep property
+    const getCity = instance.actions.getCity;
+    const setCity = instance.actions.setCity;
+    expect(getCity()).toBe("NYC");
+
     // Test setting a deep property
-    instance.actions.setCity("LA");
+    setCity("LA");
     expect(instance.state.profile.address.city).toBe("LA");
+    expect(getCity()).toBe("LA");
 
     // Test setting an object
-    instance.actions.setAddress({ city: "SF", street: "Market St" });
+    const setAddress = instance.actions.setAddress;
+    setAddress({ city: "SF", street: "Market St" });
     expect(instance.state.profile.address.city).toBe("SF");
     expect(instance.state.profile.address.street).toBe("Market St");
   });
 
-  it("should support .to() for sub-paths", () => {
+  it("should support multiple focus instances for sub-paths", () => {
     interface State {
       profile: {
         address: {
@@ -1727,20 +1774,23 @@ describe("focus()", () => {
         },
       } as State,
       setup: ({ focus }) => {
-        const setAddress = focus("profile.address");
-        const setCity = setAddress.to("city");
-        const setZip = setAddress.to("zip");
-        return { setAddress, setCity, setZip };
+        // Create separate focus instances for each sub-path
+        const [, addressFocus] = focus("profile.address");
+        const [, cityFocus] = focus("profile.address.city");
+        const [, zipFocus] = focus("profile.address.zip");
+        return { addressFocus, cityFocus, zipFocus };
       },
     });
 
     const stores = container();
     const instance = stores.get(userStore);
 
-    instance.actions.setCity("Boston");
+    const setCity = instance.actions.cityFocus;
+    setCity("Boston");
     expect(instance.state.profile.address.city).toBe("Boston");
 
-    instance.actions.setZip("02101");
+    const setZip = instance.actions.zipFocus;
+    setZip("02101");
     expect(instance.state.profile.address.zip).toBe("02101");
   });
 
@@ -1760,8 +1810,8 @@ describe("focus()", () => {
         user: {},
       } as unknown as State,
       setup: ({ focus }) => {
-        const setTheme = focus("user.profile.settings.theme");
-        return { setTheme };
+        const [, themeFocus] = focus("user.profile.settings.theme");
+        return { themeFocus };
       },
     });
 
@@ -1772,7 +1822,8 @@ describe("focus()", () => {
     expect(instance.state.user.profile).toBeUndefined();
 
     // Setting should auto-create the path
-    instance.actions.setTheme("dark");
+    const setTheme = instance.actions.themeFocus;
+    setTheme("dark");
 
     expect(instance.state.user.profile).toBeDefined();
     expect(instance.state.user.profile?.settings).toBeDefined();
@@ -1789,8 +1840,8 @@ describe("focus()", () => {
         },
       },
       setup: ({ focus }) => {
-        const setName = focus("profile.name");
-        return { setName };
+        const [, nameFocus] = focus("profile.name");
+        return { nameFocus };
       },
     });
 
@@ -1798,7 +1849,8 @@ describe("focus()", () => {
     const instance = stores.get(userStore);
 
     instance.subscribe(listener);
-    instance.actions.setName("Jane");
+    const setName = instance.actions.nameFocus;
+    setName("Jane");
 
     expect(listener).toHaveBeenCalled();
     expect(instance.state.profile.name).toBe("Jane");
@@ -1811,19 +1863,26 @@ describe("focus()", () => {
         age: 30,
       },
       setup: ({ focus }) => {
-        const setName = focus("name");
-        const setAge = focus("age");
-        return { setName, setAge };
+        const [getName, setName] = focus("name");
+        const [getAge, setAge] = focus("age");
+        return { getName, setName, getAge, setAge };
       },
     });
 
     const stores = container();
     const instance = stores.get(userStore);
 
-    instance.actions.setName("Jane");
+    const getName = instance.actions.getName;
+    const setName = instance.actions.setName;
+    const getAge = instance.actions.getAge;
+    const setAge = instance.actions.setAge;
+
+    expect(getName()).toBe("John");
+    setName("Jane");
     expect(instance.state.name).toBe("Jane");
 
-    instance.actions.setAge(25);
+    expect(getAge()).toBe(30);
+    setAge(25);
     expect(instance.state.age).toBe(25);
   });
 });

@@ -14,6 +14,14 @@
     "./react": {
       "types": "./dist/react/index.d.ts",
       "default": "./dist/react/index.js"
+    },
+    "./devtools": {
+      "types": "./dist/devtools/index.d.ts",
+      "default": "./dist/devtools/index.js"
+    },
+    "./devtools-panel": {
+      "types": "./dist/devtools-panel/index.d.ts",
+      "default": "./dist/devtools-panel/index.js"
     }
   },
   "files": [

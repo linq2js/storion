@@ -21,6 +21,8 @@ export default defineConfig({
       entry: {
         storion: resolve(__dirname, "src/index.ts"),
         "react/index": resolve(__dirname, "src/react/index.ts"),
+        "devtools/index": resolve(__dirname, "src/devtools/index.ts"),
+        "devtools-panel/index": resolve(__dirname, "src/devtools-panel/index.ts"),
       },
       formats: ["es"],
     },
@@ -39,7 +41,7 @@ export default defineConfig({
       },
     },
     rollupOptions: {
-      external: ["react", "react-dom", "react/jsx-runtime"],
+      external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime"],
       output: {
         entryFileNames: (chunkInfo) => {
           if (chunkInfo.name === "storion") {

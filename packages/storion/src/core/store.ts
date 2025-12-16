@@ -11,7 +11,6 @@ import type {
   StoreOptions,
   StoreInstance,
   StoreResolver,
-  StoreContext,
   DispatchEvent,
   ActionDispatchEvent,
   ReactiveActions,
@@ -20,6 +19,7 @@ import type {
 } from "../types";
 
 import { produce } from "immer";
+import { createStoreContext } from "./storeContext";
 
 import {
   withHooks,
@@ -241,11 +241,19 @@ export function createStoreInstance<
   // Property Change Handler
   // ==========================================================================
 
+  // Track setup phase - declared early so handlePropertyChange can access it
+  let isSetupPhase = true;
+
   function handlePropertyChange(
     key: string,
     oldValue: unknown,
     newValue: unknown
   ): void {
+    // Don't emit change events during setup phase
+    if (isSetupPhase) {
+      return;
+    }
+
     // Notify property subscribers (using emitter)
     // Effects subscribe via this mechanism through the hooks system
     const propEmitter = propertyEmitters.get(key as keyof TState);
@@ -600,183 +608,100 @@ export function createStoreInstance<
   // Setup Context
   // ==========================================================================
 
-  // Track setup phase to prevent effect() calls outside setup
-  let isSetupPhase = true;
   const deps = new Set<StoreInstance<any, any>>();
-  // Current store's lifetime (default is keepAlive)
-  const currentLifetime = options.lifetime ?? "keepAlive";
 
-  const setupContext: StoreContext<TState> = {
-    state: mutableState,
+  /**
+   * Update state using immer-style updater.
+   * Handles equality checks and property change notifications.
+   */
+  function updateState(
+    updaterOrPartial: ((draft: TState) => void) | Partial<TState>
+  ): void {
+    let nextState = currentState;
+    if (typeof updaterOrPartial === "function") {
+      // Immer-style updater function
+      const updater = updaterOrPartial as (draft: TState) => void;
+      nextState = produce(currentState, updater);
+    } else {
+      nextState = produce(currentState, (draft) => {
+        Object.assign(draft, updaterOrPartial);
+      });
+    }
 
-    resolve<S extends StateBase, A extends ActionsBase>(
-      depSpec: StoreSpec<S, A>
-    ): readonly [Readonly<S>, A] {
-      // Prevent dynamic store creation outside setup phase
-      if (!isSetupPhase) {
-        throw new Error(
-          `get() can only be called during setup phase. ` +
-            `Do not call get() inside actions or async callbacks. ` +
-            `Declare all dependencies at the top of your setup function.`
-        );
-      }
+    // Immer returns same reference if no changes
+    if (nextState === currentState) return;
 
-      // Check lifetime compatibility:
-      // A keepAlive store cannot depend on an autoDispose store
-      const depLifetime = depSpec.options.lifetime ?? "keepAlive";
+    const prevState = currentState;
+    const changedProps: Array<{
+      key: keyof TState;
+      oldValue: unknown;
+      newValue: unknown;
+    }> = [];
 
-      if (currentLifetime === "keepAlive" && depLifetime === "autoDispose") {
-        const currentName = options.name ?? "unknown";
-        const depName = depSpec.name ?? "unknown";
-        throw new Error(
-          `Lifetime mismatch: Store "${currentName}" (keepAlive) cannot depend on ` +
-            `store "${depName}" (autoDispose). A long-lived store cannot depend on ` +
-            `a store that may be disposed. Either change "${currentName}" to autoDispose, ` +
-            `or change "${depName}" to keepAlive.`
-        );
-      }
-
-      // Get full instance from resolver
-      const instance = resolver.get(depSpec);
-      deps.add(instance);
-      // Return tuple [readonlyState, actions]
-      return [instance.state, instance.actions] as const;
-    },
-
-    update(updaterOrPartial: ((draft: TState) => void) | Partial<TState>) {
-      let nextState = currentState;
-      if (typeof updaterOrPartial === "function") {
-        // Immer-style updater function
-        const updater = updaterOrPartial as (draft: TState) => void;
-        nextState = produce(currentState, updater);
-      } else {
-        nextState = produce(currentState, (draft) => {
-          Object.assign(draft, updaterOrPartial);
-        });
-      }
-
-      // Immer returns same reference if no changes
-      if (nextState === currentState) return;
-
-      const prevState = currentState;
-      const changedProps: Array<{
-        key: keyof TState;
-        oldValue: unknown;
-        newValue: unknown;
-      }> = [];
-
-      // Fast path: no custom equality configured
-      if (!hasCustomEquality) {
-        for (const key of Object.keys(nextState) as Array<keyof TState>) {
-          if (prevState[key] !== nextState[key]) {
-            changedProps.push({
-              key,
-              oldValue: prevState[key],
-              newValue: nextState[key],
-            });
-          }
-        }
-        if (changedProps.length > 0) {
-          currentState = nextState;
-          for (const { key, oldValue, newValue } of changedProps) {
-            handlePropertyChange(key as string, oldValue, newValue);
-          }
-        }
-        return;
-      }
-
-      // Slow path: custom equality configured
-      // Build stable state: preserve references for "equal" props
-      const stableState = { ...nextState };
-
+    // Fast path: no custom equality configured
+    if (!hasCustomEquality) {
       for (const key of Object.keys(nextState) as Array<keyof TState>) {
         if (prevState[key] !== nextState[key]) {
-          const equality = getEquality(key as string);
-          if (equality(prevState[key], nextState[key])) {
-            // Equal by custom equality - preserve original reference for stability
-            stableState[key] = prevState[key];
-          } else {
-            // Actually changed
-            changedProps.push({
-              key,
-              oldValue: prevState[key],
-              newValue: nextState[key],
-            });
-          }
+          changedProps.push({
+            key,
+            oldValue: prevState[key],
+            newValue: nextState[key],
+          });
         }
       }
-
-      // Only update if there are actual changes after equality checks
       if (changedProps.length > 0) {
-        currentState = stableState;
-        // Trigger listeners for changed properties
+        currentState = nextState;
         for (const { key, oldValue, newValue } of changedProps) {
           handlePropertyChange(key as string, oldValue, newValue);
         }
       }
-    },
+      return;
+    }
 
-    dirty(prop?: keyof TState): boolean {
-      return instance.dirty(prop as any);
-    },
+    // Slow path: custom equality configured
+    // Build stable state: preserve references for "equal" props
+    const stableState = { ...nextState };
 
-    reset() {
-      instance.reset();
-    },
-
-    use<TResult, TArgs extends unknown[]>(
-      mixin: (context: StoreContext<TState>, ...args: TArgs) => TResult,
-      ...args: TArgs
-    ): TResult {
-      if (!isSetupPhase) {
-        throw new Error(
-          `use() can only be called during setup phase. ` +
-            `Do not call use() inside actions or async callbacks.`
-        );
-      }
-      return mixin(setupContext, ...args);
-    },
-
-    focus(path: string): any {
-      return createFocusSetter(path);
-    },
-  };
-
-  /**
-   * Create a focus setter for a nested path.
-   * Auto-creates intermediate objects when null/undefined.
-   * Uses Immer for proper reactivity.
-   */
-  function createFocusSetter(path: string): any {
-    const segments = path.split(".");
-
-    const setter = (value: unknown): void => {
-      // Use Immer to ensure proper change tracking
-      setupContext.update((draft: any) => {
-        let current = draft;
-
-        // Navigate to parent, auto-creating objects along the way
-        for (let i = 0; i < segments.length - 1; i++) {
-          const key = segments[i];
-          if (current[key] == null) {
-            current[key] = {};
-          }
-          current = current[key];
+    for (const key of Object.keys(nextState) as Array<keyof TState>) {
+      if (prevState[key] !== nextState[key]) {
+        const equality = getEquality(key as string);
+        if (equality(prevState[key], nextState[key])) {
+          // Equal by custom equality - preserve original reference for stability
+          stableState[key] = prevState[key];
+        } else {
+          // Actually changed
+          changedProps.push({
+            key,
+            oldValue: prevState[key],
+            newValue: nextState[key],
+          });
         }
+      }
+    }
 
-        // Set the final value
-        const lastKey = segments[segments.length - 1];
-        current[lastKey] = value;
-      });
-    };
-
-    // Add .to() method for sub-focusing
-    setter.to = (subKey: string) => {
-      return createFocusSetter(`${path}.${subKey}`);
-    };
-
-    return setter;
+    // Only update if there are actual changes after equality checks
+    if (changedProps.length > 0) {
+      currentState = stableState;
+      // Trigger listeners for changed properties
+      for (const { key, oldValue, newValue } of changedProps) {
+        handlePropertyChange(key as string, oldValue, newValue);
+      }
+    }
   }
+
+  // Create setup context using the factory
+  const setupContext = createStoreContext<TState, TActions>({
+    spec,
+    resolver,
+    getMutableState: () => mutableState,
+    update: updateState,
+    subscribe: (listener) => changeEmitter.on(listener),
+    dirty: (prop) => instance!.dirty(prop as any),
+    reset: () => instance!.reset(),
+    getInstance: () => instance,
+    onDependency: (depInstance) => deps.add(depInstance),
+    isSetupPhase: () => isSetupPhase,
+  });
 
   // ==========================================================================
   // Run Setup
@@ -828,6 +753,15 @@ export function createStoreInstance<
   const wrappedActions = {} as ReactiveActions<TActions>;
 
   for (const [name, action] of Object.entries(actions)) {
+    // Actions must be functions
+    if (typeof action !== "function") {
+      throw new Error(
+        `Action "${name}" must be a function, got ${typeof action}. ` +
+          `If using focus(), destructure it and return the getter/setter separately: ` +
+          `const [get, set] = focus("path"); return { get, set };`
+      );
+    }
+
     // Create the wrapped action function
     const wrappedAction = (...args: any[]) => {
       if (disposed) {

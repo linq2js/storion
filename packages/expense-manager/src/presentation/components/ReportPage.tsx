@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { equality, useStore } from "storion/react";
+import { useStore } from "storion/react";
 import { expenseStore, filterStore, uiStore } from "../stores";
 import { ExpenseCalculator } from "@/domain/services";
 import { DateRange, getCategory, Money } from "@/domain/value-objects";

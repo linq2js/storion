@@ -30,10 +30,13 @@ export type {
   Selector,
   StableResult,
   PickEquality,
-  // Focus (lens-like setters)
+  // Focus (lens-like accessors)
   StatePath,
   PathValue,
-  FocusSetter,
+  Focus,
+  FocusOptions,
+  FocusChangeEvent,
+  NonNullish,
 } from "./types";
 
 // Core functions

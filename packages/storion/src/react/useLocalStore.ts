@@ -15,7 +15,7 @@
  * - Deferring disposal via microtask to survive StrictMode's cleanup-then-rerun
  */
 
-import { useLayoutEffect, useMemo, useRef, useReducer } from "react";
+import { useLayoutEffect, useMemo, useRef, useReducer, useEffect } from "react";
 import { container } from "../core/container";
 import {
   ActionsBase,
@@ -24,6 +24,7 @@ import {
   StoreInstance,
   StoreSpec,
 } from "../types";
+import { dev } from "../dev";
 
 /**
  * Result type for useLocalStore.
@@ -37,6 +38,13 @@ export type LocalStoreResult<
   TActions,
   Pick<StoreInstance<TState, TActions>, "dirty" | "reset">
 ];
+
+const isServer = typeof window === "undefined";
+const useIsomorphicLayoutEffect = isServer ? useEffect : useLayoutEffect;
+
+// only schedule dispose if in development mode and useLayoutEffect is available
+const shouldScheduleDispose =
+  !isServer && typeof useLayoutEffect === "function" && dev();
 
 /**
  * Create a component-local store instance.
@@ -99,7 +107,7 @@ export function useLocalStore<
 
   // Effect handles subscription and lifecycle
   // StrictMode: effect → cleanup → effect (controller survives via commit/uncommit)
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     // Mark as committed - prevents disposal during StrictMode remount
     controller.commit();
 
@@ -175,14 +183,18 @@ class LocalStoreController<
     // Skip if already committed or disposed
     if (this._committed || this._disposed) return;
 
-    // Defer check to next microtask
-    // This allows StrictMode's effect re-run to commit before we check
-    Promise.resolve().then(() => {
-      // If still not committed after microtask, it's a real unmount
-      if (!this._committed) {
-        this.dispose();
-      }
-    });
+    if (shouldScheduleDispose) {
+      // Defer check to next microtask
+      // This allows StrictMode's effect re-run to commit before we check
+      Promise.resolve().then(() => {
+        // If still not committed after microtask, it's a real unmount
+        if (!this._committed) {
+          this.dispose();
+        }
+      });
+    } else {
+      this.dispose();
+    }
   };
 
   /**
@@ -209,8 +221,10 @@ class LocalStoreController<
       );
     }
 
-    // Schedule cleanup if effect never commits (render-only)
-    this._disposeIfUnused();
+    if (shouldScheduleDispose) {
+      // Schedule cleanup if effect never commits (render-only)
+      this._disposeIfUnused();
+    }
 
     return this._store;
   };

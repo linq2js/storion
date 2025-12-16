@@ -46,7 +46,7 @@ export type EqualityMap<T> = {
 };
 
 // =============================================================================
-// Focus (Lens-like state setters)
+// Focus (Lens-like state accessors)
 // =============================================================================
 
 /**
@@ -88,28 +88,85 @@ export type PathValue<
   : never;
 
 /**
- * A focus setter for a nested state path.
- * Can be used as an action and chained with .to() for sub-paths.
+ * Non-nullable type utility.
+ */
+export type NonNullish<
+  TValue,
+  TFlag extends true | false = true
+> = TFlag extends true ? Exclude<TValue, undefined | null> : TValue;
+
+/**
+ * Focus change event payload.
+ */
+export interface FocusChangeEvent<T> {
+  next: T;
+  prev: T;
+}
+
+/**
+ * Focus options for configuring getter/setter behavior.
  *
  * @example
- * const setAddress = focus("profile.address");
- * setAddress({ city: "NYC" }); // Set the whole address
+ * // With fallback for nullable values
+ * const focus = ctx.focus("profile", {
+ *   fallback: () => ({ name: "Guest" })
+ * });
  *
- * const setCity = setAddress.to("city");
- * setCity("LA"); // Set just the city
+ * @example
+ * // With custom equality for change detection
+ * const focus = ctx.focus("items", {
+ *   equality: "shallow"
+ * });
  */
-export interface FocusSetter<T> {
-  /** Set the value at this path. Auto-creates intermediate objects if null/undefined. */
-  (value: T): void;
+export interface FocusOptions<T> {
+  /**
+   * Fallback factory for when the focused value is nullish.
+   * Applied to both getter (returns fallback) and setter (reducer receives fallback).
+   */
+  fallback?: () => NonNullish<T>;
 
   /**
-   * Create a sub-focus for a nested property.
-   * @param key - Property key to focus on
+   * Equality strategy for change detection in on() listener.
+   * Defaults to strict equality (===).
    */
-  to<K extends keyof NonNullable<T> & string>(
-    key: K
-  ): FocusSetter<NonNullable<T>[K]>;
+  equality?: Equality<T>;
 }
+
+/**
+ * Focus tuple: [getter, setter] with an on() method for subscribing to changes.
+ *
+ * @example
+ * const [getName, setName] = ctx.focus("profile.name");
+ *
+ * // Get current value
+ * const name = getName();
+ *
+ * // Set value directly
+ * setName("Jane");
+ *
+ * // Set value with reducer
+ * setName(prev => prev.toUpperCase());
+ *
+ * // Listen to changes
+ * const unsubscribe = ctx.focus("profile.name").on(({ next, prev }) => {
+ *   console.log(`Name changed from ${prev} to ${next}`);
+ * });
+ */
+export type Focus<TValue> = [
+  /** Get the current value at the focused path */
+  getter: () => TValue,
+  /** Set the value at the focused path (accepts value or reducer) */
+  setter: (valueOrReducer: TValue | ((prev: TValue) => TValue)) => void
+] & {
+  /**
+   * Subscribe to changes at the focused path.
+   * Uses the configured equality to determine if value has changed.
+   *
+   * @param listener - Called with { next, prev } when value changes
+   * @returns Unsubscribe function
+   */
+  on(listener: (event: FocusChangeEvent<TValue>) => void): VoidFunction;
+};
 
 // =============================================================================
 // Lifetime
@@ -267,7 +324,7 @@ export type SelectorMixin<TResult, TArgs extends unknown[] = []> = (
 /**
  * Context provided to the setup() function.
  */
-export interface StoreContext<TState extends StateBase> {
+export interface StoreContext<TState extends StateBase = StateBase> {
   /**
    * Mutable reactive state proxy.
    * Writes trigger subscriber notifications.
@@ -340,24 +397,44 @@ export interface StoreContext<TState extends StateBase> {
   ): TResult;
 
   /**
-   * Create a lens-like setter for a nested state path.
-   * Auto-creates intermediate objects when null/undefined.
-   * Does not support array indices, only object properties.
+   * Create a lens-like accessor for a nested state path.
+   * Returns a [getter, setter] tuple with an on() method for subscribing to changes.
    *
    * @example
-   * const setAddress = focus("profile.address");
-   * setAddress({ city: "NYC", street: "5th Ave" });
+   * // Basic usage - get/set value
+   * const [getName, setName] = focus("profile.name");
+   * const name = getName();
+   * setName("Jane");
    *
-   * // Chain with .to() for sub-paths
-   * const setCity = setAddress.to("city");
-   * setCity("LA");
+   * // With reducer
+   * setName(prev => prev.toUpperCase());
+   *
+   * // With fallback for nullable values
+   * const [getProfile, setProfile] = focus("profile", {
+   *   fallback: () => ({ name: "Guest" })
+   * });
+   *
+   * // Subscribe to changes
+   * const unsubscribe = focus("profile.name").on(({ next, prev }) => {
+   *   console.log(`Changed from ${prev} to ${next}`);
+   * });
    *
    * // Can be returned as actions
-   * return { setAddress, setCity };
+   * return { nameFocus: focus("name"), profileFocus: focus("profile") };
    */
+  focus<P extends StatePath<TState>>(path: P): Focus<PathValue<TState, P>>;
+
   focus<P extends StatePath<TState>>(
-    path: P
-  ): FocusSetter<PathValue<TState, P>>;
+    path: P,
+    options: FocusOptions<PathValue<TState, P>> & {
+      fallback: () => NonNullish<PathValue<TState, P>>;
+    }
+  ): Focus<NonNullish<PathValue<TState, P>>>;
+
+  focus<P extends StatePath<TState>>(
+    path: P,
+    options: FocusOptions<PathValue<TState, P>>
+  ): Focus<PathValue<TState, P>>;
 }
 
 // =============================================================================

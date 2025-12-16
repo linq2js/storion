@@ -226,13 +226,9 @@ export function container(options: ContainerOptions = {}): StoreContainer {
       return true;
     },
 
-    onCreate(listener) {
-      return createEmitter.on(listener);
-    },
+    onCreate: createEmitter.on,
 
-    onDispose(listener) {
-      return disposeEmitter.on(listener);
-    },
+    onDispose: disposeEmitter.on,
   };
 
   return containerApi;
