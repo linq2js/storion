@@ -251,10 +251,10 @@ const InsightCard = memo(function InsightCard({
 });
 
 export const ReportPage = memo(function ReportPage() {
-  const { expenses, dateRange, openEditModal } = useStore(({ resolve }) => {
-    const [expenseState] = resolve(expenseStore);
-    const [filterState] = resolve(filterStore);
-    const [, uiActions] = resolve(uiStore);
+  const { expenses, dateRange, openEditModal } = useStore(({ get }) => {
+    const [expenseState] = get(expenseStore);
+    const [filterState] = get(filterStore);
+    const [, uiActions] = get(uiStore);
     return {
       expenses: expenseState.expenses,
       dateRange: filterState.dateRange,

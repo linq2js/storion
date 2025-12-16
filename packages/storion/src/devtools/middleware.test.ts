@@ -189,7 +189,7 @@ describe("devtoolsMiddleware", () => {
     expect(entry!.history.length).toBeLessThanOrEqual(3);
   });
 
-  it("should unregister store on dispose", async () => {
+  it("should remove store on dispose", async () => {
     const middleware = devtoolsMiddleware({
       windowObject: mockWindow as any,
     });
@@ -209,11 +209,11 @@ describe("devtoolsMiddleware", () => {
 
     const controller = mockWindow.__STORION_DEVTOOLS__!;
     expect(controller.getStore(instance.id)).toBeDefined();
-    expect(controller.getStore(instance.id)!.disposed).toBe(false);
 
     instance.dispose();
 
-    expect(controller.getStore(instance.id)!.disposed).toBe(true);
+    // Store should be removed from devtools
+    expect(controller.getStore(instance.id)).toBeUndefined();
   });
 
   it("should subscribe to controller changes", async () => {

@@ -312,8 +312,8 @@ describe("dependencies via get()", () => {
 
     const doubler = store({
       state: { doubled: 0 },
-      setup: ({ state, resolve }) => {
-        const [counterState] = resolve(counter);
+      setup: ({ state, get }) => {
+        const [counterState] = get(counter);
 
         effect(() => {
           state.doubled = counterState.count * 2;
@@ -336,21 +336,21 @@ describe("dependencies via get()", () => {
   it("should detect circular dependencies", () => {
     const storeA = store({
       state: { value: "a" },
-      setup: ({ resolve }) => {
+      setup: ({ get }) => {
         return {};
       },
     });
 
     const storeB = store({
       state: { value: "b" },
-      setup: ({ resolve }) => {
-        resolve(storeA);
+      setup: ({ get }) => {
+        get(storeA);
         return {};
       },
     });
 
-    (storeA.options as any).setup = ({ resolve }: any) => {
-      resolve(storeB);
+    (storeA.options as any).setup = ({ get }: any) => {
+      get(storeB);
       return {};
     };
 
@@ -371,8 +371,8 @@ describe("dependencies via get()", () => {
       name: "longLived",
       state: { value: 0 },
       lifetime: "keepAlive",
-      setup: ({ resolve }) => {
-        resolve(shortLived); // This should throw
+      setup: ({ get }) => {
+        get(shortLived); // This should throw
         return {};
       },
     });
@@ -394,8 +394,8 @@ describe("dependencies via get()", () => {
       name: "shortLived",
       state: { value: 0 },
       lifetime: "autoDispose",
-      setup: ({ resolve }) => {
-        resolve(longLived); // This is OK
+      setup: ({ get }) => {
+        get(longLived); // This is OK
         return {};
       },
     });
@@ -418,8 +418,8 @@ describe("dependencies via get()", () => {
       name: "storeB",
       state: { value: 0 },
       lifetime: "autoDispose",
-      setup: ({ resolve }) => {
-        resolve(storeA);
+      setup: ({ get }) => {
+        get(storeA);
         return {};
       },
     });
@@ -430,24 +430,24 @@ describe("dependencies via get()", () => {
     expect(() => stores.get(storeB)).not.toThrow();
   });
 
-  it("should throw when resolve() is called outside setup phase (in action)", () => {
+  it("should throw when get() is called outside setup phase (in action)", () => {
     const dependency = store({
       name: "dependency",
       state: { value: 0 },
       setup: () => ({}),
     });
 
-    let capturedResolve: any;
+    let capturedGet: any;
 
     const main = store({
       name: "main",
       state: { value: 0 },
-      setup: ({ resolve }) => {
-        capturedResolve = resolve; // Capture the resolve function
+      setup: ({ get }) => {
+        capturedGet = get; // Capture the get function
         return {
           tryGetLater: () => {
-            // This should throw - calling resolve() in action
-            capturedResolve(dependency);
+            // This should throw - calling get() in action
+            capturedGet(dependency);
           },
         };
       },
@@ -471,8 +471,8 @@ describe("dependencies via get()", () => {
       name: "storeB",
       state: { value: 0 },
       lifetime: "keepAlive",
-      setup: ({ resolve }) => {
-        resolve(storeA);
+      setup: ({ get }) => {
+        get(storeA);
         return {};
       },
     });
@@ -495,8 +495,8 @@ describe("dependencies via get()", () => {
       name: "defaultStore",
       state: { value: 0 },
       // No lifetime specified - defaults to keepAlive
-      setup: ({ resolve }) => {
-        resolve(autoDisposeStore);
+      setup: ({ get }) => {
+        get(autoDisposeStore);
         return {};
       },
     });
@@ -734,18 +734,22 @@ describe("onDispatch", () => {
     const instance = stores.get(counter);
 
     instance.actions.increment(5);
-    expect(onDispatch).toHaveBeenCalledWith({
-      name: "increment",
-      args: [5],
-      nth: 1,
-    });
+    expect(onDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "increment",
+        args: [5],
+        nth: 1,
+      })
+    );
 
     instance.actions.reset();
-    expect(onDispatch).toHaveBeenCalledWith({
-      name: "reset",
-      args: [],
-      nth: 1,
-    });
+    expect(onDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "reset",
+        args: [],
+        nth: 1,
+      })
+    );
   });
 });
 
@@ -1661,7 +1665,7 @@ describe("StoreContext.use()", () => {
       ctx: import("../types").StoreContext<{ synced: number }>,
       counterSpec: typeof counter
     ) => {
-      const [counterState] = ctx.resolve(counterSpec);
+      const [counterState] = ctx.get(counterSpec);
       effect(() => {
         ctx.state.synced = counterState.count;
       });

@@ -3,8 +3,8 @@ import { useStore } from "storion/react";
 import { uiStore } from "../stores";
 
 export const Header = memo(function Header() {
-  const { activeView, setView } = useStore(({ resolve }) => {
-    const [state, actions] = resolve(uiStore);
+  const { activeView, setView } = useStore(({ get }) => {
+    const [state, actions] = get(uiStore);
     return {
       activeView: state.activeView,
       setView: actions.setView,
@@ -103,8 +103,8 @@ const NavIconButton = memo(function NavIconButton({
 
 // Floating Action Button for adding expenses
 export const FloatingAddButton = memo(function FloatingAddButton() {
-  const { activeView, openAddModal, setView } = useStore(({ resolve }) => {
-    const [state, actions] = resolve(uiStore);
+  const { activeView, openAddModal, setView } = useStore(({ get }) => {
+    const [state, actions] = get(uiStore);
     return {
       activeView: state.activeView,
       openAddModal: actions.openAddModal,

@@ -14,9 +14,9 @@ export const StatsPanel = memo(function StatsPanel({
   expenses,
   isLoading,
 }: StatsPanelProps) {
-  const { openEditModal, setDateRangePreset } = useStore(({ resolve }) => {
-    const [, uiActions] = resolve(uiStore);
-    const [, filterActions] = resolve(filterStore);
+  const { openEditModal, setDateRangePreset } = useStore(({ get }) => {
+    const [, uiActions] = get(uiStore);
+    const [, filterActions] = get(filterStore);
     return {
       openEditModal: uiActions.openEditModal,
       setDateRangePreset: filterActions.setDateRangePreset,

@@ -10,6 +10,7 @@
     "test:all": "pnpm -r test",
     "dev": "pnpm --filter storion dev",
     "dev:expense": "pnpm --filter expense-manager dev",
+    "dev:showcase": "pnpm --filter feature-showcase dev",
     "dev:all": "pnpm --filter storion --filter expense-manager dev",
     "bench": "pnpm --filter @storion/performance bench"
   },

@@ -8,7 +8,43 @@
  * - MainContent / List
  */
 
-import { memo, type ReactNode } from "react";
+import { memo, useCallback, type ReactNode } from "react";
+
+// ============================================================================
+// Icons
+// ============================================================================
+
+const IconSearch = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3" />
+  </svg>
+);
+
+const IconClear = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+);
 
 // ============================================================================
 // Search Bar
@@ -18,22 +54,42 @@ interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  autoFocus?: boolean;
 }
 
 export const SearchBar = memo(function SearchBar({
   value,
   onChange,
   placeholder = "Search...",
+  autoFocus = false,
 }: SearchBarProps) {
+  const handleClear = useCallback(() => {
+    onChange("");
+  }, [onChange]);
+
   return (
     <div className="sdt-search">
+      <div className="sdt-search-icon">
+        <IconSearch />
+      </div>
       <input
         type="text"
         className="sdt-search-input"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        autoFocus={autoFocus}
       />
+      {value && (
+        <button
+          className="sdt-search-clear"
+          onClick={handleClear}
+          title="Clear search"
+          type="button"
+        >
+          <IconClear />
+        </button>
+      )}
     </div>
   );
 });

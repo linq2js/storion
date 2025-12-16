@@ -20,11 +20,72 @@ import { createStoreInstance } from "./store";
 import { emitter } from "../emitter";
 import { untrack } from "./tracking";
 
+// ==========================================================================
+// Default Middleware
+// ==========================================================================
+
+interface DefaultMiddlewareConfig {
+  /** Middleware to run before container's middleware */
+  pre?: StoreMiddleware[];
+  /** Middleware to run after container's middleware */
+  post?: StoreMiddleware[];
+}
+
+let defaultMiddlewareConfig: DefaultMiddlewareConfig = {};
+
+/**
+ * Container function with static defaults method.
+ */
+interface ContainerFn {
+  (options?: ContainerOptions): StoreContainer;
+  /**
+   * Add default middleware that will be applied to all new containers.
+   * Multiple calls merge the middleware arrays.
+   * - `pre`: runs before container's own middleware
+   * - `post`: runs after container's own middleware
+   *
+   * @example
+   * ```ts
+   * import { container } from "storion";
+   * import { devtoolsMiddleware } from "storion/devtools";
+   *
+   * // Add default middleware (typically in app entry)
+   * container.defaults({
+   *   pre: [devtoolsMiddleware()],  // runs first
+   * });
+   *
+   * // Add more defaults (merges with existing)
+   * container.defaults({
+   *   post: [loggingMiddleware()],  // runs last
+   * });
+   *
+   * // All containers now include defaults
+   * const app = container(); // has pre + post
+   * const other = container({ middleware: [myMiddleware] }); // pre + myMiddleware + post
+   *
+   * // Clear all default middleware
+   * container.defaults.clear();
+   * ```
+   */
+  defaults: {
+    (config?: DefaultMiddlewareConfig): void;
+    /** Clear all default middleware */
+    clear(): void;
+  };
+}
+
 /**
  * Create a store container.
  */
-export function container(options: ContainerOptions = {}): StoreContainer {
-  const { middleware = [] } = options;
+export const container: ContainerFn = function (
+  options: ContainerOptions = {}
+): StoreContainer {
+  // Merge: pre + container's middleware + post
+  const middleware = [
+    ...(defaultMiddlewareConfig.pre ?? []),
+    ...(options.middleware ?? []),
+    ...(defaultMiddlewareConfig.post ?? []),
+  ];
 
   // Instance cache: spec → instance
   const instancesBySpec = new Map<
@@ -235,4 +296,19 @@ export function container(options: ContainerOptions = {}): StoreContainer {
   };
 
   return containerApi;
-}
+};
+
+// Create defaults function with clear method
+const defaultsFn = (config: DefaultMiddlewareConfig = {}): void => {
+  // Merge with existing defaults
+  defaultMiddlewareConfig = {
+    pre: [...(defaultMiddlewareConfig.pre ?? []), ...(config.pre ?? [])],
+    post: [...(defaultMiddlewareConfig.post ?? []), ...(config.post ?? [])],
+  };
+};
+defaultsFn.clear = (): void => {
+  defaultMiddlewareConfig = {};
+};
+
+// Add defaults method to container function
+container.defaults = defaultsFn;

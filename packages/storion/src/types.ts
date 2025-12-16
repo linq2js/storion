@@ -190,6 +190,20 @@ export type Focus<TValue> = [
    * @returns Unsubscribe function
    */
   on(listener: (event: FocusChangeEvent<TValue>) => void): VoidFunction;
+
+  /**
+   * Create a new Focus relative to the current path.
+   *
+   * @param relativePath - Dot-notation path relative to current focus
+   * @param options - Focus options for the new focus
+   * @returns A new Focus at the combined path
+   *
+   * @example
+   * const userFocus = focus("user");
+   * const addressFocus = userFocus.to("address");
+   * const cityFocus = userFocus.to("address.city");
+   */
+  to<TChild>(relativePath: string, options?: FocusOptions<TChild>): Focus<TChild>;
 };
 
 // =============================================================================
@@ -342,6 +356,30 @@ export type SelectorMixin<TResult, TArgs extends unknown[] = []> = (
 ) => TResult;
 
 // =============================================================================
+// Store Tuple
+// =============================================================================
+
+/**
+ * Tuple returned by get() with both array destructuring and named properties.
+ *
+ * @example
+ * // Array destructuring
+ * const [state, actions] = get(counterSpec);
+ *
+ * // Named properties
+ * const tuple = get(counterSpec);
+ * tuple.state.count;
+ * tuple.actions.increment();
+ */
+export type StoreTuple<
+  S extends StateBase,
+  A extends ActionsBase
+> = readonly [Readonly<S>, A] & {
+  readonly state: Readonly<S>;
+  readonly actions: A;
+};
+
+// =============================================================================
 // Setup Context
 // =============================================================================
 
@@ -359,15 +397,24 @@ export interface StoreContext<TState extends StateBase = StateBase>
 
   /**
    * Get another store's state and actions.
-   * Returns [readonlyState, actions] tuple.
+   * Returns tuple with both array destructuring and named properties.
    * Creates dependency - store is created if not exists.
+   *
+   * @example
+   * // Array destructuring
+   * const [state, actions] = get(counterSpec);
+   *
+   * // Named properties
+   * const tuple = get(counterSpec);
+   * tuple.state.count;
+   * tuple.actions.increment();
    *
    * Note: Returns limited tuple, not full StoreInstance.
    * You cannot access id, subscribe(), or dispose().
    */
-  resolve<S extends StateBase, A extends ActionsBase>(
+  get<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
-  ): readonly [Readonly<S>, A];
+  ): StoreTuple<S, A>;
 
   /**
    * Update state using Immer-style updater function.
@@ -583,7 +630,7 @@ export interface StoreInstance<
   /** Bound actions with reactive last() method */
   readonly actions: ReactiveActions<TActions>;
 
-  /** Store instances this store depends on (via resolve() in setup) */
+  /** Store instances this store depends on (via get() in setup) */
   readonly deps: readonly StoreInstance<any, any>[];
 
   /**
@@ -821,15 +868,24 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
   /**
    * Get a store's state and actions.
    *
-   * Returns a tracking proxy that records property access
-   * for fine-grained re-render optimization.
+   * Returns tuple with both array destructuring and named properties.
+   * Includes tracking proxy for fine-grained re-render optimization.
+   *
+   * @example
+   * // Array destructuring
+   * const [state, actions] = get(counterSpec);
+   *
+   * // Named properties
+   * const tuple = get(counterSpec);
+   * tuple.state.count;
+   * tuple.actions.increment();
    *
    * @param spec - Store specification
-   * @returns Tuple of [trackingState, actions]
+   * @returns Tuple of [trackingState, actions] with .state and .actions props
    */
-  resolve<S extends StateBase, A extends ActionsBase>(
+  get<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
-  ): readonly [Readonly<S>, A];
+  ): StoreTuple<S, A>;
 
   /**
    * Use a mixin to compose reusable selector logic.
@@ -842,6 +898,34 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
     mixin: SelectorMixin<TResult, TArgs>,
     ...args: TArgs
   ): TResult;
+
+  /**
+   * Unique identifier for this selector context (per component instance).
+   * Useful for scoping async operations with ensure().
+   *
+   * @example
+   * const { data } = useStore(({ get, id }) => {
+   *   const store = get(dataStore);
+   *   // Each component instance gets unique id
+   *   store.actions.ensure([id], params);
+   *   return { data: store.state.data };
+   * });
+   */
+  readonly id: object;
+
+  /**
+   * Run a callback once when the component mounts.
+   * The callback is executed immediately during render (before paint).
+   *
+   * @example
+   * useStore(({ get, once }) => {
+   *   const mutation = get(submitStore);
+   *   // Reset mutation state on mount
+   *   once(() => mutation.actions.reset());
+   *   return mutation;
+   * });
+   */
+  once(callback: () => void): void;
 }
 
 /**

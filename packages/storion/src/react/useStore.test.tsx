@@ -37,7 +37,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state] = get(counter);
             return { count: state.count };
           }),
@@ -61,7 +61,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state, actions] = get(counter);
             return {
               count: state.count,
@@ -89,7 +89,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [counterState] = get(counter);
             const [userState] = get(user);
             return {
@@ -124,7 +124,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { rerender } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state] = get(counter);
             return { count: state.count };
           }),
@@ -161,7 +161,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { rerender } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state] = get(user);
             const result: Record<string, unknown> = { name: state.name };
             if (trackCity) {
@@ -202,7 +202,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result, rerender } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state, actions] = get(counter);
             return {
               count: state.count,
@@ -235,7 +235,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state, storeActions] = get(counter);
             return {
               count: state.count,
@@ -267,7 +267,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result, rerender } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             if (!enabled) {
               return { data: null };
             }
@@ -298,7 +298,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state] = get(user);
             return { profile: state.profile };
           }),
@@ -330,7 +330,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const { result } = renderHook(
         () => {
           renderCount();
-          return useStore(({ resolve: get }) => {
+          return useStore(({ get }) => {
             const [state, actions] = get(counter);
             return {
               // This IS tracked
@@ -385,7 +385,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state] = get(counter);
             return {
               tracked: state.a,
@@ -417,7 +417,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const stores = container();
 
       function Counter() {
-        const { count, increment } = useStore(({ resolve: get }) => {
+        const { count, increment } = useStore(({ get }) => {
           const [state, actions] = get(counter);
           return {
             count: state.count,
@@ -465,7 +465,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result: hookResult } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state, actions] = get(counter);
             return [state.count, actions.increment] as const;
           }),
@@ -490,7 +490,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       const { result: hookResult } = renderHook(
         () =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state, actions] = get(counter);
             return [
               { count: state.count, name: state.name },
@@ -519,7 +519,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       expect(() => {
         renderHook(() =>
-          useStore(({ resolve: get }) => {
+          useStore(({ get }) => {
             const [state] = get(counter);
             return { count: state.count };
           })
@@ -545,7 +545,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(() => {
         renderHook(
           () =>
-            useStore(async ({ resolve: get }) => {
+            useStore(async ({ get }) => {
               const [state] = get(counter);
               return { count: state.count };
             }),
@@ -572,7 +572,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(() => {
         renderHook(
           () =>
-            useStore(({ resolve: get }) => {
+            useStore(({ get }) => {
               const [state] = get(counter);
               return { then: () => {}, count: state.count };
             }),
@@ -597,7 +597,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
         ctx: SelectorContext,
         counterSpec: typeof counter
       ) => {
-        const [state] = ctx.resolve(counterSpec);
+        const [state] = ctx.get(counterSpec);
         return state.count * 2;
       };
 
@@ -632,7 +632,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
         specs: StoreSpec<{ value: number }>[]
       ) => {
         return specs.reduce((sum, spec) => {
-          const [state] = ctx.resolve(spec);
+          const [state] = ctx.get(spec);
           return sum + state.value;
         }, 0);
       };
@@ -664,7 +664,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       });
 
       const countMixin = (ctx: SelectorContext, spec: typeof counter) => {
-        const [state] = ctx.resolve(spec);
+        const [state] = ctx.get(spec);
         return state.count;
       };
 
@@ -688,6 +688,172 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       rerender();
 
       expect(result.current.count).toBe(1);
+    });
+  });
+
+  describe("SelectorContext.id", () => {
+    it("should provide stable unique id per component instance", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      stores.get(counter);
+
+      const { result, rerender } = renderHook(
+        () =>
+          useStore(({ get, id }) => {
+            const [state] = get(counter);
+            return { count: state.count, id };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Capture the id after initial mount
+      const firstId = result.current.id;
+      expect(firstId).toBeDefined();
+      expect(typeof firstId).toBe("object");
+
+      // Re-render multiple times and verify id is stable
+      rerender();
+      expect(result.current.id).toBe(firstId);
+
+      rerender();
+      expect(result.current.id).toBe(firstId);
+
+      rerender();
+      expect(result.current.id).toBe(firstId);
+    });
+
+    it("should provide different id for different component instances", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      stores.get(counter);
+
+      let id1: object | undefined;
+      let id2: object | undefined;
+
+      const { unmount: unmount1 } = renderHook(
+        () =>
+          useStore(({ get, id }) => {
+            id1 = id;
+            const [state] = get(counter);
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      const { unmount: unmount2 } = renderHook(
+        () =>
+          useStore(({ get, id }) => {
+            id2 = id;
+            const [state] = get(counter);
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Different component instances should have different ids
+      expect(id1).toBeDefined();
+      expect(id2).toBeDefined();
+      expect(id1).not.toBe(id2);
+
+      unmount1();
+      unmount2();
+    });
+  });
+
+  describe("SelectorContext.once()", () => {
+    it("should run callback once on mount", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const counterInstance = stores.get(counter);
+
+      const onceCallback = vi.fn();
+
+      const { rerender } = renderHook(
+        () =>
+          useStore(({ get, once }) => {
+            const [state] = get(counter);
+            once(onceCallback);
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // once callback should be called on mount
+      // In strict mode, component mounts twice (intentional by React)
+      const initialCallCount = onceCallback.mock.calls.length;
+      expect(initialCallCount).toBeGreaterThanOrEqual(1);
+
+      // Re-render multiple times
+      rerender();
+      rerender();
+
+      // Should not increase
+      expect(onceCallback).toHaveBeenCalledTimes(initialCallCount);
+
+      // Trigger state change and re-render
+      act(() => {
+        counterInstance.actions.increment();
+      });
+      rerender();
+
+      // Still same count
+      expect(onceCallback).toHaveBeenCalledTimes(initialCallCount);
+    });
+
+
+    it("should run multiple once callbacks", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      stores.get(counter);
+
+      const callback1 = vi.fn();
+      const callback2 = vi.fn();
+      const callback3 = vi.fn();
+
+      const { rerender } = renderHook(
+        () =>
+          useStore(({ get, once }) => {
+            const [state] = get(counter);
+            once(callback1);
+            once(callback2);
+            once(callback3);
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // All callbacks should run on mount
+      // In strict mode, they may run twice (once per mount)
+      const initialCount = callback1.mock.calls.length;
+      expect(initialCount).toBeGreaterThanOrEqual(1);
+      expect(callback2).toHaveBeenCalledTimes(initialCount);
+      expect(callback3).toHaveBeenCalledTimes(initialCount);
+
+      // Re-render should not run callbacks again
+      rerender();
+      expect(callback1).toHaveBeenCalledTimes(initialCount);
+      expect(callback2).toHaveBeenCalledTimes(initialCount);
+      expect(callback3).toHaveBeenCalledTimes(initialCount);
     });
   });
 });

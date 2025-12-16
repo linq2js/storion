@@ -330,7 +330,7 @@ describe("useLocalStore", () => {
 
   describe("error handling", () => {
     it("should throw error if store has dependencies", () => {
-      // Create a base spec that the dependent spec will resolve
+      // Create a base spec that the dependent spec will get
       const baseSpec = store({
         name: "baseStoreForDeps",
         state: { value: 0 },
@@ -342,9 +342,9 @@ describe("useLocalStore", () => {
       const dependentSpec = store({
         name: "dependentStore",
         state: { value: 0 },
-        setup({ resolve }) {
+        setup({ get }) {
           // This creates a dependency
-          resolve(baseSpec);
+          get(baseSpec);
           return {};
         },
       });

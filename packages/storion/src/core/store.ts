@@ -34,6 +34,7 @@ import { resolveEquality, strictEqual } from "./equality";
 import { generateSpecName, generateStoreId } from "./generator";
 
 import { emitter, Emitter } from "../emitter";
+import { collection } from "../collection";
 
 // =============================================================================
 // Store Spec Factory
@@ -138,22 +139,12 @@ export function createStoreInstance<
 
   const changeEmitter = emitter<void>();
   const disposeEmitter = emitter<void>();
-  const propertyEmitters = new Map<
+
+  // Property emitters - created lazily on first subscription
+  const propertyEmitters = collection<
     keyof TState,
     Emitter<PropertyChangeEvent>
-  >();
-
-  // Get or create property emitter
-  const getPropertyEmitter = (
-    key: keyof TState
-  ): Emitter<PropertyChangeEvent> => {
-    let em = propertyEmitters.get(key);
-    if (!em) {
-      em = emitter<PropertyChangeEvent>();
-      propertyEmitters.set(key, em);
-    }
-    return em;
-  };
+  >(() => emitter<PropertyChangeEvent>());
 
   // ==========================================================================
   // Action Dispatch Tracking
@@ -168,30 +159,22 @@ export function createStoreInstance<
   /** Invocation count per action */
   const actionNthCounters = new Map<string, number>();
 
-  /** Emitters for action dispatches (#actionName) */
-  const actionEmitters = new Map<
-    string,
-    Emitter<{
-      next: ActionDispatchEvent<TActions, keyof TActions>;
-      prev: ActionDispatchEvent<TActions, keyof TActions> | undefined;
-    }>
-  >();
+  /** Action dispatch event type */
+  type ActionEmitterEvent = {
+    next: ActionDispatchEvent<TActions, keyof TActions>;
+    prev: ActionDispatchEvent<TActions, keyof TActions> | undefined;
+  };
+
+  /** Emitters for action dispatches - created lazily per action name */
+  const actionEmitters = collection<string, Emitter<ActionEmitterEvent>>(() =>
+    emitter<ActionEmitterEvent>()
+  );
 
   /** Wildcard emitter for all action dispatches (@) */
   const wildcardActionEmitter = emitter<{
     next: DispatchEvent<TActions>;
     prev: DispatchEvent<TActions> | undefined;
   }>();
-
-  // Get or create action emitter
-  const getActionEmitter = (actionName: string) => {
-    let em = actionEmitters.get(actionName);
-    if (!em) {
-      em = emitter();
-      actionEmitters.set(actionName, em);
-    }
-    return em;
-  };
 
   // Effect dispose functions (collected via scheduleEffect hook)
   const disposeEffectsEmitter = emitter();
@@ -258,10 +241,9 @@ export function createStoreInstance<
 
     // Notify property subscribers (using emitter)
     // Effects subscribe via this mechanism through the hooks system
-    const propEmitter = propertyEmitters.get(key as keyof TState);
-    if (propEmitter) {
-      propEmitter.emit({ newValue, oldValue });
-    }
+    propertyEmitters.with(key as keyof TState, (em) =>
+      em.emit({ newValue, oldValue })
+    );
 
     // Schedule global subscriber notification
     scheduleNotification(() => {
@@ -283,54 +265,6 @@ export function createStoreInstance<
   // ==========================================================================
   // Action Dispatch Handler
   // ==========================================================================
-
-  /**
-   * Record action dispatch and notify subscribers.
-   * Called BEFORE action execution to ensure dispatch is recorded even if action throws.
-   */
-  function handleActionDispatch<K extends keyof TActions>(
-    actionName: K,
-    args: Parameters<TActions[K]>
-  ): void {
-    const name = actionName as string;
-
-    // Increment invocation counter
-    const nth = (actionNthCounters.get(name) ?? 0) + 1;
-    actionNthCounters.set(name, nth);
-
-    // Get previous invocation
-    const prev = actionInvocations.get(name);
-
-    // Create immutable dispatch event
-    const next: ActionDispatchEvent<TActions, K> = Object.freeze({
-      name: actionName,
-      args,
-      nth,
-    });
-
-    // Store new invocation
-    actionInvocations.set(
-      name,
-      next as ActionDispatchEvent<TActions, keyof TActions>
-    );
-
-    // Notify action-specific emitter (#actionName)
-    const actionEmitter = actionEmitters.get(name);
-    if (actionEmitter) {
-      actionEmitter.emit({
-        next: next as ActionDispatchEvent<TActions, keyof TActions>,
-        prev,
-      });
-    }
-
-    // Notify wildcard emitter (@)
-    if (wildcardActionEmitter.size > 0) {
-      wildcardActionEmitter.emit({
-        next: next as DispatchEvent<TActions>,
-        prev: prev as DispatchEvent<TActions> | undefined,
-      });
-    }
-  }
 
   /**
    * Get last invocation for an action (reactive - triggers trackRead).
@@ -407,8 +341,7 @@ export function createStoreInstance<
       // Overload 4: subscribe('@actionName', listener) - specific action dispatch
       if (key.startsWith("@")) {
         const actionName = key.slice(1);
-        const actionEmitter = getActionEmitter(actionName);
-        const unsub = actionEmitter.on(propListener!);
+        const unsub = actionEmitters.get(actionName).on(propListener!);
         return () => {
           unsub();
           decrementRef();
@@ -417,7 +350,7 @@ export function createStoreInstance<
 
       // Overload 2: subscribe(propKey, listener) - specific property
       const propKey = listenerOrPropKey as keyof TState;
-      const propEmitter = getPropertyEmitter(propKey);
+      const propEmitter = propertyEmitters.get(propKey);
       const unsub = propEmitter.on(({ newValue, oldValue }) => {
         propListener!({ next: newValue, prev: oldValue });
       });
@@ -437,13 +370,11 @@ export function createStoreInstance<
       // Action subscription (@actionName)
       if (key.startsWith("@")) {
         const actionName = key.slice(1);
-        const actionEmitter = getActionEmitter(actionName);
-        return actionEmitter.on(listener);
+        return actionEmitters.get(actionName).on(listener);
       }
 
       // Property subscription
-      const propEmitter = getPropertyEmitter(propKey as keyof TState);
-      return propEmitter.on(listener);
+      return propertyEmitters.get(propKey as keyof TState).on(listener);
     },
 
     dispose() {
@@ -771,24 +702,58 @@ export function createStoreInstance<
         throw new Error(`Cannot call action on disposed store: ${storeId}`);
       }
 
-      // Dispatch event BEFORE action execution
-      // This ensures dispatch is recorded even if action throws
-      handleActionDispatch(
-        name as keyof TActions,
-        args as Parameters<TActions[keyof TActions]>
-      );
+      // Record dispatch info BEFORE action execution (for error cases)
+      // but DON'T emit to wildcard subscribers yet
+      const actionNameKey = name as keyof TActions;
+      const nthKey = name;
+      const nth = (actionNthCounters.get(nthKey) ?? 0) + 1;
+      actionNthCounters.set(nthKey, nth);
+
+      const prev = actionInvocations.get(nthKey);
+      const next: ActionDispatchEvent<TActions, typeof actionNameKey> =
+        Object.freeze({
+          name: actionNameKey,
+          args: args as Parameters<TActions[typeof actionNameKey]>,
+          nth,
+          timestamp: Date.now(),
+        });
+      actionInvocations.set(nthKey, next);
+
+      // Notify specific action emitter (@actionName) - before execution
+      const actionEmitter = actionEmitters.get(nthKey);
+      if (actionEmitter.size > 0) {
+        actionEmitter.emit({
+          next: next as DispatchEvent<TActions>,
+          prev: prev as DispatchEvent<TActions> | undefined,
+        });
+      }
 
       // Also call options.onDispatch if provided
       if (options.onDispatch) {
-        const invocation = actionInvocations.get(name);
-        if (invocation) {
-          options.onDispatch(invocation as DispatchEvent<TActions>);
-        }
+        options.onDispatch(next as DispatchEvent<TActions>);
       }
 
       try {
-        return action(...args);
+        const result = action(...args);
+
+        // Emit to wildcard subscribers AFTER action completes successfully
+        // This ensures state is captured after all mutations
+        if (wildcardActionEmitter.size > 0) {
+          wildcardActionEmitter.emit({
+            next: next as DispatchEvent<TActions>,
+            prev: prev as DispatchEvent<TActions> | undefined,
+          });
+        }
+
+        return result;
       } catch (error) {
+        // Still emit to wildcard on error (so devtools can see failed actions)
+        if (wildcardActionEmitter.size > 0) {
+          wildcardActionEmitter.emit({
+            next: next as DispatchEvent<TActions>,
+            prev: prev as DispatchEvent<TActions> | undefined,
+          });
+        }
         if (options.onError) {
           options.onError(error);
         }

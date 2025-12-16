@@ -13,6 +13,7 @@ import {
   type StoreSpec,
   type StoreContainer,
   type SelectorContext,
+  type StoreTuple,
   type Selector,
   type StableResult,
 } from "../types";
@@ -24,8 +25,8 @@ import { useLocalStore, type LocalStoreResult } from "./useLocalStore";
  * React hook to consume stores with automatic optimization.
  *
  * Features:
- * - Multi-store access via resolve() in selector
- * - Conditional access (resolve() can be called conditionally)
+ * - Multi-store access via get() in selector
+ * - Conditional access (get() can be called conditionally)
  * - Auto-stable functions (never cause re-renders)
  * - Fine-grained updates (only re-renders when selected values change)
  * - Respects untrack() for skipping dependency tracking
@@ -36,6 +37,8 @@ interface UseStoreRefs<T> {
   stableFns: Map<string, Function>;
   trackedDeps: Map<string, ReadEvent>;
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
+  id: object; // unique id for this component instance
+  onceRan: boolean; // whether once has been executed
 }
 
 /**
@@ -54,6 +57,8 @@ export function useStoreWithContainer<T extends object>(
     stableFns: new Map(),
     trackedDeps: new Map(),
     subscriptions: new Map(),
+    id: {},
+    onceRan: false,
   }));
 
   // Update selector on every render
@@ -62,28 +67,46 @@ export function useStoreWithContainer<T extends object>(
   // Clear tracked deps for this render
   refs.trackedDeps.clear();
 
+  // Capture once flag before selector runs (so all once() calls see the same value)
+  const shouldRunOnce = !refs.onceRan;
+
   // Create selector context (no tracking proxy needed - hooks handle it)
   const selectorContext: SelectorContext = useMemo(() => {
     const ctx: SelectorContext = {
       [STORION_TYPE]: "selector.context",
 
-      resolve<S extends StateBase, A extends ActionsBase>(
+      id: refs.id,
+
+      get<S extends StateBase, A extends ActionsBase>(
         spec: StoreSpec<S, A>
-      ): readonly [Readonly<S>, A] {
+      ): StoreTuple<S, A> {
         // Get full instance from container
         const instance = container.get(spec);
-        // Return state directly - hooks will track reads
-        return [instance.state, instance.actions] as const;
+        // Return tuple with named properties
+        const tuple = [instance.state, instance.actions] as const;
+        return Object.assign(tuple, {
+          state: instance.state,
+          actions: instance.actions,
+        }) as StoreTuple<S, A>;
       },
+
       use<TResult, TArgs extends unknown[]>(
         mixin: (context: SelectorContext, ...args: TArgs) => TResult,
         ...args: TArgs
       ): TResult {
         return mixin(ctx, ...args);
       },
+
+      once(callback: () => void): void {
+        // Run immediately on first mount only
+        if (shouldRunOnce) {
+          callback();
+        }
+      },
     };
     return ctx;
-  }, [container]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [container, shouldRunOnce]);
 
   // Run selector with hooks to track dependencies
   const result = withHooks(
@@ -94,6 +117,11 @@ export function useStoreWithContainer<T extends object>(
     },
     () => selector(selectorContext)
   );
+
+  // Mark once as ran after first selector execution
+  if (shouldRunOnce) {
+    refs.onceRan = true;
+  }
 
   // Prevent async selectors - they cause tracking issues
   if (
@@ -177,8 +205,8 @@ export function useStoreWithContainer<T extends object>(
  * @example
  * ```tsx
  * // With selector - access global stores
- * const { count, increment } = useStore(({ resolve }) => {
- *   const [state, actions] = resolve(counterSpec);
+ * const { count, increment } = useStore(({ get }) => {
+ *   const [state, actions] = get(counterSpec);
  *   return { count: state.count, increment: actions.increment };
  * });
  *

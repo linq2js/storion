@@ -18,7 +18,7 @@ import { useStoreWithContainer } from "./useStore";
 
 /**
  * Selector for create() hook.
- * Receives state and actions directly (no resolve needed).
+ * Receives state and actions directly (no get needed).
  */
 export type CreateSelector<
   TState extends StateBase,
@@ -95,8 +95,8 @@ export function create<TState extends StateBase, TActions extends ActionsBase>(
     selector: CreateSelector<TState, TActions, T>
   ): StableResult<T> => {
     return useStoreWithContainer(
-      ({ resolve }) => {
-        const [state, actions] = resolve(spec);
+      ({ get }) => {
+        const [state, actions] = get(spec);
         return selector(state, actions);
       },
       dedicatedContainer

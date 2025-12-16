@@ -31,6 +31,7 @@ export {
   type SelectorContext,
   type SelectorMixin,
   type Selector,
+  type StoreTuple,
   type StableResult,
   type PickEquality,
   // Focus (lens-like accessors)

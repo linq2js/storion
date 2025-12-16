@@ -18,5 +18,7 @@ export type {
   DevtoolsStoreEntry,
   DevtoolsMiddlewareOptions,
   StateSnapshot,
+  DevtoolsEvent,
+  DevtoolsEventType,
 } from "./types";
 

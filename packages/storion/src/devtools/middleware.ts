@@ -158,22 +158,32 @@ export function devtoolsMiddleware(
       meta: spec.options.meta,
     });
 
-    // Subscribe to action dispatches for tracking
-    const unsubscribeActions = instance.subscribe("@*", (event: any) => {
-      // Skip devtools internal actions
-      if (typeof event.name === "string" && event.name.startsWith("__")) return;
+    // Track last action for associating with state changes
+    let lastAction: { name: string; args: unknown[] } | null = null;
 
+    // Subscribe to action dispatches to track which action caused the change
+    const unsubscribeActions = instance.subscribe("@*", (event: any) => {
+      const { next } = event;
+      // Skip devtools internal actions
+      if (typeof next.name === "string" && next.name.startsWith("__")) return;
+      lastAction = { name: next.name, args: next.args };
+    });
+
+    // Subscribe to STATE changes (fires after mutations complete)
+    const unsubscribeState = instance.subscribe(() => {
       recordStateChange(
         instance.id,
         { ...instance.state },
-        event.name,
-        event.args
+        lastAction?.name,
+        lastAction?.args
       );
+      lastAction = null; // Reset after recording
     });
 
     // Handle disposal
     instance.onDispose(() => {
       unsubscribeActions();
+      unsubscribeState();
       unregisterStore(instance.id);
     });
 

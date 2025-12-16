@@ -13,8 +13,8 @@ const DATE_PRESETS: { value: DateRangePreset; label: string; short: string }[] =
 
 export const FilterBar = memo(function FilterBar() {
   const { dateRangePreset, category, setDateRangePreset, setCategory, reset } =
-    useStore(({ resolve }) => {
-      const [state, actions] = resolve(filterStore);
+    useStore(({ get }) => {
+      const [state, actions] = get(filterStore);
       return {
         dateRangePreset: state.dateRangePreset,
         category: state.category,

@@ -12,6 +12,7 @@ import {
   type StoreInstance,
   type StoreResolver,
   type StoreContext,
+  type StoreTuple,
   type StoreMixin,
   type Focus,
   type FocusOptions,
@@ -176,14 +177,27 @@ export function createFocus<TState extends StateBase, TValue>(
     });
   };
 
-  // Create tuple with on() method
+  /**
+   * Create a new Focus relative to the current path.
+   */
+  const to = <TChild>(
+    relativePath: string,
+    childOptions?: FocusOptions<TChild>
+  ): Focus<TChild> => {
+    const combinedPath = `${path}.${relativePath}`;
+    return createFocus(focusCtx, combinedPath, childOptions);
+  };
+
+  // Create tuple with on() and to() methods
   const focus = [getter, setter] as Focus<TValue>;
   const focusObj = focus as unknown as {
     [STORION_TYPE]: "focus";
     on: typeof on;
+    to: typeof to;
   };
   focusObj[STORION_TYPE] = "focus";
   focusObj.on = on;
+  focusObj.to = to;
 
   return focus;
 }
@@ -197,7 +211,7 @@ export function createFocus<TState extends StateBase, TValue>(
  *
  * The context provides:
  * - state: Mutable reactive state proxy
- * - resolve(): Get other store's state and actions
+ * - get(): Get other store's state and actions
  * - update(): Update state with immer or partial object
  * - focus(): Create lens-like accessor for nested paths
  * - use(): Compose reusable mixins
@@ -230,9 +244,9 @@ export function createStoreContext<
       return getMutableState();
     },
 
-    resolve<S extends StateBase, A extends ActionsBase>(
+    get<S extends StateBase, A extends ActionsBase>(
       depSpec: StoreSpec<S, A>
-    ): readonly [Readonly<S>, A] {
+    ): StoreTuple<S, A> {
       // Prevent dynamic store creation outside setup phase
       if (!isSetupPhase()) {
         throw new Error(
@@ -261,8 +275,12 @@ export function createStoreContext<
       const instance = resolver.get(depSpec);
       onDependency?.(instance);
 
-      // Return tuple [readonlyState, actions]
-      return [instance.state, instance.actions] as const;
+      // Return tuple with named properties
+      const tuple = [instance.state, instance.actions] as const;
+      return Object.assign(tuple, {
+        state: instance.state,
+        actions: instance.actions,
+      }) as StoreTuple<S, A>;
     },
 
     update(updaterOrPartial: ((draft: TState) => void) | Partial<TState>) {

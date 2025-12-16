@@ -167,6 +167,36 @@ export const panelStyles = `
     border-color: ${colors.border.focus};
   }
 
+  .sdt-btn-toggle {
+    background: transparent;
+    border: 1px solid ${colors.border.default};
+    color: ${colors.text.muted};
+  }
+
+  .sdt-btn-toggle:hover {
+    background: ${colors.bg.elevated};
+    color: ${colors.text.secondary};
+  }
+
+  .sdt-btn-toggle.active {
+    background: ${colors.bg.elevated};
+    border-color: ${colors.accent.info};
+    color: ${colors.accent.info};
+  }
+
+  .sdt-btn-toggle.active:hover {
+    background: ${colors.bg.hover};
+  }
+
+  /* Stores action bar */
+  .sdt-stores-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid ${colors.border.default};
+  }
+
   /* ============================================
      Tab Content Container
      ============================================ */
@@ -181,14 +211,28 @@ export const panelStyles = `
      Search Input
      ============================================ */
   .sdt-search {
+    position: relative;
+    display: flex;
+    align-items: center;
     padding: 6px 8px;
     border-bottom: 1px solid ${colors.border.default};
     flex-shrink: 0;
   }
 
+  .sdt-search-icon {
+    position: absolute;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: ${colors.text.muted};
+    pointer-events: none;
+    z-index: 1;
+  }
+
   .sdt-search-input {
     width: 100%;
-    padding: 4px 8px;
+    padding: 5px 28px 5px 28px;
     background: ${colors.bg.card};
     border: 1px solid ${colors.border.default};
     border-radius: 4px;
@@ -211,6 +255,28 @@ export const panelStyles = `
   .sdt-search-input::placeholder {
     color: ${colors.text.dim};
     font-family: ${fonts.sans};
+  }
+
+  .sdt-search-clear {
+    position: absolute;
+    right: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 2px;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .sdt-search-clear:hover {
+    color: ${colors.text.primary};
+    background: ${colors.bg.elevated};
   }
 
   /* ============================================
@@ -358,6 +424,16 @@ export const panelStyles = `
     background: ${colors.bg.elevated};
   }
 
+  /* Flash animation for store header */
+  @keyframes sdt-store-flash {
+    0% { background-color: rgba(168, 85, 247, 0.25); }
+    100% { background-color: transparent; }
+  }
+
+  .sdt-store-header.flash {
+    animation: sdt-store-flash 0.5s ease-out;
+  }
+
   .sdt-expand-btn {
     background: transparent;
     border: none;
@@ -377,25 +453,15 @@ export const panelStyles = `
   }
 
   .sdt-store-name {
-    font-family: ${fonts.sans};
-    font-size: 12px;
-    font-weight: 600;
+    font-family: ${fonts.mono};
+    font-size: 11px;
+    font-weight: 500;
     color: ${colors.text.primary};
     flex: 1;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-  }
-
-  .sdt-store-id {
-    font-family: ${fonts.mono};
-    font-size: 10px;
-    font-weight: 400;
-    color: ${colors.text.muted};
   }
 
   .sdt-store-actions {
@@ -429,18 +495,30 @@ export const panelStyles = `
   }
 
   /* ============================================
-     State Tree (Mono font for values)
+     State JSON Textarea
      ============================================ */
-  .sdt-state-tree {
+  .sdt-state-json {
     font-family: ${fonts.mono};
     font-size: 11px;
-    line-height: 1.5;
+    line-height: 1.4;
+    width: 100%;
+    min-height: 160px;
+    max-height: 400px;
+    padding: 6px 8px;
+    background: ${colors.bg.elevated};
+    border: 1px solid ${colors.border};
+    border-radius: 4px;
+    color: ${colors.text.secondary};
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
   }
 
-  .sdt-state-key {
-    color: ${colors.syntax.key};
+  .sdt-state-json:focus {
+    border-color: ${colors.accent};
   }
 
+  /* Keep state-value for metadata section */
   .sdt-state-value {
     color: ${colors.syntax.string};
   }
@@ -610,6 +688,8 @@ export const panelStyles = `
     background: transparent;
     z-index: 10;
     transition: background 0.15s ease;
+    /* Increase hit area for easier grabbing */
+    padding: 0;
   }
 
   .sdt-resize-handle:hover,
@@ -618,14 +698,14 @@ export const panelStyles = `
   }
 
   .sdt-resize-handle.horizontal {
-    width: 3px;
+    width: 4px;
     height: 100%;
     top: 0;
     cursor: ew-resize;
   }
 
   .sdt-resize-handle.vertical {
-    height: 3px;
+    height: 4px;
     width: 100%;
     left: 0;
     cursor: ns-resize;
@@ -670,48 +750,270 @@ export const panelStyles = `
   }
 
   /* ============================================
-     Collapsed State
-     ============================================ */
-  .storion-devtools.collapsed {
-    width: 36px !important;
-    min-width: 36px !important;
-  }
-
-  .storion-devtools.collapsed .sdt-header {
-    flex-direction: column;
-    padding: 6px 4px;
-    gap: 4px;
-  }
-
-  .storion-devtools.collapsed .sdt-title,
-  .storion-devtools.collapsed .sdt-tab-content {
-    display: none;
-  }
-
-  .storion-devtools.collapsed .sdt-header-actions {
-    margin-left: 0;
-    flex-direction: column;
-  }
-
-  /* ============================================
      Position Variants
      ============================================ */
   .storion-devtools.position-bottom {
     flex-direction: column;
   }
 
-  .storion-devtools.position-bottom.collapsed {
-    height: 36px !important;
-    min-height: 36px !important;
-    width: 100% !important;
+  /* When bottom position and wide screen, display stores in 2 columns */
+  .storion-devtools.position-bottom .sdt-main-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 4px;
+    align-content: start;
+    overflow-y: auto; /* Ensure scrolling still works */
   }
 
-  .storion-devtools.position-bottom.collapsed .sdt-header {
-    flex-direction: row;
+  .storion-devtools.position-bottom .sdt-store-entry {
+    margin-bottom: 0;
+    height: fit-content; /* Prevent grid from stretching items */
   }
 
-  .storion-devtools.position-bottom.collapsed .sdt-header-actions {
-    flex-direction: row;
+  /* ============================================
+     Tabs
+     ============================================ */
+  .sdt-tabs {
+    display: flex;
+    border-bottom: 1px solid ${colors.border.default};
+    background: ${colors.bg.card};
+    padding: 0 4px;
+    gap: 2px;
+  }
+
+  .sdt-tab {
+    font-family: ${fonts.sans};
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .sdt-tab:hover {
+    color: ${colors.text.secondary};
+  }
+
+  .sdt-tab.active {
+    color: ${colors.text.primary};
+    border-bottom-color: ${colors.accent.primary};
+  }
+
+  .sdt-tab-count {
+    font-family: ${fonts.mono};
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background: ${colors.bg.elevated};
+    color: ${colors.text.muted};
+  }
+
+  .sdt-tab.active .sdt-tab-count {
+    background: ${colors.bg.hover};
+    color: ${colors.text.secondary};
+  }
+
+  /* Flash animation for tabs */
+  @keyframes sdt-flash {
+    0% { background-color: rgba(168, 85, 247, 0.3); }
+    100% { background-color: transparent; }
+  }
+
+  .sdt-tab.flash {
+    animation: sdt-flash 0.6s ease-out;
+  }
+
+  .sdt-tab.flash .sdt-tab-count {
+    animation: sdt-flash 0.6s ease-out;
+  }
+
+  /* ============================================
+     Event Entry
+     ============================================ */
+  .sdt-event-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-bottom: 1px solid ${colors.border.default};
+    font-family: ${fonts.mono};
+    font-size: 10px;
+    min-height: 28px;
+    max-height: 44px;
+    overflow: hidden;
+  }
+
+  .sdt-event-entry:hover {
+    background: ${colors.bg.elevated};
+  }
+
+  .sdt-event-time {
+    color: ${colors.text.muted};
+    font-size: 10px;
+    flex-shrink: 0;
+    width: 56px;
+  }
+
+  .sdt-event-type {
+    font-family: ${fonts.sans};
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .sdt-event-target {
+    color: ${colors.text.secondary};
+    flex-shrink: 0;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sdt-event-target.clickable {
+    cursor: pointer;
+    color: ${colors.accent.info};
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.15s;
+  }
+
+  .sdt-event-target.clickable:hover {
+    text-decoration-color: ${colors.accent.info};
+  }
+
+  .sdt-event-extra {
+    color: ${colors.text.muted};
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .sdt-event-copy {
+    background: transparent;
+    border: none;
+    color: ${colors.text.dim};
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+  }
+
+  .sdt-event-entry:hover .sdt-event-copy {
+    opacity: 1;
+  }
+
+  .sdt-event-copy:hover {
+    color: ${colors.text.secondary};
+    background: ${colors.bg.hover};
+  }
+
+  /* ============================================
+     Event Filter Bar
+     ============================================ */
+  .sdt-event-filters {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid ${colors.border.default};
+    background: ${colors.bg.card};
+  }
+
+  .sdt-event-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    flex: 1;
+  }
+
+  .sdt-event-filter-chip {
+    font-family: ${fonts.sans};
+    font-size: 9px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid ${colors.border.default};
+    background: transparent;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .sdt-event-filter-chip:hover {
+    border-color: ${colors.border.subtle};
+    color: ${colors.text.secondary};
+  }
+
+  .sdt-event-filter-chip.active {
+    color: ${colors.text.primary};
+  }
+
+  .sdt-event-clear-btn {
+    background: transparent;
+    border: none;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .sdt-event-clear-btn:hover {
+    color: ${colors.accent.danger};
+    background: ${colors.bg.elevated};
+  }
+
+  /* ============================================
+     Floating Button (Collapsed State)
+     ============================================ */
+  .sdt-floating-btn {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: ${colors.bg.card};
+    border: 1px solid ${colors.border.default};
+    color: ${colors.text.primary};
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+    z-index: 999999;
+  }
+
+  .sdt-floating-btn:hover {
+    background: ${colors.bg.elevated};
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .sdt-floating-btn:active {
+    transform: scale(0.95);
   }
 
   /* ============================================

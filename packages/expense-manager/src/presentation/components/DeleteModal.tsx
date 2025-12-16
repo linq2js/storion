@@ -10,9 +10,9 @@ interface DeleteModalProps {
 export const DeleteModal = memo(function DeleteModal({
   repository,
 }: DeleteModalProps) {
-  const { selectedExpense, closeModal, remove } = useStore(({ resolve }) => {
-    const [uiState, uiActions] = resolve(uiStore);
-    const [, expenseActions] = resolve(expenseStore);
+  const { selectedExpense, closeModal, remove } = useStore(({ get }) => {
+    const [uiState, uiActions] = get(uiStore);
+    const [, expenseActions] = get(expenseStore);
 
     return {
       selectedExpense: uiState.selectedExpense,

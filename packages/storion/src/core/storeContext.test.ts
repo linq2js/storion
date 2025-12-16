@@ -457,4 +457,130 @@ describe("focus()", () => {
       );
     });
   });
+
+  describe("to() method for relative focus", () => {
+    it("should create a child focus from parent focus", () => {
+      const userStore = store({
+        state: {
+          user: {
+            name: "John",
+            address: {
+              city: "NYC",
+              country: "USA",
+            },
+          },
+        },
+        setup: (ctx) => {
+          const userFocus = ctx.focus("user");
+          const addressFocus = userFocus.to<{ city: string; country: string }>(
+            "address"
+          );
+          const [getCity, setCity] = addressFocus.to<string>("city");
+
+          return { getCity, setCity };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.actions.getCity()).toBe("NYC");
+
+      instance.actions.setCity("LA");
+      expect(instance.actions.getCity()).toBe("LA");
+      expect(instance.state.user.address.city).toBe("LA");
+    });
+
+    it("should support chained to() calls", () => {
+      const userStore = store({
+        state: {
+          data: {
+            nested: {
+              deep: {
+                value: 42,
+              },
+            },
+          },
+        },
+        setup: (ctx) => {
+          const dataFocus = ctx.focus("data");
+          const valueFocus = dataFocus
+            .to<{ deep: { value: number } }>("nested")
+            .to<{ value: number }>("deep")
+            .to<number>("value");
+
+          const [getValue, setValue] = valueFocus;
+          return { getValue, setValue };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.actions.getValue()).toBe(42);
+
+      instance.actions.setValue(100);
+      expect(instance.actions.getValue()).toBe(100);
+    });
+
+    it("should support options in to() method", () => {
+      const userStore = store({
+        state: {
+          user: {
+            profile: null as { name: string } | null,
+          },
+        },
+        setup: (ctx) => {
+          const userFocus = ctx.focus("user");
+          const profileFocus = userFocus.to<{ name: string }>("profile", {
+            fallback: () => ({ name: "Guest" }),
+          });
+          const [getProfile] = profileFocus;
+
+          return { getProfile };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      // Should return fallback when profile is null
+      expect(instance.actions.getProfile()).toEqual({ name: "Guest" });
+    });
+
+    it("should have on() method on child focus", () => {
+      const userStore = store({
+        state: {
+          user: {
+            name: "John",
+          },
+        },
+        setup: (ctx) => {
+          const userFocus = ctx.focus("user");
+          const nameFocus = userFocus.to<string>("name");
+          const [getName, setName] = nameFocus;
+
+          return {
+            getName,
+            setName,
+            onNameChange: (cb: (e: { next: string; prev: string }) => void) =>
+              nameFocus.on(cb),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      const listener = vi.fn();
+      instance.actions.onNameChange(listener);
+
+      instance.actions.setName("Jane");
+
+      expect(listener).toHaveBeenCalledWith({
+        next: "Jane",
+        prev: "John",
+      });
+    });
+  });
 });

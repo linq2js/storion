@@ -9,6 +9,30 @@ import { createRoot, type Root } from "react-dom/client";
 import { DevtoolsPanel, type PanelPosition } from "./DevtoolsPanel";
 import type { DevtoolsController } from "../devtools/types";
 
+// ============================================================================
+// Load stored settings (must match DevtoolsPanel storage)
+// ============================================================================
+
+const STORAGE_KEY = "storion-devtools-settings";
+
+interface StoredSettings {
+  position?: PanelPosition;
+  collapsed?: boolean;
+  size?: number;
+}
+
+function loadStoredSettings(): StoredSettings {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // Ignore errors
+  }
+  return {};
+}
+
 export interface MountOptions {
   /** Container element to mount into. If string, will query for element. */
   container?: HTMLElement | string;
@@ -24,9 +48,7 @@ export interface MountOptions {
 
 let panelRoot: Root | null = null;
 let panelContainer: HTMLElement | null = null;
-let floatingButton: HTMLElement | null = null;
 let currentPosition: PanelPosition = "left";
-let expandCallback: (() => void) | null = null;
 let originalBodyPadding: string = "";
 
 /**
@@ -57,70 +79,13 @@ function resetBodyPadding() {
   originalBodyPadding = "";
 }
 
-/**
- * Create or update the floating button
- */
-function createFloatingButton(zIndex: number, onClick: () => void) {
-  if (floatingButton) {
-    floatingButton.remove();
-  }
-
-  floatingButton = document.createElement("button");
-  floatingButton.id = "storion-devtools-fab";
-
-  Object.assign(floatingButton.style, {
-    position: "fixed",
-    bottom: "16px",
-    left: "16px",
-    width: "32px",
-    height: "32px",
-    borderRadius: "50%",
-    background: "linear-gradient(135deg, #a855f7 0%, #6366f1 100%)",
-    border: "none",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-    cursor: "pointer",
-    zIndex: String(zIndex),
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "white",
-    fontSize: "14px",
-    fontWeight: "600",
-    transition: "transform 0.15s ease, box-shadow 0.15s ease",
-  });
-
-  floatingButton.innerHTML = "⚡";
-  floatingButton.title = "Open Storion Devtools";
-
-  floatingButton.addEventListener("mouseenter", () => {
-    if (floatingButton) {
-      floatingButton.style.transform = "scale(1.1)";
-      floatingButton.style.boxShadow = "0 4px 12px rgba(0,0,0,0.4)";
-    }
-  });
-
-  floatingButton.addEventListener("mouseleave", () => {
-    if (floatingButton) {
-      floatingButton.style.transform = "scale(1)";
-      floatingButton.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
-    }
-  });
-
-  floatingButton.addEventListener("click", onClick);
-  document.body.appendChild(floatingButton);
-}
-
-/**
- * Show/hide floating button
- */
-function setFloatingButtonVisible(visible: boolean) {
-  if (floatingButton) {
-    floatingButton.style.display = visible ? "flex" : "none";
-  }
-}
+// Track if panel was previously collapsed (for fade-in effect)
+let wasCollapsed = false;
 
 /**
  * Update container position and size.
+ * When collapsed, move panel off-screen and show floating button.
+ * When expanding, fade in the panel.
  */
 function updateContainerPosition(
   position: PanelPosition,
@@ -130,17 +95,10 @@ function updateContainerPosition(
   if (!panelContainer) return;
 
   currentPosition = position;
+  const isExpanding = wasCollapsed && !collapsed;
+  wasCollapsed = collapsed;
 
-  if (collapsed) {
-    panelContainer.style.display = "none";
-    setFloatingButtonVisible(true);
-    return;
-  }
-
-  panelContainer.style.display = "block";
-  setFloatingButtonVisible(false);
-
-  // Reset all position styles
+  // Reset all position styles first
   panelContainer.style.top = "";
   panelContainer.style.right = "";
   panelContainer.style.bottom = "";
@@ -151,6 +109,26 @@ function updateContainerPosition(
   panelContainer.style.borderRight = "";
   panelContainer.style.borderBottom = "";
   panelContainer.style.borderLeft = "";
+
+  if (collapsed) {
+    // Hide panel off-screen (no transition when hiding)
+    panelContainer.style.transition = "none";
+    panelContainer.style.opacity = "1";
+    panelContainer.style.left = "-9999px";
+    panelContainer.style.top = "0";
+    panelContainer.style.width = `${size}px`;
+    panelContainer.style.height = "100vh";
+    updateBodyPadding(position, size, true);
+    return;
+  }
+
+  // Show panel normally
+
+  // If expanding, start invisible for fade-in
+  if (isExpanding) {
+    panelContainer.style.transition = "none";
+    panelContainer.style.opacity = "0";
+  }
 
   if (position === "left") {
     panelContainer.style.top = "0";
@@ -168,38 +146,37 @@ function updateContainerPosition(
     panelContainer.style.borderTop = "1px solid #27272a";
   }
 
+  // Trigger fade-in after position is set
+  if (isExpanding) {
+    // Force reflow to ensure transition works
+    void panelContainer.offsetHeight;
+    panelContainer.style.transition = "opacity 0.2s ease-out";
+    panelContainer.style.opacity = "1";
+  }
+
   // Update body padding for bottom position
   updateBodyPadding(position, size, collapsed);
 }
 
 /**
- * Update container size only.
+ * Update container size only (used for resize during drag).
+ * Only updates size when not collapsed.
  */
-function updateContainerSize(size: number, collapsed: boolean = false) {
+function updateContainerSize(size: number) {
   if (!panelContainer) return;
 
-  // Always keep container visible - collapsed state is handled by CSS
-  panelContainer.style.display = "block";
-  setFloatingButtonVisible(false);
+  // Disable transitions for smooth resizing
+  panelContainer.style.transition = "none";
 
-  if (collapsed) {
-    // Collapsed: narrow strip for header only
-    if (currentPosition === "bottom") {
-      panelContainer.style.height = "40px";
-    } else {
-      panelContainer.style.width = "40px";
-    }
+  // Only update visible dimensions
+  if (currentPosition === "bottom") {
+    panelContainer.style.height = `${size}px`;
   } else {
-    // Expanded: full size
-    if (currentPosition === "bottom") {
-      panelContainer.style.height = `${size}px`;
-    } else {
-      panelContainer.style.width = `${size}px`;
-    }
+    panelContainer.style.width = `${size}px`;
   }
 
   // Update body padding for bottom position
-  updateBodyPadding(currentPosition, size, collapsed);
+  updateBodyPadding(currentPosition, size, false);
 }
 
 /**
@@ -220,13 +197,15 @@ function updateContainerSize(size: number, collapsed: boolean = false) {
  * ```
  */
 export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
-  const {
-    container,
-    position = "left",
-    size: initialSize = 360,
-    zIndex = 999999,
-    collapsed: initialCollapsed = false,
-  } = options;
+  // Load stored settings first - stored settings take priority over options
+  const stored = loadStoredSettings();
+
+  const { container, zIndex = 999999 } = options;
+
+  // Stored settings take priority, then options, then defaults
+  const position: PanelPosition = stored.position ?? options.position ?? "left";
+  const initialSize = stored.size ?? options.size ?? 360;
+  const initialCollapsed = stored.collapsed ?? options.collapsed ?? false;
 
   currentPosition = position;
 
@@ -251,10 +230,6 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
   if (panelContainer && !container) {
     panelContainer.remove();
     panelContainer = null;
-  }
-  if (floatingButton) {
-    floatingButton.remove();
-    floatingButton = null;
   }
 
   // Get or create container
@@ -281,24 +256,23 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
       background: "#09090b",
       boxShadow: "0 0 20px rgba(0,0,0,0.5)",
       overflow: "hidden",
-      transition: "width 0.15s ease, height 0.15s ease",
       display: "block",
     };
 
-    const collapsedSize = "40px";
+    // Initial position - will be updated by updateContainerPosition
     const positionStyles: Record<string, Record<string, string>> = {
       left: {
         top: "0",
-        left: "0",
-        width: initialCollapsed ? collapsedSize : `${initialSize}px`,
+        left: initialCollapsed ? "-9999px" : "0",
+        width: `${initialSize}px`,
         height: "100vh",
         borderRight: "1px solid #27272a",
       },
       bottom: {
-        bottom: "0",
+        bottom: initialCollapsed ? "-9999px" : "0",
         left: "0",
-        right: "0",
-        height: initialCollapsed ? collapsedSize : `${initialSize}px`,
+        right: "",
+        height: `${initialSize}px`,
         width: "100%",
         borderTop: "1px solid #27272a",
       },
@@ -315,44 +289,21 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
   let currentSize = initialSize;
   let isCollapsed = initialCollapsed;
 
-  // Create expand callback for floating button
-  expandCallback = () => {
-    isCollapsed = false;
-    updateContainerSize(currentSize, false);
-    // Re-render with collapsed = false
-    if (panelRoot) {
-      panelRoot.render(
-        <DevtoolsPanel
-          controller={controller}
-          position={currentPosition}
-          initialSize={currentSize}
-          initialCollapsed={false}
-          onCollapsedChange={handleCollapsedChange}
-          onPositionChange={handlePositionChange}
-          onResize={handleResize}
-        />
-      );
-    }
-  };
+  // Initialize wasCollapsed for fade-in effect
+  wasCollapsed = initialCollapsed;
 
-  // Create floating button
-  createFloatingButton(zIndex, () => expandCallback?.());
-
-  // Floating button is no longer used - panel always visible in collapsed state
-  setFloatingButtonVisible(false);
-
-  // Handle resize from panel
+  // Handle resize from panel (only when not collapsed)
   const handleResize = (newSize: number) => {
     currentSize = newSize;
     if (!isCollapsed) {
-      updateContainerSize(newSize, false);
+      updateContainerSize(newSize);
     }
   };
 
   // Handle collapse from panel
   const handleCollapsedChange = (collapsed: boolean) => {
     isCollapsed = collapsed;
-    updateContainerSize(currentSize, collapsed);
+    updateContainerPosition(currentPosition, currentSize, collapsed);
   };
 
   // Handle position change from panel
@@ -375,8 +326,41 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
     />
   );
 
+  // Set up global error listeners
+  const handleWindowError = (event: ErrorEvent) => {
+    controller.recordEvent("error", "window", event.message, {
+      message: event.message,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+      stack: event.error?.stack,
+    });
+  };
+
+  const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+    const reason = event.reason;
+    const message =
+      reason instanceof Error
+        ? reason.message
+        : typeof reason === "string"
+        ? reason
+        : "Unhandled promise rejection";
+
+    controller.recordEvent("error", "window", message, {
+      message,
+      stack: reason instanceof Error ? reason.stack : undefined,
+      reason,
+    });
+  };
+
+  window.addEventListener("error", handleWindowError);
+  window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
   // Return unmount function
   return () => {
+    window.removeEventListener("error", handleWindowError);
+    window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+
     if (panelRoot) {
       panelRoot.unmount();
       panelRoot = null;
@@ -385,12 +369,7 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
       panelContainer.remove();
       panelContainer = null;
     }
-    if (floatingButton) {
-      floatingButton.remove();
-      floatingButton = null;
-    }
     resetBodyPadding();
-    expandCallback = null;
   };
 }
 
@@ -406,12 +385,7 @@ export function unmountDevtoolsPanel(): void {
     panelContainer.remove();
     panelContainer = null;
   }
-  if (floatingButton) {
-    floatingButton.remove();
-    floatingButton = null;
-  }
   resetBodyPadding();
-  expandCallback = null;
 }
 
 /**

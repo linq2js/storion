@@ -39,6 +39,8 @@ export interface AsyncIdleStateFresh {
   data: undefined;
   error: undefined;
   timestamp: undefined;
+  /** @internal Request ID for concurrency control */
+  __requestId?: AsyncRequestId;
   toJSON?(): SerializedAsyncState<undefined>;
 }
 
@@ -48,7 +50,10 @@ export interface AsyncPendingStateFresh<T = unknown> {
   data: undefined;
   error: undefined;
   timestamp: undefined;
+  /** @internal Key for Suspense promise tracking */
   __key?: AsyncKey<T>;
+  /** @internal Request ID for concurrency control */
+  __requestId?: AsyncRequestId;
   toJSON?(): SerializedAsyncState<T>;
 }
 
@@ -58,6 +63,8 @@ export interface AsyncErrorStateFresh {
   data: undefined;
   error: Error;
   timestamp: undefined;
+  /** @internal Request ID for concurrency control */
+  __requestId?: AsyncRequestId;
   toJSON?(): SerializedAsyncState<undefined>;
 }
 
@@ -68,6 +75,8 @@ export interface AsyncIdleStateStale<T = unknown> {
   data: T;
   error: undefined;
   timestamp: undefined;
+  /** @internal Request ID for concurrency control */
+  __requestId?: AsyncRequestId;
   toJSON?(): SerializedAsyncState<T>;
 }
 
@@ -77,7 +86,10 @@ export interface AsyncPendingStateStale<T = unknown> {
   data: T;
   error: undefined;
   timestamp: undefined;
+  /** @internal Key for Suspense promise tracking */
   __key?: AsyncKey<T>;
+  /** @internal Request ID for concurrency control */
+  __requestId?: AsyncRequestId;
   toJSON?(): SerializedAsyncState<T>;
 }
 
@@ -87,6 +99,8 @@ export interface AsyncErrorStateStale<T = unknown> {
   data: T;
   error: Error;
   timestamp: undefined;
+  /** @internal Request ID for concurrency control */
+  __requestId?: AsyncRequestId;
   toJSON?(): SerializedAsyncState<T>;
 }
 
@@ -115,6 +129,8 @@ export interface AsyncSuccessState<T = unknown> {
   data: T;
   error: undefined;
   timestamp: number;
+  /** @internal Request ID for concurrency control */
+  __requestId?: AsyncRequestId;
   toJSON?(): SerializedAsyncState<T>;
 }
 
@@ -132,6 +148,12 @@ export type AsyncErrorState<
  * Used internally for React Suspense support.
  */
 export type AsyncKey<T = unknown> = object & { __brand?: T };
+
+/**
+ * Request ID for detecting external state modifications.
+ * Used to prevent stale async updates from overwriting rolled-back state.
+ */
+export type AsyncRequestId = object;
 
 // ===== AsyncContext for Handler =====
 

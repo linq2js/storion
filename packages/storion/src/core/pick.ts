@@ -23,20 +23,20 @@ let pickIdCounter = 0;
  * @example
  * ```ts
  * // Without pick: re-renders when ANY profile property changes
- * useStore(({ resolve }) => {
- *   const [state] = resolve(userStore);
+ * useStore(({ get }) => {
+ *   const [state] = get(userStore);
  *   return { name: state.profile.name }; // tracks "profile"
  * });
  *
  * // With pick: re-renders only when profile.name changes
- * useStore(({ resolve }) => {
- *   const [state] = resolve(userStore);
+ * useStore(({ get }) => {
+ *   const [state] = get(userStore);
  *   return { name: pick(() => state.profile.name) };
  * });
  *
  * // With custom equality
- * useStore(({ resolve }) => {
- *   const [state] = resolve(userStore);
+ * useStore(({ get }) => {
+ *   const [state] = get(userStore);
  *   return {
  *     profile: pick(
  *       () => ({ name: state.profile.name, age: state.profile.age }),

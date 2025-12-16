@@ -21,6 +21,7 @@
 
 export {
   DevtoolsPanel,
+  clearDevtoolsSettings,
   type DevtoolsPanelProps,
   type PanelPosition,
 } from "./DevtoolsPanel";

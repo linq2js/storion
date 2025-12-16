@@ -4,6 +4,42 @@
 
 import type { StoreInstance } from "../types";
 
+// =============================================================================
+// Event Types
+// =============================================================================
+
+/**
+ * Types of events tracked by devtools.
+ */
+export type DevtoolsEventType =
+  | "change"
+  | "create"
+  | "dispose"
+  | "dispatch"
+  | "error";
+
+/**
+ * A devtools event entry.
+ */
+export interface DevtoolsEvent {
+  /** Unique event ID */
+  id: number;
+  /** Timestamp when event occurred */
+  timestamp: number;
+  /** Event type */
+  type: DevtoolsEventType;
+  /** Target - "window" or store ID */
+  target: string;
+  /** Extra info (action name, error message, changed keys, etc.) */
+  extra?: string;
+  /** Full data for copy (error stack, state diff, etc.) */
+  data?: unknown;
+}
+
+// =============================================================================
+// Snapshot Types
+// =============================================================================
+
 /**
  * A snapshot of store state at a point in time.
  */
@@ -74,6 +110,24 @@ export interface DevtoolsController {
 
   /** Max history entries per store */
   maxHistory: number;
+
+  // Event-related methods
+  /** Get all tracked events */
+  getEvents(): DevtoolsEvent[];
+
+  /** Clear all events */
+  clearEvents(): void;
+
+  /** Record an event */
+  recordEvent(
+    type: DevtoolsEventType,
+    target: string,
+    extra?: string,
+    data?: unknown
+  ): void;
+
+  /** Max events to keep */
+  maxEvents: number;
 }
 
 /**

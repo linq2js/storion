@@ -14,6 +14,7 @@ import type {
   MapSettledResult,
   RaceResult,
   AsyncKey,
+  AsyncRequestId,
   SerializedAsyncState,
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
@@ -131,6 +132,10 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     const abortController = new AbortController();
     let isCancelled = false;
 
+    // Create unique request ID for this dispatch
+    // Used to detect external state modifications (e.g., devtools rollback)
+    const requestId: AsyncRequestId = {};
+
     // Create cancel function
     const cancel = () => {
       if (!isCancelled) {
@@ -155,6 +160,24 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         ? prevState.data
         : undefined;
 
+    // Check if state was externally modified (only relevant when autoCancel is true)
+    // With autoCancel: false, concurrent updates are intentional, so skip this check
+    const autoCancel = options?.autoCancel !== false;
+
+    // Helper to check if state was externally modified
+    // Returns true if state was changed by something other than this async action
+    const isStateExternallyModified = (): boolean => {
+      if (!autoCancel) {
+        // When autoCancel is false, concurrent updates are allowed
+        // Only detect true external modifications (no __requestId at all)
+        const currentState = getState();
+        return currentState.__requestId === undefined;
+      }
+      // When autoCancel is true, any different requestId means our state is stale
+      const currentState = getState();
+      return currentState.__requestId !== requestId;
+    };
+
     // Execute with retry logic
     const retryCount = getRetryCount(options?.retry);
 
@@ -176,6 +199,13 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
             throw new DOMException("Aborted", "AbortError");
           }
 
+          // Check if state was externally modified (e.g., devtools rollback)
+          if (isStateExternallyModified()) {
+            // State was changed externally, don't overwrite
+            // Still return result to the caller
+            return result;
+          }
+
           // Success - update state (preserve mode)
           setState({
             status: "success",
@@ -183,6 +213,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
             data: result,
             error: undefined,
             timestamp: Date.now(),
+            __requestId: requestId,
             toJSON: stateToJSON,
           } as AsyncState<T, M>);
 
@@ -211,6 +242,13 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         }
       }
 
+      // Check if state was externally modified before setting error state
+      if (isStateExternallyModified()) {
+        // State was changed externally, don't overwrite
+        // Still throw error to the caller
+        throw lastError;
+      }
+
       // All retries exhausted - update state with error
       // In stale mode, keep data; in fresh mode, data is undefined
       setState({
@@ -219,6 +257,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         data: mode === "stale" ? staleData : undefined,
         error: lastError!,
         timestamp: undefined,
+        __requestId: requestId,
         toJSON: stateToJSON,
       } as AsyncState<T, M>);
 
@@ -241,7 +280,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     // Store promise in cache for Suspense support
     pendingPromises.set(asyncKey, promise);
 
-    // Update state to pending with key (after promise is created)
+    // Update state to pending with key and requestId
     // In stale mode, preserve data; in fresh mode, data is undefined
     setState({
       status: "pending",
@@ -250,6 +289,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
       error: undefined,
       timestamp: undefined,
       __key: asyncKey,
+      __requestId: requestId,
       toJSON: stateToJSON,
     } as AsyncState<T, M>);
 
@@ -312,6 +352,9 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     const currentState = getState();
     const mode = currentState.mode;
 
+    // Create new requestId to invalidate any in-flight requests
+    const resetRequestId: AsyncRequestId = {};
+
     // In stale mode, keep data on reset; in fresh mode, clear it
     if (mode === "stale") {
       setState({
@@ -320,6 +363,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         data: currentState.data,
         error: undefined,
         timestamp: undefined,
+        __requestId: resetRequestId,
         toJSON: stateToJSON,
       } as AsyncState<T, M>);
     } else {
@@ -329,6 +373,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         data: undefined,
         error: undefined,
         timestamp: undefined,
+        __requestId: resetRequestId,
         toJSON: stateToJSON,
       } as AsyncState<T, M>);
     }

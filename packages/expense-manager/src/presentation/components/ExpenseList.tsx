@@ -96,8 +96,8 @@ interface ExpenseRowProps {
 
 const ExpenseRow = memo(function ExpenseRow({ expense }: ExpenseRowProps) {
   const category = getCategory(expense.category);
-  const { onEdit, onDelete } = useStore(({ resolve }) => {
-    const [, actions] = resolve(uiStore);
+  const { onEdit, onDelete } = useStore(({ get }) => {
+    const [, actions] = get(uiStore);
     return {
       onEdit: () => actions.openEditModal(expense),
       onDelete: () => actions.openDeleteModal(expense),

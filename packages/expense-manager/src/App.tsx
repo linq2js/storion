@@ -27,8 +27,8 @@ const repository: ExpenseRepository = new ExpenseRepositoryImpl(
 
 export function App() {
   const { expenses, isLoading, error, load, clearError } = useStore(
-    ({ resolve }) => {
-      const [state, actions] = resolve(expenseStore);
+    ({ get }) => {
+      const [state, actions] = get(expenseStore);
       return {
         expenses: state.expenses,
         isLoading: state.isLoading,
@@ -39,16 +39,16 @@ export function App() {
     }
   );
 
-  const { dateRange, category } = useStore(({ resolve }) => {
-    const [state] = resolve(filterStore);
+  const { dateRange, category } = useStore(({ get }) => {
+    const [state] = get(filterStore);
     return {
       dateRange: state.dateRange,
       category: state.category,
     };
   });
 
-  const { activeModal, activeView } = useStore(({ resolve }) => {
-    const [state] = resolve(uiStore);
+  const { activeModal, activeView } = useStore(({ get }) => {
+    const [state] = get(uiStore);
     return { activeModal: state.activeModal, activeView: state.activeView };
   });
 

@@ -9,9 +9,9 @@ import { expenseStore, filterStore } from "../stores";
 import { formatCompact } from "./StatsPanel";
 
 export const CategoryBreakdown = memo(function CategoryBreakdown() {
-  const { breakdown } = useStore(({ resolve }) => {
-    const [expenseState] = resolve(expenseStore);
-    const [filterState] = resolve(filterStore);
+  const { breakdown } = useStore(({ get }) => {
+    const [expenseState] = get(expenseStore);
+    const [filterState] = get(filterStore);
     return {
       breakdown: pick(() => {
         const filtered = ExpenseCalculator.filterByDateRange(
@@ -51,8 +51,8 @@ const CategoryBar = memo(function CategoryBar({
   delay?: number;
 }) {
   const category = getCategory(item.category);
-  const { onClick } = useStore(({ resolve }) => {
-    const [, actions] = resolve(filterStore);
+  const { onClick } = useStore(({ get }) => {
+    const [, actions] = get(filterStore);
     return {
       onClick: () => actions.setCategory(item.category),
     };

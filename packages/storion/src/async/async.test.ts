@@ -280,6 +280,131 @@ describe("async", () => {
     });
   });
 
+  describe("external modification detection", () => {
+    it("should not update state if externally modified during dispatch (devtools rollback)", async () => {
+      let state = async.fresh<string>();
+
+      const getter = () => state;
+      const setter = (
+        valueOrReducer:
+          | AsyncState<string, "fresh">
+          | ((prev: AsyncState<string, "fresh">) => AsyncState<string, "fresh">)
+      ) => {
+        if (typeof valueOrReducer === "function") {
+          state = valueOrReducer(state);
+        } else {
+          state = valueOrReducer;
+        }
+      };
+
+      const focus = [getter, setter] as Focus<AsyncState<string, "fresh">>;
+      Object.defineProperty(focus, "on", { value: () => () => {} });
+
+      let resolveHandler: (value: string) => void;
+
+      const { dispatch } = async(focus, async () => {
+        return new Promise<string>((resolve) => {
+          resolveHandler = resolve;
+        });
+      });
+
+      // Start dispatch
+      const promise = dispatch();
+      expect(state.status).toBe("pending");
+      expect(state.__requestId).toBeDefined();
+
+      // Simulate external modification (devtools rollback)
+      // External code sets state without __requestId
+      state = {
+        status: "success",
+        mode: "fresh",
+        data: "rolled-back-data",
+        error: undefined,
+        timestamp: Date.now(),
+        // No __requestId - indicates external modification
+      };
+
+      // Complete the handler
+      resolveHandler!("handler-result");
+      const result = await promise;
+
+      // Handler still returns its result
+      expect(result).toBe("handler-result");
+
+      // But state was NOT overwritten (external modification preserved)
+      expect(state.data).toBe("rolled-back-data");
+    });
+
+    it("should update state normally when not externally modified", async () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+
+      const { dispatch } = async(focus, async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return "handler-result";
+      });
+
+      const promise = dispatch();
+      expect(getState().status).toBe("pending");
+
+      await promise;
+
+      // State should be updated
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("handler-result");
+    });
+
+    it("should skip error state update if externally modified", async () => {
+      let state = async.fresh<string>();
+
+      const getter = () => state;
+      const setter = (
+        valueOrReducer:
+          | AsyncState<string, "fresh">
+          | ((prev: AsyncState<string, "fresh">) => AsyncState<string, "fresh">)
+      ) => {
+        if (typeof valueOrReducer === "function") {
+          state = valueOrReducer(state);
+        } else {
+          state = valueOrReducer;
+        }
+      };
+
+      const focus = [getter, setter] as Focus<AsyncState<string, "fresh">>;
+      Object.defineProperty(focus, "on", { value: () => () => {} });
+
+      let rejectHandler: (error: Error) => void;
+
+      const { dispatch } = async(focus, async () => {
+        return new Promise<string>((_, reject) => {
+          rejectHandler = reject;
+        });
+      });
+
+      // Start dispatch
+      const promise = dispatch();
+      expect(state.status).toBe("pending");
+
+      // Simulate external modification
+      state = {
+        status: "idle",
+        mode: "fresh",
+        data: undefined,
+        error: undefined,
+        timestamp: undefined,
+        // No __requestId
+      };
+
+      // Handler throws error
+      rejectHandler!(new Error("handler error"));
+
+      // Promise should reject
+      await expect(promise).rejects.toThrow("handler error");
+
+      // But state was NOT changed to error (external modification preserved)
+      expect(state.status).toBe("idle");
+    });
+  });
+
   describe("ensure", () => {
     it("should dispatch if deps changed", async () => {
       const [focus] = createMockFocus(async.fresh<string>());

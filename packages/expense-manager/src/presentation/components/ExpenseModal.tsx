@@ -13,9 +13,9 @@ export const ExpenseModal = memo(function ExpenseModal({
   repository,
 }: ExpenseModalProps) {
   const { activeModal, selectedExpense, closeModal, add, update } = useStore(
-    ({ resolve }) => {
-      const [uiState, uiActions] = resolve(uiStore);
-      const [, expenseActions] = resolve(expenseStore);
+    ({ get }) => {
+      const [uiState, uiActions] = get(uiStore);
+      const [, expenseActions] = get(expenseStore);
 
       return {
         activeModal: uiState.activeModal,

@@ -12,7 +12,7 @@ importers:
         specifier: ^5.3.3
         version: 5.9.3
 
-  examples/expense-manager:
+  packages/expense-manager:
     dependencies:
       react:
         specifier: ^19.0.0
@@ -22,7 +22,7 @@ importers:
         version: 19.2.3(react@19.2.3)
       storion:
         specifier: workspace:*
-        version: link:../../packages/storion
+        version: link:../storion
       uuid:
         specifier: ^11.0.3
         version: 11.1.0
@@ -67,7 +67,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.2)(jsdom@25.0.1)(terser@5.44.1)
 
-  packages/expense-manager:
+  packages/feature-showcase:
     dependencies:
       react:
         specifier: ^19.0.0
@@ -78,9 +78,6 @@ importers:
       storion:
         specifier: workspace:*
         version: link:../storion
-      uuid:
-        specifier: ^11.0.3
-        version: 11.1.0
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -94,9 +91,6 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.2
         version: 19.2.3(@types/react@19.2.7)
-      '@types/uuid':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@6.4.1(@types/node@22.19.2)(jiti@1.21.7)(terser@5.44.1))
