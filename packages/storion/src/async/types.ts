@@ -192,6 +192,21 @@ export interface AsyncContext {
   safe<TArgs extends unknown[], TReturn>(
     callback: (...args: TArgs) => TReturn
   ): (...args: TArgs) => TReturn | undefined;
+
+  /**
+   * Cancel the current async operation.
+   * Useful for implementing timeouts.
+   *
+   * @example
+   * async(focus, async (ctx) => {
+   *   // Timeout after 5 seconds
+   *   setTimeout(ctx.cancel, 5000);
+   *
+   *   const data = await ctx.safe(fetch('/api/slow'));
+   *   return data;
+   * });
+   */
+  cancel(): void;
 }
 
 // ===== Handler Type =====

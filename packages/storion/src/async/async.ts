@@ -130,6 +130,13 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     // Used to detect external state modifications (e.g., devtools rollback)
     const requestId: AsyncRequestId = {};
 
+    // Create a promise that rejects when cancelled
+    // This ensures dispatch() rejects immediately on cancel, even if handler is stuck
+    let rejectOnCancel: ((error: Error) => void) | null = null;
+    const cancelPromise = new Promise<never>((_, reject) => {
+      rejectOnCancel = reject;
+    });
+
     // Create cancel function
     const cancel = () => {
       if (!isCancelled) {
@@ -137,6 +144,8 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         abortController.abort();
         // Clean up promise from cache
         pendingPromises.delete(asyncKey);
+        // Reject the cancel promise to ensure dispatch() rejects immediately
+        rejectOnCancel?.(new DOMException("Aborted", "AbortError"));
       }
     };
 
@@ -220,6 +229,8 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
                 return undefined;
               };
             },
+
+            cancel,
           };
 
           // Execute handler - always async via invoke
@@ -273,6 +284,11 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         }
       }
 
+      // All retries exhausted - abort the signal to cancel any pending ctx.safe() operations
+      if (!abortController.signal.aborted) {
+        abortController.abort();
+      }
+
       // Check if state was externally modified before setting error state
       if (isStateExternallyModified()) {
         // State was changed externally, don't overwrite
@@ -305,11 +321,14 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
       throw lastError;
     };
 
-    // Start execution and create cancellable promise
-    const promise = executeWithRetry();
+    // Start execution and race with cancellation
+    // This ensures dispatch() rejects immediately on cancel, even if handler is stuck
+    const executionPromise = executeWithRetry();
+    const promise = Promise.race([executionPromise, cancelPromise]);
 
-    // Store promise in cache for Suspense support
-    pendingPromises.set(asyncKey, promise);
+    // Store execution promise in cache for Suspense support
+    // (not the raced promise, as we want Suspense to track actual execution)
+    pendingPromises.set(asyncKey, executionPromise);
 
     // Update state to pending with key and requestId
     // In stale mode, preserve data; in fresh mode, data is undefined

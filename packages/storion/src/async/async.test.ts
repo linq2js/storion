@@ -345,6 +345,54 @@ describe("async", () => {
       // All three handlers should have been called
       expect(handler).toHaveBeenCalledTimes(3);
     });
+
+    it("should allow cancellation from within handler via ctx.cancel()", async () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+
+      const { dispatch } = async(focus, async (ctx) => {
+        // Simulate timeout - cancel after 20ms
+        setTimeout(ctx.cancel, 20);
+
+        // This would normally take 100ms, but cancel happens at 20ms
+        // The dispatch promise rejects immediately on cancel
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        return "done";
+      });
+
+      const promise = dispatch();
+      expect(getState().status).toBe("pending");
+
+      // Promise should reject immediately when ctx.cancel() is called (at 20ms)
+      // Not waiting for the 100ms timeout to complete
+      const start = Date.now();
+      await expect(promise).rejects.toThrow("Aborted");
+      const elapsed = Date.now() - start;
+
+      // Should reject in ~20ms, not 100ms
+      expect(elapsed).toBeLessThan(50);
+    });
+
+    it("should support timeout pattern with ctx.cancel()", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+
+      const { dispatch } = async(focus, async (ctx) => {
+        // Timeout after 10ms
+        const timeoutId = setTimeout(ctx.cancel, 10);
+
+        try {
+          // Fast operation - completes before timeout
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          clearTimeout(timeoutId);
+          return "success";
+        } catch {
+          return "cancelled";
+        }
+      });
+
+      const result = await dispatch();
+      expect(result).toBe("success");
+    });
   });
 
   describe("external modification detection", () => {

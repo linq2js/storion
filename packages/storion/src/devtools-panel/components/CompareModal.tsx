@@ -6,6 +6,7 @@
 
 import { useMemo } from "react";
 import type { StateSnapshot } from "../../devtools/types";
+import { formatTime } from "../utils";
 import { IconCancel } from "./icons";
 
 export interface CompareModalProps {
@@ -85,7 +86,7 @@ export function CompareModal({
       <div className="sdt-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sdt-modal-header">
           <span className="sdt-modal-title">
-            Compare: {storeId} [{snapshot.id}] vs Current
+            Compare: {storeId} @ {formatTime(snapshot.timestamp)} vs Current
           </span>
           <button className="sdt-modal-close" onClick={onClose}>
             <IconCancel />

@@ -69,11 +69,11 @@ export const StoreEntry = memo(function StoreEntry({
   const initialSnapshot = entry.history[0];
   const recentEntries = entry.history.slice(1); // All entries except initial
   const recentDisplayCount = Math.max(0, displayCount - 1); // Reserve 1 slot for initial
-  const displayRecentEntries = recentEntries.slice(-recentDisplayCount).reverse();
+  const displayRecentEntries = recentEntries
+    .slice(-recentDisplayCount)
+    .reverse();
   const displayHistory =
-    totalHistory > 0
-      ? [...displayRecentEntries, initialSnapshot]
-      : [];
+    totalHistory > 0 ? [...displayRecentEntries, initialSnapshot] : [];
 
   // Get changed props by comparing with previous snapshot
   const getChangedProps = useCallback(
@@ -336,4 +336,3 @@ export const StoreEntry = memo(function StoreEntry({
     </div>
   );
 });
-
