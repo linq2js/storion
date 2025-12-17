@@ -706,7 +706,7 @@ export const panelStyles = `
      ============================================ */
   .sdt-resize-handle {
     position: absolute;
-    background: transparent;
+    background: ${colors.border.subtle};
     z-index: 10;
     transition: background 0.15s ease;
     /* Touch-friendly: add invisible padding for larger hit area */

@@ -258,7 +258,9 @@ export const StoreEntry = memo(function StoreEntry({
                         className="sdt-history-action-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onRevert(snapshot.id);
+                          if (confirm("Revert state to this snapshot?")) {
+                            onRevert(snapshot.id);
+                          }
                         }}
                         title="Revert to this state"
                       >
