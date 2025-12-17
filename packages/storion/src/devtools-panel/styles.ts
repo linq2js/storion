@@ -901,7 +901,8 @@ export const panelStyles = `
     color: ${colors.text.muted};
     font-size: 10px;
     flex-shrink: 0;
-    width: 56px;
+    width: 80px;
+    margin-right: 4px;
   }
 
   .sdt-event-type {

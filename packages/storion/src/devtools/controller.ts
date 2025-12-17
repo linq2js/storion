@@ -177,6 +177,9 @@ export function createDevtoolsController(
       }
     }
 
+    // Skip if no actual changes
+    if (changedKeys.length === 0) return;
+
     entry.state = state;
     const snapshot = createSnapshot(state, action, actionArgs);
     addSnapshot(entry, snapshot);

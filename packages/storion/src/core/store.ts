@@ -29,6 +29,7 @@ import {
   trackWrite,
   hasReadHook,
   hasWriteHook,
+  batch,
 } from "./tracking";
 import { resolveEquality, strictEqual } from "./equality";
 import { generateSpecName, generateStoreId } from "./generator";
@@ -586,9 +587,12 @@ export function createStoreInstance<
       }
       if (changedProps.length > 0) {
         currentState = nextState;
-        for (const { key, oldValue, newValue } of changedProps) {
-          handlePropertyChange(key as string, oldValue, newValue);
-        }
+        // Batch notifications to emit only once to global subscribers
+        batch(() => {
+          for (const { key, oldValue, newValue } of changedProps) {
+            handlePropertyChange(key as string, oldValue, newValue);
+          }
+        });
       }
       return;
     }
@@ -617,10 +621,12 @@ export function createStoreInstance<
     // Only update if there are actual changes after equality checks
     if (changedProps.length > 0) {
       currentState = stableState;
-      // Trigger listeners for changed properties
-      for (const { key, oldValue, newValue } of changedProps) {
-        handlePropertyChange(key as string, oldValue, newValue);
-      }
+      // Batch notifications to emit only once to global subscribers
+      batch(() => {
+        for (const { key, oldValue, newValue } of changedProps) {
+          handlePropertyChange(key as string, oldValue, newValue);
+        }
+      });
     }
   }
 

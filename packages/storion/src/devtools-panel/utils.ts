@@ -5,31 +5,25 @@
  */
 
 /**
- * Format a timestamp to time string (HH:MM:SS)
+ * Format a timestamp to time string with milliseconds (HH:MM:SS.mmm)
  */
 export function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
-  return date.toLocaleTimeString([], {
+  const time = date.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
   });
+  const ms = String(date.getMilliseconds()).padStart(3, "0");
+  return `${time}.${ms}`;
 }
 
 /**
- * Format a timestamp to date+time string
+ * Format a timestamp to time string with milliseconds (HH:MM:SS.mmm)
  */
 export function formatDateTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  return formatTime(timestamp);
 }
 
 /**
