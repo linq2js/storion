@@ -10,6 +10,13 @@ export { StoreProvider, useContainer } from "./context";
 // Hooks
 export { useStore } from "./useStore";
 export { type LocalStoreResult } from "./useLocalStore";
+export {
+  withStore,
+  type WithStoreHook,
+  type WithStoreRender,
+  type WithStoreRenderWithRef,
+  type WithStoreOptions,
+} from "./withStore";
 
 // Shorthand
 export {

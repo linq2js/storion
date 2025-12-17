@@ -2,7 +2,7 @@
  * Tests for useStore hook.
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { act } from "@testing-library/react";
 import { wrappers } from "./strictMode";
@@ -816,7 +816,6 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(onceCallback).toHaveBeenCalledTimes(initialCallCount);
     });
 
-
     it("should run multiple once callbacks", () => {
       const counter = store({
         state: { count: 0 },
@@ -855,5 +854,20 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(callback2).toHaveBeenCalledTimes(initialCount);
       expect(callback3).toHaveBeenCalledTimes(initialCount);
     });
+  });
+
+  it("should support using hooks in selector", () => {
+    const { result } = renderHook(
+      () => {
+        return useStore(() => {
+          const [count, setCount] = useState(0);
+          return { count, setCount };
+        });
+      },
+      { wrapper: createWrapper(container()) }
+    );
+
+    expect(result.current.count).toBe(0);
+    act(() => result.current.setCount(1));
   });
 });

@@ -1,15 +1,14 @@
 /**
  * Todo Demo Component
- * Demonstrates selectors and computed values
+ * Demonstrates withStore with selectors, computed values, and React hooks
  */
-import { memo, useState } from "react";
-import { useStore, type Selector } from "storion/react";
+import { useState } from "react";
+import { withStore } from "storion/react";
 import {
   todoStore,
   sortedTodosSelector,
   todoStatsSelector,
   type Todo,
-  type TodoStats,
 } from "../stores/selectorStore";
 
 const priorityColors: Record<Todo["priority"], string> = {
@@ -18,45 +17,56 @@ const priorityColors: Record<Todo["priority"], string> = {
   low: "bg-green-500/20 text-green-400 border-green-500/30",
 };
 
-// Combined selector for all data
-const todoDataSelector: Selector<{
-  filter: "all" | "active" | "completed";
-  sortBy: "date" | "priority" | "text";
-  sortedTodos: Todo[];
-  stats: TodoStats;
-  actions: ReturnType<typeof todoStore.options.setup> extends infer A ? A : never;
-}> = ({ get, use }) => {
-  const [state, actions] = get(todoStore);
-  const sortedTodos = use(sortedTodosSelector);
-  const stats = use(todoStatsSelector);
-  return {
-    filter: state.filter,
-    sortBy: state.sortBy,
+export const TodoDemo = withStore(
+  (ctx) => {
+    // Store data via mixin
+    const [state, actions] = ctx.get(todoStore);
+    const sortedTodos = ctx.mixin(sortedTodosSelector);
+    const stats = ctx.mixin(todoStatsSelector);
+
+    // React hooks work inside withStore hook!
+    const [newTodo, setNewTodo] = useState("");
+    const [newPriority, setNewPriority] = useState<Todo["priority"]>("medium");
+
+    return {
+      filter: state.filter,
+      sortBy: state.sortBy,
+      sortedTodos,
+      stats,
+      actions,
+      newTodo,
+      setNewTodo,
+      newPriority,
+      setNewPriority,
+    };
+  },
+  ({
+    filter,
+    sortBy,
     sortedTodos,
     stats,
     actions,
-  };
-};
+    newTodo,
+    setNewTodo,
+    newPriority,
+    setNewPriority,
+  }) => {
+    const handleAddTodo = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (newTodo.trim()) {
+        actions.addTodo(newTodo.trim(), newPriority);
+        setNewTodo("");
+      }
+    };
 
-export const TodoDemo = memo(function TodoDemo() {
-  const { filter, sortBy, sortedTodos, stats, actions } = useStore(todoDataSelector);
-  const [newTodo, setNewTodo] = useState("");
-  const [newPriority, setNewPriority] = useState<Todo["priority"]>("medium");
-
-  const handleAddTodo = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newTodo.trim()) {
-      actions.addTodo(newTodo.trim(), newPriority);
-      setNewTodo("");
-    }
-  };
-
-  return (
+    return (
     <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
         <div className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 text-center">
-          <div className="text-2xl font-bold text-purple-400">{stats.total}</div>
+          <div className="text-2xl font-bold text-purple-400">
+            {stats.total}
+          </div>
           <div className="text-xs text-zinc-500">Total</div>
         </div>
         <div className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50 text-center">
@@ -169,12 +179,16 @@ export const TodoDemo = memo(function TodoDemo() {
               {todo.completed && <span className="text-xs">✓</span>}
             </button>
             <span
-              className={`flex-1 ${todo.completed ? "line-through text-zinc-500" : ""}`}
+              className={`flex-1 ${
+                todo.completed ? "line-through text-zinc-500" : ""
+              }`}
             >
               {todo.text}
             </span>
             <span
-              className={`px-2 py-0.5 rounded text-xs border ${priorityColors[todo.priority]}`}
+              className={`px-2 py-0.5 rounded text-xs border ${
+                priorityColors[todo.priority]
+              }`}
             >
               {todo.priority}
             </span>
@@ -203,5 +217,6 @@ export const TodoDemo = memo(function TodoDemo() {
         </button>
       )}
     </div>
-  );
-});
+    );
+  }
+);

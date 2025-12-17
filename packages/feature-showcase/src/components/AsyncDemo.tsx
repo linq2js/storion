@@ -1,9 +1,9 @@
 /**
  * Async Demo Component
- * Demonstrates async actions with storion/async
+ * Demonstrates async actions with storion/async and withStore pattern
  */
 import { memo } from "react";
-import { useStore } from "storion/react";
+import { withStore } from "storion/react";
 import { asyncStore } from "../stores";
 
 const LoadingSpinner = memo(function LoadingSpinner() {
@@ -61,21 +61,20 @@ const UserCard = memo(function UserCard({
   );
 });
 
-export const AsyncDemo = memo(function AsyncDemo() {
-  // Use selector to read specific values for proper tracking
-  const { selectedUserId, user, posts, actions } = useStore(({ get }) => {
-    const [state, actions] = get(asyncStore);
+export const AsyncDemo = withStore(
+  (ctx) => {
+    const [state, actions] = ctx.get(asyncStore);
     return {
       selectedUserId: state.selectedUserId,
       user: state.user,
       posts: state.posts,
       actions,
     };
-  });
+  },
+  ({ selectedUserId, user, posts, actions }) => {
+    const userIds = ["1", "2", "3", "4", "5"];
 
-  const userIds = ["1", "2", "3", "4", "5"];
-
-  return (
+    return (
     <div className="space-y-6">
       {/* User Selection */}
       <div className="flex flex-wrap gap-2">
@@ -105,10 +104,10 @@ export const AsyncDemo = memo(function AsyncDemo() {
               user.status === "pending"
                 ? "bg-yellow-500/20 text-yellow-400"
                 : user.status === "success"
-                  ? "bg-green-500/20 text-green-400"
-                  : user.status === "error"
-                    ? "bg-red-500/20 text-red-400"
-                    : "bg-zinc-500/20 text-zinc-400"
+                ? "bg-green-500/20 text-green-400"
+                : user.status === "error"
+                ? "bg-red-500/20 text-red-400"
+                : "bg-zinc-500/20 text-zinc-400"
             }`}
           >
             {user.status}
@@ -137,8 +136,8 @@ export const AsyncDemo = memo(function AsyncDemo() {
               posts.status === "pending"
                 ? "bg-yellow-500/20 text-yellow-400"
                 : posts.status === "success"
-                  ? "bg-green-500/20 text-green-400"
-                  : "bg-zinc-500/20 text-zinc-400"
+                ? "bg-green-500/20 text-green-400"
+                : "bg-zinc-500/20 text-zinc-400"
             }`}
           >
             {posts.status}
@@ -160,10 +159,9 @@ export const AsyncDemo = memo(function AsyncDemo() {
               </div>
             </div>
           ))}
-          {posts.data?.length === 0 &&
-            posts.status !== "pending" && (
-              <p className="text-zinc-500 text-center py-4">No posts yet</p>
-            )}
+          {posts.data?.length === 0 && posts.status !== "pending" && (
+            <p className="text-zinc-500 text-center py-4">No posts yet</p>
+          )}
         </div>
       </div>
 
@@ -189,5 +187,6 @@ export const AsyncDemo = memo(function AsyncDemo() {
         </button>
       </div>
     </div>
-  );
-});
+    );
+  }
+);

@@ -32,8 +32,8 @@ import { useLocalStore, type LocalStoreResult } from "./useLocalStore";
  * - Respects untrack() for skipping dependency tracking
  * - Works with pick() for value-level granularity
  */
-interface UseStoreRefs<T> {
-  selector: Selector<T>;
+interface UseStoreRefs {
+  fresh: any;
   stableFns: Map<string, Function>;
   trackedDeps: Map<string, ReadEvent>;
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
@@ -52,17 +52,14 @@ export function useStoreWithContainer<T extends object>(
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
 
   // Combined ref for all mutable values
-  const [refs] = useState<UseStoreRefs<T>>(() => ({
-    selector,
+  const [refs] = useState<UseStoreRefs>(() => ({
+    fresh: undefined,
     stableFns: new Map(),
     trackedDeps: new Map(),
     subscriptions: new Map(),
     id: {},
     onceRan: false,
   }));
-
-  // Update selector on every render
-  refs.selector = selector;
 
   // Clear tracked deps for this render
   refs.trackedDeps.clear();
@@ -133,7 +130,7 @@ export function useStoreWithContainer<T extends object>(
         "Do not return a Promise from the selector function."
     );
   }
-
+  refs.fresh = result;
   // Build output with stable functions (preserve array vs object)
   const output = (Array.isArray(result) ? [] : {}) as StableResult<T>;
 
@@ -143,8 +140,7 @@ export function useStoreWithContainer<T extends object>(
       if (!refs.stableFns.has(key)) {
         refs.stableFns.set(key, (...args: unknown[]) => {
           // Run fresh selector and call the function
-          const fresh = refs.selector(selectorContext);
-          return (fresh as any)[key](...args);
+          return (refs.fresh as any)?.[key]?.(...args);
         });
       }
       (output as any)[key] = refs.stableFns.get(key);

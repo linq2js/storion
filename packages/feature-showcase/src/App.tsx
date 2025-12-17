@@ -4,8 +4,9 @@
  */
 import { memo, useState } from "react";
 import { CounterDemo, FocusDemo, AsyncDemo, TodoDemo } from "./components";
+import { WithStoreDemo } from "./components/WithStoreDemo";
 
-type Tab = "counter" | "focus" | "async" | "selectors";
+type Tab = "counter" | "focus" | "async" | "selectors" | "withStore";
 
 const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
   {
@@ -31,6 +32,12 @@ const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
     label: "Selectors",
     icon: "🎯",
     description: "Computed values and cross-store composition",
+  },
+  {
+    id: "withStore",
+    label: "withStore",
+    icon: "🧩",
+    description: "Automatic memoization for hooks + render",
   },
 ];
 
@@ -97,6 +104,7 @@ export function App() {
           {activeTab === "focus" && <FocusDemo />}
           {activeTab === "async" && <AsyncDemo />}
           {activeTab === "selectors" && <TodoDemo />}
+          {activeTab === "withStore" && <WithStoreDemo />}
         </div>
 
         {/* Feature Info */}

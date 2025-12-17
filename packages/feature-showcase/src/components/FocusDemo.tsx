@@ -1,23 +1,20 @@
 /**
  * Focus Demo Component
- * Demonstrates the Focus API for lens-like state access
+ * Demonstrates withStore with the Focus API for lens-like state access
  */
-import { memo } from "react";
-import { useStore } from "storion/react";
+import { withStore } from "storion/react";
 import { focusStore } from "../stores";
 
-export const FocusDemo = memo(function FocusDemo() {
-  // Read specific values inside selector for proper tracking
-  const { profile, lastUpdated, actions } = useStore(({ get }) => {
-    const [state, actions] = get(focusStore);
+export const FocusDemo = withStore(
+  (ctx) => {
+    const [state, actions] = ctx.get(focusStore);
     return {
       profile: state.profile,
       lastUpdated: state.lastUpdated,
       actions,
     };
-  });
-
-  return (
+  },
+  ({ profile, lastUpdated, actions }) => (
     <div className="space-y-6">
       {/* Profile Card */}
       <div className="bg-zinc-800/50 rounded-xl p-6 border border-zinc-700/50">
@@ -136,5 +133,5 @@ export const FocusDemo = memo(function FocusDemo() {
         </p>
       )}
     </div>
-  );
-});
+  )
+);

@@ -19,6 +19,7 @@ interface CounterActions extends ActionsBase {
   decrement: () => void;
   reset: () => void;
   setStep: (step: number) => void;
+  setCount: (count: number) => void;
   undo: () => void;
 }
 
@@ -44,6 +45,10 @@ export const counterStore = store<CounterState, CounterActions>({
     }),
     setStep: update.action((draft, step: number) => {
       draft.step = step;
+    }),
+    setCount: update.action((draft, count: number) => {
+      draft.history.push(draft.count);
+      draft.count = count;
     }),
     undo: update.action((draft) => {
       if (draft.history.length > 0) {

@@ -802,14 +802,17 @@ export const panelStyles = `
   .storion-devtools.position-bottom .sdt-main-content {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-auto-rows: min-content;
     gap: 4px;
     align-content: start;
+    align-items: start;
     overflow-y: auto; /* Ensure scrolling still works */
   }
 
   .storion-devtools.position-bottom .sdt-store-entry {
     margin-bottom: 0;
-    height: fit-content; /* Prevent grid from stretching items */
+    height: auto;
+    min-height: 0;
   }
 
   /* ============================================

@@ -8,6 +8,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { store, container, effect } from "./index";
+import { withStore } from "./react/withStore";
+import * as React from "react";
+import type { FC } from "react";
 // =============================================================================
 // Test Store Definition
 // =============================================================================
@@ -316,6 +319,226 @@ const instance = stores.get(testStore);
   });
 
   console.log(storeWithMeta);
+}
+
+// =============================================================================
+// withStore - Direct mode (no ref)
+// =============================================================================
+
+{
+  const userStore = store({
+    state: { name: "John", age: 30 },
+    setup: () => ({}),
+  });
+
+  // Component without ref
+  const UserProfile = withStore(
+    (ctx, { userId }: { userId: string }) => {
+      const [user] = ctx.get(userStore);
+      return { name: user.name, age: user.age, userId };
+    },
+    ({ name, age, userId }) => {
+      // Type checking: all props should be inferred
+      name satisfies string;
+      age satisfies number;
+      userId satisfies string;
+      return null;
+    }
+  );
+
+  // Usage - only input props required
+  // Type check: Component should accept userId prop
+  const _checkProps: FC<{ userId: string }> = UserProfile;
+  console.log(_checkProps, userStore);
+}
+
+// =============================================================================
+// withStore - Direct mode (with ref)
+// =============================================================================
+
+{
+  const inputStore = store({
+    state: { value: "" },
+    setup: () => ({}),
+  });
+
+  // Component with ref (auto-detected by arity)
+  const MyInput = withStore(
+    (ctx, { defaultValue }: { defaultValue: string }) => {
+      const [input] = ctx.get(inputStore);
+      return { value: input.value || defaultValue };
+    },
+    ({ value }: { value: string }, ref: React.Ref<HTMLInputElement>) => {
+      // Type checking: ref should be Ref<HTMLInputElement>
+      value satisfies string;
+      ref satisfies React.Ref<HTMLInputElement>;
+      return null;
+    }
+  );
+
+  // Usage - can pass ref
+  // Type check: Component should accept defaultValue prop and ref
+  type MyInputProps = React.ComponentPropsWithRef<typeof MyInput>;
+  const _checkRef: MyInputProps = { defaultValue: "test", ref: null };
+  console.log(_checkRef, inputStore);
+}
+
+// =============================================================================
+// withStore - HOC mode (no ref)
+// =============================================================================
+
+{
+  const dataStore = store({
+    state: { items: [] as string[] },
+    setup: () => ({}),
+  });
+
+  // Create HOC
+  const withData = withStore((ctx, { filter }: { filter: string }) => {
+    const [data] = ctx.get(dataStore);
+    return {
+      items: data.items.filter((item) => item.includes(filter)),
+      count: data.items.length,
+    };
+  });
+
+  // Use HOC with functional component
+  const DataList: FC<{ items: string[]; count: number }> = ({ items, count }) => {
+    items satisfies string[];
+    count satisfies number;
+    return null;
+  };
+
+  const ConnectedDataList = withData(DataList);
+
+  // Usage
+  // Type check: Component should accept filter prop
+  const _checkHoc: FC<{ filter: string }> = ConnectedDataList;
+  console.log(_checkHoc, dataStore);
+}
+
+// =============================================================================
+// withStore - HOC mode (with ref)
+// =============================================================================
+
+{
+  const formStore = store({
+    state: { value: "" },
+    setup: () => ({}),
+  });
+
+  // Create HOC
+  const withFormData = withStore((ctx, { name }: { name: string }) => {
+    const [form] = ctx.get(formStore);
+    return { value: form.value, name };
+  });
+
+  // Use HOC with forwardRef component
+  const FormInput = React.forwardRef<
+    HTMLInputElement,
+    { value: string; name: string }
+  >(({ value, name }, ref) => {
+    value satisfies string;
+    name satisfies string;
+    ref satisfies React.Ref<HTMLInputElement>;
+    return null;
+  });
+
+  const ConnectedFormInput = withFormData(FormInput);
+
+  // Usage - can pass ref
+  // Type check: Component should accept name prop and ref
+  // Note: ref is handled by forwardRef internally
+  const _checkHocRef: { name: string } = { name: "email" };
+  console.log(_checkHocRef, formStore, ConnectedFormInput);
+}
+
+// =============================================================================
+// withStore - Multiple hooks
+// =============================================================================
+
+{
+  const store1 = store({
+    state: { value: 1 },
+    setup: () => ({}),
+  });
+
+  const store2 = store({
+    state: { value: 2 },
+    setup: () => ({}),
+  });
+
+  // Hook can access multiple stores
+  const Combined = withStore(
+    (ctx, {}: {}) => {
+      const [s1] = ctx.get(store1);
+      const [s2] = ctx.get(store2);
+      return { total: s1.value + s2.value };
+    },
+    ({ total }) => {
+      total satisfies number;
+      return null;
+    }
+  );
+
+  // Type check: Component should accept empty props
+  const _checkMulti: FC<{}> = Combined;
+  console.log(_checkMulti);
+}
+
+// =============================================================================
+// withStore - Empty input props (two-param hook)
+// =============================================================================
+
+{
+  const staticStore = store({
+    state: { message: "Hello" },
+    setup: () => ({}),
+  });
+
+  // Component with no input props (explicit empty object)
+  const StaticComponent = withStore(
+    (ctx, {}: {}) => {
+      const [state] = ctx.get(staticStore);
+      return { message: state.message };
+    },
+    ({ message }) => {
+      message satisfies string;
+      return null;
+    }
+  );
+
+  // Usage - no props required
+  // Type check: Component should accept empty props
+  const _checkStatic: FC<{}> = StaticComponent;
+  console.log(_checkStatic, staticStore);
+}
+
+// =============================================================================
+// withStore - Single param hook (context only)
+// =============================================================================
+
+{
+  const messageStore = store({
+    state: { text: "Hello World" },
+    setup: () => ({}),
+  });
+
+  // Hook with only context parameter (no props)
+  const Message = withStore(
+    (ctx) => {
+      const [state] = ctx.get(messageStore);
+      return { text: state.text };
+    },
+    ({ text }) => {
+      text satisfies string;
+      return null;
+    }
+  );
+
+  // Type check: Should work without props
+  const _checkMessage: FC<{}> = Message;
+  console.log(_checkMessage, messageStore);
 }
 
 console.log("Type checks passed!");

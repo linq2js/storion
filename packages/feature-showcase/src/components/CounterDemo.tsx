@@ -1,15 +1,13 @@
 /**
  * Counter Demo Component
- * Demonstrates basic store usage with actions
+ * Demonstrates withStore pattern for automatic memoization
  */
-import { memo } from "react";
-import { useStore } from "storion/react";
+import { withStore } from "storion/react";
 import { counterStore } from "../stores";
 
-export const CounterDemo = memo(function CounterDemo() {
-  // Read specific values inside selector for proper tracking
-  const { count, step, history, actions } = useStore(({ get }) => {
-    const [state, actions] = get(counterStore);
+export const CounterDemo = withStore(
+  (ctx) => {
+    const [state, actions] = ctx.get(counterStore);
 
     return {
       count: state.count,
@@ -17,9 +15,8 @@ export const CounterDemo = memo(function CounterDemo() {
       history: state.history,
       actions,
     };
-  });
-
-  return (
+  },
+  ({ count, step, history, actions }) => (
     <div className="space-y-6">
       {/* Counter Display */}
       <div className="flex items-center justify-center gap-8">
@@ -88,5 +85,5 @@ export const CounterDemo = memo(function CounterDemo() {
         </div>
       )}
     </div>
-  );
-});
+  )
+);

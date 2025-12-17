@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
 // Plugin to watch storion source and trigger HMR
@@ -20,6 +20,7 @@ function watchStorion() {
     };
 }
 export default defineConfig({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     plugins: [react(), watchStorion()],
     resolve: {
         alias: [
