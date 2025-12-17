@@ -8,8 +8,8 @@
  * - Error handling and retry
  * - Loading states
  */
-import { store, type ActionsBase } from "storion";
-import { async, type AsyncState, type CancellablePromise } from "storion/async";
+import { store } from "storion";
+import { async, type AsyncState } from "storion/async";
 
 // Simulated API
 const fakeApi = {
@@ -54,23 +54,13 @@ interface AsyncDemoState {
   selectedUserId: string;
 }
 
-interface AsyncDemoActions extends ActionsBase {
-  fetchUser: (userId: string) => CancellablePromise<User>;
-  refreshUser: () => CancellablePromise<User>;
-  cancelUser: () => void;
-  resetUser: () => void;
-  fetchPosts: (userId: string) => CancellablePromise<Post[]>;
-  refreshPosts: () => CancellablePromise<Post[]>;
-  selectUser: (userId: string) => void;
-}
-
-export const asyncStore = store<AsyncDemoState, AsyncDemoActions>({
+export const asyncStore = store({
   name: "async-demo",
   state: {
     user: async.fresh<User>(),
     posts: async.stale<Post[]>([]),
     selectedUserId: "1",
-  },
+  } satisfies AsyncDemoState,
   setup: ({ state, focus }) => {
     // Create async action for fetching user (fresh mode)
     const [, setUser] = focus("user");

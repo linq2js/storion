@@ -29,36 +29,26 @@ export const counterStore = store<CounterState, CounterActions>({
     step: 1,
     history: [],
   },
-  setup: ({ state, update }) => ({
-    increment: () => {
-      update((draft) => {
-        draft.history.push(draft.count);
-        draft.count += draft.step;
-      });
-    },
-    decrement: () => {
-      update((draft) => {
-        draft.history.push(draft.count);
-        draft.count -= draft.step;
-      });
-    },
-    reset: () => {
-      update((draft) => {
-        draft.history = [];
-        draft.count = 0;
-      });
-    },
-    setStep: (step: number) => {
-      update((draft) => {
-        draft.step = step;
-      });
-    },
-    undo: () => {
-      update((draft) => {
-        if (state.history.length > 0) {
-          draft.count = draft.history.pop()!;
-        }
-      });
-    },
+  setup: ({ update }) => ({
+    increment: update.action((draft) => {
+      draft.history.push(draft.count);
+      draft.count += draft.step;
+    }),
+    decrement: update.action((draft) => {
+      draft.history.push(draft.count);
+      draft.count -= draft.step;
+    }),
+    reset: update.action((draft) => {
+      draft.history = [];
+      draft.count = 0;
+    }),
+    setStep: update.action((draft, step: number) => {
+      draft.step = step;
+    }),
+    undo: update.action((draft) => {
+      if (draft.history.length > 0) {
+        draft.count = draft.history.pop()!;
+      }
+    }),
   }),
 });

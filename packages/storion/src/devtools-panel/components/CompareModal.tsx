@@ -64,8 +64,24 @@ export function CompareModal({
     return JSON.stringify(value, null, 2);
   };
 
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleOverlayTouchEnd = (e: React.TouchEvent) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="sdt-modal-overlay" onClick={onClose}>
+    <div
+      className="sdt-modal-overlay"
+      onClick={handleOverlayClick}
+      onTouchEnd={handleOverlayTouchEnd}
+    >
       <div className="sdt-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sdt-modal-header">
           <span className="sdt-modal-title">

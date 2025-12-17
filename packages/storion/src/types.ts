@@ -384,6 +384,43 @@ export type StoreTuple<
 // =============================================================================
 
 /**
+ * Update function with action creator.
+ *
+ * Can be called directly to update state, or use `.action()` to create
+ * action functions that wrap updates.
+ */
+export interface StoreUpdate<TState extends StateBase> {
+  /**
+   * Update state using Immer-style updater function.
+   */
+  (updater: (draft: TState) => void): void;
+
+  /**
+   * Update state with partial object (shallow merge).
+   */
+  (partial: Partial<TState>): void;
+
+  /**
+   * Create an action function that wraps an updater.
+   * Throws error if the updater returns a PromiseLike (async not supported).
+   *
+   * @example
+   * // No arguments
+   * increment: update.action(draft => {
+   *   draft.count++;
+   * }),
+   *
+   * // With arguments
+   * addItem: update.action((draft, name: string, price: number) => {
+   *   draft.items.push({ name, price });
+   * }),
+   */
+  action<TArgs extends unknown[]>(
+    updater: (draft: TState, ...args: TArgs) => void
+  ): (...args: TArgs) => void;
+}
+
+/**
  * Context provided to the setup() function.
  */
 export interface StoreContext<TState extends StateBase = StateBase>
@@ -417,23 +454,31 @@ export interface StoreContext<TState extends StateBase = StateBase>
   ): StoreTuple<S, A>;
 
   /**
-   * Update state using Immer-style updater function.
+   * Update state using Immer-style updater function or partial object.
+   *
+   * Also provides `.action()` to create action functions that wrap updates.
    *
    * @example
+   * // Direct update with updater function
    * update(draft => {
    *   draft.items.push({ id: 1, name: 'New Item' });
    *   draft.count++;
    * });
-   */
-  update(updater: (draft: TState) => void): void;
-
-  /**
-   * Update state with partial object (shallow merge).
    *
-   * @example
+   * // Direct update with partial object
    * update({ count: 10, name: 'Updated' });
+   *
+   * // Create action with update.action()
+   * increment: update.action(draft => {
+   *   draft.count++;
+   * }),
+   *
+   * // Action with arguments
+   * addItem: update.action((draft, name: string) => {
+   *   draft.items.push({ id: Date.now(), name });
+   * }),
    */
-  update(partial: Partial<TState>): void;
+  update: StoreUpdate<TState>;
 
   /**
    * Check if state has been modified since setup completed.

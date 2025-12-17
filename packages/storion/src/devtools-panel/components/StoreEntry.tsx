@@ -9,6 +9,7 @@ import type { DevtoolsStoreEntry, StateSnapshot } from "../../devtools/types";
 import { formatTime, formatDateTime, formatValue } from "../utils";
 import {
   IconChevron,
+  IconStore,
   IconEdit,
   IconSave,
   IconCancel,
@@ -151,20 +152,14 @@ export const StoreEntry = memo(function StoreEntry({
 
   return (
     <div className="sdt-store-entry">
-      {/* Header: expand/collapse -> name + id -> actions */}
+      {/* Header: icon -> name + id -> actions -> expand/collapse */}
       <div
         className={`sdt-store-header ${flash ? "flash" : ""}`}
         onClick={toggleExpand}
       >
-        <button
-          className="sdt-expand-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleExpand();
-          }}
-        >
-          <IconChevron open={expanded} />
-        </button>
+        <span className="sdt-store-icon">
+          <IconStore />
+        </span>
         <div className="sdt-store-name">{entry.id}</div>
         <div className="sdt-store-actions">
           <button
@@ -175,6 +170,15 @@ export const StoreEntry = memo(function StoreEntry({
             <IconEvents />
           </button>
         </div>
+        <button
+          className="sdt-expand-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleExpand();
+          }}
+        >
+          <IconChevron open={expanded} />
+        </button>
       </div>
 
       {/* Details */}

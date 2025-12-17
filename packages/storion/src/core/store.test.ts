@@ -1255,6 +1255,108 @@ describe("StoreContext.update()", () => {
     expect(instance.state.count).toBe(5);
     expect(countListener).toHaveBeenCalledWith({ next: 5, prev: 0 });
   });
+
+  describe("update.action()", () => {
+    it("should create action function from updater", () => {
+      const counterStore = store({
+        state: { count: 0 },
+        setup: ({ update }) => ({
+          increment: update.action((draft) => {
+            draft.count++;
+          }),
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(counterStore);
+
+      expect(instance.state.count).toBe(0);
+      instance.actions.increment();
+      expect(instance.state.count).toBe(1);
+      instance.actions.increment();
+      expect(instance.state.count).toBe(2);
+    });
+
+    it("should pass arguments to updater", () => {
+      const listStore = store({
+        state: { items: [] as string[] },
+        setup: ({ update }) => ({
+          addItem: update.action((draft, name: string) => {
+            draft.items.push(name);
+          }),
+          addMultiple: update.action((draft, ...names: string[]) => {
+            draft.items.push(...names);
+          }),
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(listStore);
+
+      instance.actions.addItem("apple");
+      expect(instance.state.items).toEqual(["apple"]);
+
+      instance.actions.addMultiple("banana", "cherry");
+      expect(instance.state.items).toEqual(["apple", "banana", "cherry"]);
+    });
+
+    it("should work with complex nested updates", () => {
+      const appStore = store({
+        state: {
+          user: {
+            profile: { name: "John", age: 25 },
+            preferences: { theme: "light" as "light" | "dark" },
+          },
+        },
+        setup: ({ update }) => ({
+          updateProfile: update.action(
+            (draft, name: string, age: number) => {
+              draft.user.profile.name = name;
+              draft.user.profile.age = age;
+            }
+          ),
+          toggleTheme: update.action((draft) => {
+            draft.user.preferences.theme =
+              draft.user.preferences.theme === "light" ? "dark" : "light";
+          }),
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(appStore);
+
+      instance.actions.updateProfile("Jane", 30);
+      expect(instance.state.user.profile).toEqual({ name: "Jane", age: 30 });
+
+      instance.actions.toggleTheme();
+      expect(instance.state.user.preferences.theme).toBe("dark");
+    });
+
+    it("should preserve immutability (immer)", () => {
+      const listStore = store({
+        state: { items: [{ id: 1, name: "A" }] },
+        setup: ({ update }) => ({
+          addItem: update.action((draft, name: string) => {
+            draft.items.push({ id: draft.items.length + 1, name });
+          }),
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(listStore);
+
+      const originalItems = instance.state.items;
+
+      instance.actions.addItem("B");
+
+      // Should be a new array reference
+      expect(instance.state.items).not.toBe(originalItems);
+      expect(instance.state.items).toEqual([
+        { id: 1, name: "A" },
+        { id: 2, name: "B" },
+      ]);
+    });
+  });
 });
 
 describe("dirty()", () => {

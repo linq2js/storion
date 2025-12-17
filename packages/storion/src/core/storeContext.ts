@@ -12,6 +12,7 @@ import {
   type StoreInstance,
   type StoreResolver,
   type StoreContext,
+  type StoreUpdate,
   type StoreTuple,
   type StoreMixin,
   type Focus,
@@ -203,6 +204,43 @@ export function createFocus<TState extends StateBase, TValue>(
 }
 
 // =============================================================================
+// Update Function Factory
+// =============================================================================
+
+/**
+ * Create an update function with the `.action()` method.
+ */
+function createUpdateFn<TState extends StateBase>(
+  update: (updater: (draft: TState) => void) => void
+): StoreUpdate<TState> {
+  // Create the base update function
+  const updateFn = (
+    updaterOrPartial: ((draft: TState) => void) | Partial<TState>
+  ): void => {
+    if (typeof updaterOrPartial === "function") {
+      update(updaterOrPartial);
+    } else {
+      update((draft) => {
+        Object.assign(draft, updaterOrPartial);
+      });
+    }
+  };
+
+  // Add the action method
+  updateFn.action = <TArgs extends unknown[]>(
+    updater: (draft: TState, ...args: TArgs) => void
+  ): ((...args: TArgs) => void) => {
+    return (...args: TArgs): void => {
+      update((draft) => {
+        updater(draft, ...args);
+      });
+    };
+  };
+
+  return updateFn as StoreUpdate<TState>;
+}
+
+// =============================================================================
 // Store Context Factory
 // =============================================================================
 
@@ -283,15 +321,7 @@ export function createStoreContext<
       }) as StoreTuple<S, A>;
     },
 
-    update(updaterOrPartial: ((draft: TState) => void) | Partial<TState>) {
-      if (typeof updaterOrPartial === "function") {
-        update(updaterOrPartial);
-      } else {
-        update((draft) => {
-          Object.assign(draft, updaterOrPartial);
-        });
-      }
-    },
+    update: createUpdateFn(update),
 
     dirty(prop?: keyof TState): boolean {
       return dirty(prop as any);

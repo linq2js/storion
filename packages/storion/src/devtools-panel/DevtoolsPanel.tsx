@@ -166,23 +166,13 @@ export function DevtoolsPanel({
     onPositionChange?.(newPosition);
   }, [position, onPositionChange]);
 
-  const handleTransparencyStart = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault();
-      setIsTransparent(true);
-      onTransparencyChange?.(true);
-    },
-    [onTransparencyChange]
-  );
-
-  const handleTransparencyEnd = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault();
-      setIsTransparent(false);
-      onTransparencyChange?.(false);
-    },
-    [onTransparencyChange]
-  );
+  const toggleTransparency = useCallback(() => {
+    setIsTransparent((prev) => {
+      const next = !prev;
+      onTransparencyChange?.(next);
+      return next;
+    });
+  }, [onTransparencyChange]);
 
   const handleResize = useCallback(
     (delta: number) => {
@@ -244,14 +234,9 @@ export function DevtoolsPanel({
           </div>
           <div className="sdt-header-actions">
             <button
-              className="sdt-btn"
-              onMouseDown={handleTransparencyStart}
-              onMouseUp={handleTransparencyEnd}
-              onMouseLeave={handleTransparencyEnd}
-              onTouchStart={handleTransparencyStart}
-              onTouchEnd={handleTransparencyEnd}
-              onClick={(e) => e.preventDefault()}
-              title="Hold to see through"
+              className={`sdt-btn ${isTransparent ? "active" : ""}`}
+              onClick={toggleTransparency}
+              title="Toggle transparency"
             >
               <IconTransparency />
             </button>

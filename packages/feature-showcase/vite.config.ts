@@ -1,19 +1,20 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig } from "vitest/config";
+import type { ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
 // Plugin to watch storion source and trigger HMR
-function watchStorion(): Plugin {
+function watchStorion() {
   const storionSrc = path.resolve(__dirname, "../storion/src");
 
   return {
     name: "watch-storion",
-    configureServer(server) {
+    configureServer(server: ViteDevServer) {
       // Watch storion source directory
       server.watcher.add(storionSrc);
 
       // Trigger full reload when storion changes
-      server.watcher.on("change", (file) => {
+      server.watcher.on("change", (file: string) => {
         if (file.startsWith(storionSrc)) {
           console.log(
             `[storion] ${path.relative(storionSrc, file)} changed, reloading...`
@@ -26,7 +27,8 @@ function watchStorion(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), watchStorion()],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  plugins: [react(), watchStorion()] as any,
   resolve: {
     alias: [
       // More specific paths first
@@ -77,4 +79,3 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
   },
 });
-

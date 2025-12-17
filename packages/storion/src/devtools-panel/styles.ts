@@ -168,6 +168,12 @@ export const panelStyles = `
     background: ${colors.bg.hover};
   }
 
+  .sdt-btn.active {
+    background: ${colors.bg.elevated};
+    color: ${colors.text.primary};
+    border-color: rgba(168, 85, 247, 0.4);
+  }
+
   .sdt-btn-primary {
     background: ${colors.text.primary};
     color: ${colors.bg.base};
@@ -436,13 +442,14 @@ export const panelStyles = `
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 8px;
+    padding: 8px 10px;
     cursor: pointer;
     transition: background 0.15s ease;
+    background: ${colors.bg.elevated};
   }
 
   .sdt-store-header:hover {
-    background: ${colors.bg.elevated};
+    background: ${colors.bg.hover};
   }
 
   /* Flash animation for store header */
@@ -453,6 +460,14 @@ export const panelStyles = `
 
   .sdt-store-header.flash {
     animation: sdt-store-flash 0.5s ease-out;
+  }
+
+  .sdt-store-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: ${colors.accent.primary};
+    opacity: 0.7;
   }
 
   .sdt-expand-btn {
@@ -466,6 +481,7 @@ export const panelStyles = `
     justify-content: center;
     border-radius: 3px;
     transition: all 0.15s ease;
+    margin-left: auto;
   }
 
   .sdt-expand-btn:hover {
@@ -475,9 +491,9 @@ export const panelStyles = `
 
   .sdt-store-name {
     font-family: ${fonts.mono};
-    font-size: 11px;
-    font-weight: 500;
-    color: ${colors.text.primary};
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffffff;
     flex: 1;
     min-width: 0;
     white-space: nowrap;
@@ -520,8 +536,8 @@ export const panelStyles = `
     min-height: 160px;
     max-height: 400px;
     padding: 6px 8px;
-    background: ${colors.bg.elevated};
-    border: 1px solid ${colors.border};
+    background: ${colors.bg.base};
+    border: 1px solid ${colors.border.default};
     border-radius: 4px;
     color: ${colors.text.secondary};
     resize: vertical;
@@ -581,17 +597,8 @@ export const panelStyles = `
     background: ${colors.bg.elevated};
   }
 
-  .sdt-history-item.initial {
-    background: rgba(59, 130, 246, 0.1);
-    border-color: rgba(59, 130, 246, 0.2);
-  }
-
-  .sdt-history-item.initial:hover {
-    background: rgba(59, 130, 246, 0.15);
-  }
-
   .sdt-history-item.initial .sdt-history-time {
-    color: ${colors.accent.blue};
+    color: #ffffff;
     font-weight: 500;
   }
 
@@ -1131,7 +1138,7 @@ export const panelStyles = `
   }
 
   .sdt-state-json.editing {
-    background: ${colors.bg.input};
+    background: ${colors.bg.elevated};
     border-color: ${colors.accent.primary};
     color: ${colors.text.primary};
   }
@@ -1179,18 +1186,27 @@ export const panelStyles = `
     justify-content: center;
     z-index: 1000000;
     backdrop-filter: blur(2px);
+    padding: 16px;
+    touch-action: manipulation;
   }
 
   .sdt-modal {
     background: ${colors.bg.panel};
     border: 1px solid ${colors.border.default};
     border-radius: 8px;
-    min-width: 500px;
+    width: 100%;
+    min-width: 300px;
     max-width: 800px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  @media (min-width: 640px) {
+    .sdt-modal {
+      min-width: 500px;
+    }
   }
 
   .sdt-modal-header {
@@ -1261,18 +1277,18 @@ export const panelStyles = `
   }
 
   .sdt-compare-row.changed {
-    border-color: ${colors.accent.yellow}40;
-    background: ${colors.accent.yellow}08;
+    border-color: ${colors.accent.yellow}30;
+    background: ${colors.accent.yellow}06;
   }
 
   .sdt-compare-row.added {
-    border-color: ${colors.accent.green}40;
-    background: ${colors.accent.green}08;
+    border-color: ${colors.accent.green}30;
+    background: ${colors.accent.green}06;
   }
 
   .sdt-compare-row.removed {
-    border-color: ${colors.accent.red}40;
-    background: ${colors.accent.red}08;
+    border-color: ${colors.accent.red}30;
+    background: ${colors.accent.red}06;
   }
 
   .sdt-compare-row.unchanged {
@@ -1297,16 +1313,16 @@ export const panelStyles = `
 
   .sdt-compare-old,
   .sdt-compare-new {
-    background: ${colors.bg.panel};
+    background: ${colors.bg.base};
     padding: 8px 10px;
   }
 
   .sdt-compare-old {
-    background: ${colors.accent.red}08;
+    background: linear-gradient(${colors.accent.red}12, ${colors.accent.red}12), ${colors.bg.base};
   }
 
   .sdt-compare-new {
-    background: ${colors.accent.green}08;
+    background: linear-gradient(${colors.accent.green}12, ${colors.accent.green}12), ${colors.bg.base};
   }
 
   .sdt-compare-label {
@@ -1324,7 +1340,7 @@ export const panelStyles = `
     font-size: 11px;
     white-space: pre-wrap;
     word-break: break-all;
-    color: ${colors.text.primary};
+    color: #ffffff;
   }
 
   /* ============================================
