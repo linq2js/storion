@@ -60,6 +60,16 @@ export function CompareModal({
     });
   }, [snapshot.state, currentState]);
 
+  // Count by type for legend
+  const counts = useMemo(() => {
+    return {
+      changed: diff.filter((d) => d.type === "changed").length,
+      added: diff.filter((d) => d.type === "added").length,
+      removed: diff.filter((d) => d.type === "removed").length,
+      unchanged: diff.filter((d) => d.type === "unchanged").length,
+    };
+  }, [diff]);
+
   const formatJsonValue = (value: unknown): string => {
     if (value === undefined) return "undefined";
     return JSON.stringify(value, null, 2);
@@ -93,23 +103,29 @@ export function CompareModal({
           </button>
         </div>
         <div className="sdt-modal-body">
-          <div className="sdt-compare-legend">
-            <span className="sdt-legend-item changed">● Changed</span>
-            <span className="sdt-legend-item added">● Added</span>
-            <span className="sdt-legend-item removed">● Removed</span>
-            <span className="sdt-legend-item unchanged">● Unchanged</span>
+          {/* Sticky header: legend + column headers */}
+          <div className="sdt-compare-sticky-header">
+            <div className="sdt-compare-legend">
+              <span className="sdt-legend-item changed">● Changed ({counts.changed})</span>
+              <span className="sdt-legend-item added">● Added ({counts.added})</span>
+              <span className="sdt-legend-item removed">● Removed ({counts.removed})</span>
+              <span className="sdt-legend-item unchanged">● Unchanged ({counts.unchanged})</span>
+            </div>
+            <div className="sdt-compare-columns-header">
+              <div className="sdt-compare-col-old">Snapshot</div>
+              <div className="sdt-compare-col-new">Current</div>
+            </div>
           </div>
+          {/* Properties list */}
           <div className="sdt-compare-content">
             {diff.map(({ key, type, oldValue, newValue }) => (
-              <div key={key} className={`sdt-compare-row ${type}`}>
-                <div className="sdt-compare-key">{key}</div>
+              <div key={key} className={`sdt-compare-item ${type}`}>
+                <div className="sdt-compare-prop-name">{key}</div>
                 <div className="sdt-compare-values">
                   <div className="sdt-compare-old">
-                    <span className="sdt-compare-label">Snapshot:</span>
                     <pre>{formatJsonValue(oldValue)}</pre>
                   </div>
                   <div className="sdt-compare-new">
-                    <span className="sdt-compare-label">Current:</span>
                     <pre>{formatJsonValue(newValue)}</pre>
                   </div>
                 </div>

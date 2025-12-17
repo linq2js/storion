@@ -1246,8 +1246,19 @@ export const panelStyles = `
 
   .sdt-modal-body {
     padding: 16px;
+    padding-top: 0;
     overflow: auto;
     flex: 1;
+  }
+
+  /* Sticky header container - legend + column headers */
+  .sdt-compare-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: ${colors.bg.panel};
+    margin: 0 -16px;
+    padding: 16px 16px 0 16px;
   }
 
   .sdt-compare-legend {
@@ -1268,46 +1279,84 @@ export const panelStyles = `
   .sdt-legend-item.removed { color: ${colors.accent.red}; }
   .sdt-legend-item.unchanged { color: ${colors.text.muted}; }
 
+  /* Two-column header: Snapshot | Current */
+  .sdt-compare-columns-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: ${colors.border.subtle};
+    border: 1px solid ${colors.border.subtle};
+    border-radius: 4px 4px 0 0;
+    margin-bottom: 0px; /* Remove gap with content below */
+  }
+
+  .sdt-compare-col-old,
+  .sdt-compare-col-new {
+    padding: 8px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: ${colors.text.secondary};
+    background: ${colors.bg.elevated};
+  }
+
+  .sdt-compare-col-old {
+    background: linear-gradient(${colors.accent.red}15, ${colors.accent.red}15), ${colors.bg.elevated};
+  }
+
+  .sdt-compare-col-new {
+    background: linear-gradient(${colors.accent.green}15, ${colors.accent.green}15), ${colors.bg.elevated};
+  }
+
+  /* Content area */
   .sdt-compare-content {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-  }
-
-  .sdt-compare-row {
     border: 1px solid ${colors.border.subtle};
-    border-radius: 4px;
-    overflow: hidden;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
   }
 
-  .sdt-compare-row.changed {
-    border-color: ${colors.accent.yellow}30;
-    background: ${colors.accent.yellow}06;
+  /* Each property item */
+  .sdt-compare-item {
+    border-bottom: 1px solid ${colors.border.subtle};
   }
 
-  .sdt-compare-row.added {
-    border-color: ${colors.accent.green}30;
-    background: ${colors.accent.green}06;
+  .sdt-compare-item:last-child {
+    border-bottom: none;
   }
 
-  .sdt-compare-row.removed {
-    border-color: ${colors.accent.red}30;
-    background: ${colors.accent.red}06;
-  }
-
-  .sdt-compare-row.unchanged {
+  .sdt-compare-item.unchanged {
     opacity: 0.5;
   }
 
-  .sdt-compare-key {
+  /* Property name - sticky within its section */
+  .sdt-compare-prop-name {
     font-weight: 600;
     padding: 6px 10px;
     background: ${colors.bg.elevated};
-    border-bottom: 1px solid ${colors.border.subtle};
     font-size: 11px;
     color: ${colors.text.primary};
+    position: sticky;
+    top: 75px; /* Below the sticky header (legend ~27px + columns ~35px + padding 16px) */
+    z-index: 5;
+    border-bottom: 1px solid ${colors.border.subtle};
   }
 
+  .sdt-compare-item.changed .sdt-compare-prop-name {
+    box-shadow: inset 3px 0 0 ${colors.accent.yellow};
+  }
+
+  .sdt-compare-item.added .sdt-compare-prop-name {
+    box-shadow: inset 3px 0 0 ${colors.accent.green};
+  }
+
+  .sdt-compare-item.removed .sdt-compare-prop-name {
+    box-shadow: inset 3px 0 0 ${colors.accent.red};
+  }
+
+  /* Two-column values */
   .sdt-compare-values {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1317,24 +1366,17 @@ export const panelStyles = `
 
   .sdt-compare-old,
   .sdt-compare-new {
-    background: ${colors.bg.base};
     padding: 8px 10px;
+    background: ${colors.bg.base};
+    min-height: 40px;
   }
 
   .sdt-compare-old {
-    background: linear-gradient(${colors.accent.red}12, ${colors.accent.red}12), ${colors.bg.base};
+    background: linear-gradient(${colors.accent.red}08, ${colors.accent.red}08), ${colors.bg.base};
   }
 
   .sdt-compare-new {
-    background: linear-gradient(${colors.accent.green}12, ${colors.accent.green}12), ${colors.bg.base};
-  }
-
-  .sdt-compare-label {
-    font-size: 9px;
-    text-transform: uppercase;
-    color: ${colors.text.muted};
-    margin-bottom: 4px;
-    display: block;
+    background: linear-gradient(${colors.accent.green}08, ${colors.accent.green}08), ${colors.bg.base};
   }
 
   .sdt-compare-old pre,
