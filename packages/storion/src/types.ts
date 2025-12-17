@@ -901,13 +901,13 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
 
   /**
    * Unique identifier for this selector context (per component instance).
-   * Useful for scoping async operations with ensure().
+   * Useful for scoping operations with trigger().
    *
    * @example
    * const { data } = useStore(({ get, id }) => {
    *   const store = get(dataStore);
-   *   // Each component instance gets unique id
-   *   store.actions.ensure([id], params);
+   *   // Each component instance gets unique scope
+   *   trigger(id, store.actions.dispatch, [params], params);
    *   return { data: store.state.data };
    * });
    */

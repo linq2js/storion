@@ -187,8 +187,6 @@ export interface AsyncRetryOptions {
 
 // ===== Mixin Options =====
 
-import type { Equality } from "../types";
-
 /**
  * Options for async mixin setup.
  */
@@ -197,8 +195,6 @@ export interface AsyncOptions {
   onError?: (error: Error) => void;
   /** Retry configuration */
   retry?: number | AsyncRetryOptions;
-  /** Equality function for comparing individual dep items (default: strict/Object.is) */
-  equality?: Equality<unknown>;
   /** Auto-cancel previous request on new dispatch (default: true) */
   autoCancel?: boolean;
 }
@@ -217,8 +213,6 @@ export type CancellablePromise<T> = Promise<T> & {
 export interface AsyncActions<T, TArgs extends any[]> {
   /** Dispatch the async operation */
   dispatch(...args: TArgs): CancellablePromise<T>;
-  /** Dispatch only if deps changed since last dispatch */
-  ensure(deps: unknown[], ...args: TArgs): CancellablePromise<T>;
   /** Re-dispatch with last args */
   refresh(): CancellablePromise<T>;
   /** Cancel ongoing operation */

@@ -60,7 +60,6 @@ interface AsyncDemoActions extends ActionsBase {
   cancelUser: () => void;
   resetUser: () => void;
   fetchPosts: (userId: string) => CancellablePromise<Post[]>;
-  ensurePosts: (userId: string) => CancellablePromise<Post[]>;
   refreshPosts: () => CancellablePromise<Post[]>;
   selectUser: (userId: string) => void;
 }
@@ -102,7 +101,6 @@ export const asyncStore = store<AsyncDemoState, AsyncDemoActions>({
       },
 
       fetchPosts: (userId: string) => postsActions.dispatch(userId),
-      ensurePosts: (userId: string) => postsActions.ensure([userId], userId),
       refreshPosts: () => postsActions.refresh(),
 
       selectUser: (userId: string) => {

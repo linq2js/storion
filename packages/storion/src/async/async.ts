@@ -1,4 +1,4 @@
-import type { Focus, Equality } from "../types";
+import type { Focus } from "../types";
 import type {
   AsyncState,
   AsyncMode,
@@ -18,7 +18,6 @@ import type {
   SerializedAsyncState,
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
-import { resolveEquality, shallowEqual } from "../core/equality";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -94,13 +93,6 @@ function getRetryDelay(
   return 1000;
 }
 
-// ===== Helper: Deps equality comparison =====
-
-function createDepsEqual(equality?: Equality<unknown>) {
-  const itemEqual = resolveEquality(equality);
-  return (a: unknown, b: unknown) => shallowEqual(a, b, itemEqual);
-}
-
 // ===== Main async function =====
 
 export function async<T, M extends AsyncMode, TArgs extends any[]>(
@@ -113,16 +105,12 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
   // Stable key for this async instance (used for promise tracking)
   const asyncKey: AsyncKey<T> = {};
 
-  // Create deps equality comparator using provided equality option
-  const depsEqual = createDepsEqual(options?.equality);
-
-  // Track last cancel function and last args/deps
+  // Track last cancel function and last args
   let lastCancel: (() => void) | null = null;
   let lastArgs: TArgs | null = null;
-  let lastDeps: unknown[] | null = null;
 
-  // Core dispatch implementation
-  function dispatchCore(...args: TArgs): CancellablePromise<T> {
+  // Dispatch implementation
+  function dispatch(...args: TArgs): CancellablePromise<T> {
     // Cancel any ongoing request (if autoCancel enabled, default: true)
     if (lastCancel && options?.autoCancel !== false) {
       lastCancel();
@@ -302,29 +290,6 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     return createCancellablePromise(promise, cancel);
   }
 
-  // Ensure: dispatch only if deps + args changed
-  function ensure(deps: unknown[], ...args: TArgs): CancellablePromise<T> {
-    // Build actual deps from [...deps, ...args]
-    const actualDeps = [...deps, ...args];
-
-    // If deps + args are same, return resolved promise with current data (or reject if error)
-    if (depsEqual(lastDeps, actualDeps)) {
-      const currentState = getState();
-      if (currentState.status === "success") {
-        const resolved = Promise.resolve(currentState.data);
-        return createCancellablePromise(resolved, () => {});
-      }
-      if (currentState.status === "error") {
-        const rejected = Promise.reject(currentState.error);
-        return createCancellablePromise(rejected, () => {});
-      }
-    }
-
-    // Deps or args changed, update and dispatch
-    lastDeps = actualDeps;
-    return dispatchCore(...args);
-  }
-
   // Refresh: re-dispatch with last args
   function refresh(): CancellablePromise<T> {
     if (lastArgs === null) {
@@ -333,7 +298,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
       );
       return createCancellablePromise(rejected, () => {});
     }
-    return dispatchCore(...lastArgs);
+    return dispatch(...lastArgs);
   }
 
   // Cancel: invoke lastCancel
@@ -348,7 +313,6 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
   function reset(): void {
     cancel();
     lastArgs = null;
-    lastDeps = null;
     const currentState = getState();
     const mode = currentState.mode;
 
@@ -380,8 +344,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
   }
 
   return {
-    dispatch: dispatchCore,
-    ensure,
+    dispatch,
     refresh,
     cancel,
     reset,
