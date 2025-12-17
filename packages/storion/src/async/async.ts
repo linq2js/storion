@@ -38,8 +38,14 @@ export function getPendingPromise<T>(
 
 // ===== Helper: Ensure async execution (like Promise.try) =====
 
-function promiseTry<T>(fn: () => T | Promise<T>): Promise<T> {
-  return new Promise<T>((resolve) => resolve(fn()));
+/**
+ * Wraps a synchronous or async function to always return a Promise.
+ * Ensures async execution even for synchronous functions.
+ */
+function promiseTry<T>(fn: () => T | PromiseLike<T>): Promise<Awaited<T>> {
+  return new Promise<Awaited<T>>((resolve) => {
+    resolve(fn() as Awaited<T>);
+  });
 }
 
 // ===== Helper: Create cancellable promise =====
@@ -175,11 +181,48 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
       for (let attempt = 0; attempt <= retryCount; attempt++) {
         try {
           // Create async context
+          const isCancelledOrAborted = () =>
+            isCancelled || abortController.signal.aborted;
+
           const asyncContext: AsyncContext = {
             signal: abortController.signal,
+
+            safe<T>(
+              promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)
+            ): any {
+              if (promiseOrCallback instanceof Promise) {
+                // Wrap promise - never resolve/reject if cancelled
+                return new Promise<T>((resolve, reject) => {
+                  promiseOrCallback.then(
+                    (value) => {
+                      if (!isCancelledOrAborted()) {
+                        resolve(value);
+                      }
+                      // Never resolve/reject if cancelled - promise stays pending
+                    },
+                    (error) => {
+                      if (!isCancelledOrAborted()) {
+                        reject(error);
+                      }
+                      // Never resolve/reject if cancelled
+                    }
+                  );
+                });
+              }
+
+              // Wrap callback - don't run if cancelled
+              return (...args: unknown[]) => {
+                if (!isCancelledOrAborted()) {
+                  return (promiseOrCallback as (...args: unknown[]) => T)(
+                    ...args
+                  );
+                }
+                return undefined;
+              };
+            },
           };
 
-          // Execute handler - always async via promiseTry
+          // Execute handler - always async via invoke
           const result = await promiseTry(() => handler(asyncContext, ...args));
 
           // Check if cancelled
@@ -291,12 +334,9 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
   }
 
   // Refresh: re-dispatch with last args
-  function refresh(): CancellablePromise<T> {
+  function refresh(): CancellablePromise<T> | undefined {
     if (lastArgs === null) {
-      const rejected = Promise.reject(
-        new Error("Cannot refresh: no previous dispatch")
-      );
-      return createCancellablePromise(rejected, () => {});
+      return undefined;
     }
     return dispatch(...lastArgs);
   }
@@ -385,67 +425,35 @@ export namespace async {
     };
   }
 
-  /**
-   * Create an idle state (fresh mode, no data).
-   * @deprecated Use async.fresh() instead
-   */
-  export function idle<T = unknown>(): AsyncState<T, "fresh"> {
-    return fresh<T>();
-  }
-
-  /**
-   * Create a success state.
-   */
-  export function success<T, M extends AsyncMode = "fresh">(
-    data: T,
-    mode: M = "fresh" as M
-  ): AsyncState<T, M> {
-    return {
-      status: "success",
-      mode,
-      data,
-      error: undefined,
-      timestamp: Date.now(),
-      toJSON: stateToJSON,
-    } as AsyncState<T, M>;
-  }
-
-  /**
-   * Create a pending state.
-   */
-  export function pending<T = unknown, M extends AsyncMode = "fresh">(
-    mode: M = "fresh" as M,
-    data?: T
-  ): AsyncState<T, M> {
-    return {
-      status: "pending",
-      mode,
-      data: mode === "stale" ? data : undefined,
-      error: undefined,
-      timestamp: undefined,
-      toJSON: stateToJSON,
-    } as AsyncState<T, M>;
-  }
-
-  /**
-   * Create an error state.
-   */
-  export function error<T = unknown, M extends AsyncMode = "fresh">(
-    err: Error,
-    mode: M = "fresh" as M,
-    staleData?: T
-  ): AsyncState<T, M> {
-    return {
-      status: "error",
-      mode,
-      data: mode === "stale" ? staleData : undefined,
-      error: err,
-      timestamp: undefined,
-      toJSON: stateToJSON,
-    } as AsyncState<T, M>;
-  }
-
   // ===== Utility Methods =====
+  export function delay<T = void>(
+    ms: number,
+    resolved?: T
+  ): CancellablePromise<T> {
+    let timeout: any;
+    return createCancellablePromise(
+      new Promise((resolve) => {
+        timeout = setTimeout(resolve, ms, resolved);
+      }),
+      () => {
+        clearTimeout(timeout);
+      }
+    );
+  }
+
+  /**
+   * Wraps a synchronous or async function to always return a Promise.
+   * Ensures async execution even for synchronous functions.
+   *
+   * This is the same utility used internally for dispatching handlers.
+   *
+   * @example
+   * const promise = async.invoke(() => {
+   *   // Sync or async code
+   *   return someValue;
+   * });
+   */
+  export const invoke = promiseTry;
 
   /**
    * Extract data from AsyncState, throws if not ready.

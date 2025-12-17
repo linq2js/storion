@@ -163,6 +163,35 @@ export type AsyncRequestId = object;
 export interface AsyncContext {
   /** AbortSignal for cancellation */
   signal: AbortSignal;
+
+  /**
+   * Wrap a promise to never resolve if the async operation is cancelled.
+   * Useful for nested async operations that should be cancelled together.
+   *
+   * @example
+   * async(focus, async (ctx) => {
+   *   const data1 = await ctx.safe(fetch('/api/1'));
+   *   const data2 = await ctx.safe(fetch('/api/2'));
+   *   return { data1, data2 };
+   * });
+   */
+  safe<T>(promise: Promise<T>): Promise<T>;
+
+  /**
+   * Wrap a callback to not run if the async operation is cancelled.
+   * Useful for event handlers and timeouts.
+   *
+   * @example
+   * async(focus, async (ctx) => {
+   *   setTimeout(ctx.safe(() => {
+   *     // Only runs if not cancelled
+   *     doSomething();
+   *   }), 1000);
+   * });
+   */
+  safe<TArgs extends unknown[], TReturn>(
+    callback: (...args: TArgs) => TReturn
+  ): (...args: TArgs) => TReturn | undefined;
 }
 
 // ===== Handler Type =====
@@ -174,7 +203,7 @@ export interface AsyncContext {
 export type AsyncHandler<T, TArgs extends any[]> = (
   context: AsyncContext,
   ...args: TArgs
-) => T | Promise<T>;
+) => T | PromiseLike<T>;
 
 // ===== Retry Options =====
 
@@ -213,8 +242,8 @@ export type CancellablePromise<T> = Promise<T> & {
 export interface AsyncActions<T, TArgs extends any[]> {
   /** Dispatch the async operation */
   dispatch(...args: TArgs): CancellablePromise<T>;
-  /** Re-dispatch with last args */
-  refresh(): CancellablePromise<T>;
+  /** Re-dispatch with last args. Returns undefined if no previous dispatch. */
+  refresh(): CancellablePromise<T> | undefined;
   /** Cancel ongoing operation */
   cancel(): void;
   /** Reset to idle state */

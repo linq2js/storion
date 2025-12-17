@@ -481,12 +481,6 @@ export const panelStyles = `
   .sdt-store-actions {
     display: flex;
     gap: 2px;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-
-  .sdt-store-header:hover .sdt-store-actions {
-    opacity: 1;
   }
 
   /* ============================================
@@ -692,6 +686,14 @@ export const panelStyles = `
   .sdt-metadata-value.code-location {
     color: ${colors.accent.info};
     font-size: 10px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s, text-decoration 0.15s;
+  }
+
+  .sdt-metadata-value.code-location:hover {
+    color: ${colors.accent.blue};
+    text-decoration: underline;
   }
 
   /* ============================================
@@ -944,20 +946,19 @@ export const panelStyles = `
   .sdt-event-copy {
     background: transparent;
     border: none;
-    color: ${colors.text.dim};
+    color: ${colors.text.muted};
     cursor: pointer;
-    padding: 3px;
+    padding: 2px 4px;
     border-radius: 3px;
     flex-shrink: 0;
-    opacity: 0;
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
     transition: opacity 0.15s, color 0.15s, background 0.15s;
   }
 
-  .sdt-event-entry:hover .sdt-event-copy {
-    opacity: 1;
-  }
-
   .sdt-event-copy:hover {
+    opacity: 1;
     color: ${colors.text.secondary};
     background: ${colors.bg.hover};
   }
@@ -1049,6 +1050,304 @@ export const panelStyles = `
 
   .sdt-floating-btn:active {
     transform: scale(0.95);
+  }
+
+  /* ============================================
+     Store Actions in Header
+     ============================================ */
+  .sdt-store-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .sdt-store-action-btn {
+    background: transparent;
+    border: none;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+  }
+
+  .sdt-store-action-btn:hover {
+    opacity: 1;
+    background: ${colors.bg.hover};
+    color: ${colors.text.primary};
+  }
+
+  /* ============================================
+     Section Header with Actions
+     ============================================ */
+  .sdt-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .sdt-section-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .sdt-edit-btn,
+  .sdt-save-btn,
+  .sdt-cancel-btn {
+    background: transparent;
+    border: 1px solid ${colors.border.subtle};
+    color: ${colors.text.muted};
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    transition: all 0.15s;
+  }
+
+  .sdt-edit-btn:hover {
+    background: ${colors.bg.hover};
+    color: ${colors.text.primary};
+    border-color: ${colors.border.default};
+  }
+
+  .sdt-save-btn {
+    border-color: ${colors.accent.green};
+    color: ${colors.accent.green};
+  }
+
+  .sdt-save-btn:hover {
+    background: ${colors.accent.green}20;
+  }
+
+  .sdt-cancel-btn:hover {
+    background: ${colors.accent.red}20;
+    color: ${colors.accent.red};
+    border-color: ${colors.accent.red};
+  }
+
+  .sdt-state-json.editing {
+    background: ${colors.bg.input};
+    border-color: ${colors.accent.primary};
+    color: ${colors.text.primary};
+  }
+
+  /* ============================================
+     History Compare Button
+     ============================================ */
+  .sdt-history-compare {
+    background: transparent;
+    border: 1px solid ${colors.border.subtle};
+    color: ${colors.text.muted};
+    font-size: 9px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-right: 4px;
+    transition: all 0.15s;
+  }
+
+  .sdt-history-compare:hover {
+    background: ${colors.accent.blue}20;
+    border-color: ${colors.accent.blue};
+    color: ${colors.accent.blue};
+  }
+
+  /* ============================================
+     Event Replay Button
+     ============================================ */
+  .sdt-event-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .sdt-event-replay {
+    background: transparent;
+    border: none;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
+    transition: all 0.15s;
+  }
+
+  .sdt-event-replay:hover {
+    opacity: 1;
+    background: ${colors.accent.purple}20;
+    color: ${colors.accent.purple};
+  }
+
+  /* ============================================
+     Compare Modal
+     ============================================ */
+  .sdt-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000000;
+    backdrop-filter: blur(2px);
+  }
+
+  .sdt-modal {
+    background: ${colors.bg.panel};
+    border: 1px solid ${colors.border.default};
+    border-radius: 8px;
+    min-width: 500px;
+    max-width: 800px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .sdt-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid ${colors.border.default};
+  }
+
+  .sdt-modal-title {
+    font-weight: 600;
+    color: ${colors.text.primary};
+    font-size: 13px;
+  }
+
+  .sdt-modal-close {
+    background: transparent;
+    border: none;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: all 0.15s;
+  }
+
+  .sdt-modal-close:hover {
+    background: ${colors.bg.hover};
+    color: ${colors.text.primary};
+  }
+
+  .sdt-modal-body {
+    padding: 16px;
+    overflow: auto;
+    flex: 1;
+  }
+
+  .sdt-compare-legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 11px;
+  }
+
+  .sdt-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .sdt-legend-item.changed { color: ${colors.accent.yellow}; }
+  .sdt-legend-item.added { color: ${colors.accent.green}; }
+  .sdt-legend-item.removed { color: ${colors.accent.red}; }
+  .sdt-legend-item.unchanged { color: ${colors.text.muted}; }
+
+  .sdt-compare-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sdt-compare-row {
+    border: 1px solid ${colors.border.subtle};
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .sdt-compare-row.changed {
+    border-color: ${colors.accent.yellow}40;
+    background: ${colors.accent.yellow}08;
+  }
+
+  .sdt-compare-row.added {
+    border-color: ${colors.accent.green}40;
+    background: ${colors.accent.green}08;
+  }
+
+  .sdt-compare-row.removed {
+    border-color: ${colors.accent.red}40;
+    background: ${colors.accent.red}08;
+  }
+
+  .sdt-compare-row.unchanged {
+    opacity: 0.5;
+  }
+
+  .sdt-compare-key {
+    font-weight: 600;
+    padding: 6px 10px;
+    background: ${colors.bg.elevated};
+    border-bottom: 1px solid ${colors.border.subtle};
+    font-size: 11px;
+    color: ${colors.text.primary};
+  }
+
+  .sdt-compare-values {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: ${colors.border.subtle};
+  }
+
+  .sdt-compare-old,
+  .sdt-compare-new {
+    background: ${colors.bg.panel};
+    padding: 8px 10px;
+  }
+
+  .sdt-compare-old {
+    background: ${colors.accent.red}08;
+  }
+
+  .sdt-compare-new {
+    background: ${colors.accent.green}08;
+  }
+
+  .sdt-compare-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: ${colors.text.muted};
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .sdt-compare-old pre,
+  .sdt-compare-new pre {
+    margin: 0;
+    font-family: ${fonts.mono};
+    font-size: 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: ${colors.text.secondary};
   }
 
   /* ============================================
