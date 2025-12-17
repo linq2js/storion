@@ -508,6 +508,200 @@ describe("dependencies via get()", () => {
   });
 });
 
+describe("create() - child stores", () => {
+  it("should create a child store instance", () => {
+    const child = store({
+      name: "child",
+      state: { value: 0 },
+      setup: () => ({
+        setValue: (value: number) => {
+          /* no-op */
+        },
+      }),
+    });
+
+    let childInstance: any;
+    const parent = store({
+      name: "parent",
+      state: { count: 0 },
+      setup: ({ create }) => {
+        childInstance = create(child);
+        return {};
+      },
+    });
+
+    const stores = container();
+    stores.get(parent);
+
+    expect(childInstance).toBeDefined();
+    expect(childInstance.id).toBeDefined();
+    expect(childInstance.state.value).toBe(0);
+    expect(childInstance.actions.setValue).toBeInstanceOf(Function);
+  });
+
+  it("should dispose child store when parent is disposed", () => {
+    const child = store({
+      name: "child",
+      state: { value: 0 },
+      setup: () => ({}),
+    });
+
+    let childInstance: any;
+    const parent = store({
+      name: "parent",
+      state: { count: 0 },
+      lifetime: "autoDispose",
+      setup: ({ create }) => {
+        childInstance = create(child);
+        return {};
+      },
+    });
+
+    const stores = container();
+    const parentInstance = stores.get(parent);
+
+    expect(childInstance.disposed()).toBe(false);
+
+    // Dispose parent
+    parentInstance.dispose();
+
+    // Child should also be disposed
+    expect(childInstance.disposed()).toBe(true);
+  });
+
+  it("should throw when create() is called outside setup phase", () => {
+    const child = store({
+      name: "child",
+      state: { value: 0 },
+      setup: () => ({}),
+    });
+
+    const parent = store({
+      name: "parent",
+      state: { count: 0 },
+      setup: ({ create }) => ({
+        tryCreateChild: () => {
+          create(child); // This should throw
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(parent);
+
+    expect(() => {
+      instance.actions.tryCreateChild();
+    }).toThrow(/can only be called during setup phase/i);
+  });
+
+  it("should throw when keepAlive parent creates autoDispose child", () => {
+    const child = store({
+      name: "child",
+      state: { value: 0 },
+      lifetime: "autoDispose",
+      setup: () => ({}),
+    });
+
+    const parent = store({
+      name: "parent",
+      state: { count: 0 },
+      lifetime: "keepAlive",
+      setup: ({ create }) => {
+        create(child); // This should throw
+        return {};
+      },
+    });
+
+    const stores = container();
+
+    expect(() => {
+      stores.get(parent);
+    }).toThrow(/lifetime mismatch/i);
+  });
+
+  it("should allow keepAlive parent to create keepAlive child", () => {
+    const child = store({
+      name: "child",
+      state: { value: 0 },
+      lifetime: "keepAlive",
+      setup: () => ({}),
+    });
+
+    const parent = store({
+      name: "parent",
+      state: { count: 0 },
+      lifetime: "keepAlive",
+      setup: ({ create }) => {
+        create(child);
+        return {};
+      },
+    });
+
+    const stores = container();
+
+    expect(() => {
+      stores.get(parent);
+    }).not.toThrow();
+  });
+
+  it("should allow accessing child instance methods", () => {
+    const disposeFn = vi.fn();
+
+    const child = store({
+      name: "child",
+      state: { value: 0 },
+      setup: ({ state }) => {
+        return {
+          increment: () => {
+            state.value++;
+          },
+        };
+      },
+    });
+
+    let childInstance: any;
+    const parent = store({
+      name: "parent",
+      state: { count: 0 },
+      setup: ({ create }) => {
+        childInstance = create(child);
+
+        // Can subscribe to child
+        childInstance.subscribe(() => {
+          /* no-op */
+        });
+
+        // Can register disposal listener
+        childInstance.onDispose(disposeFn);
+
+        return {
+          incrementChild: () => {
+            childInstance.actions.increment();
+          },
+        };
+      },
+    });
+
+    const stores = container();
+    const parentInstance = stores.get(parent);
+
+    // Initial value
+    expect(childInstance.state.value).toBe(0);
+
+    // Call action through parent
+    parentInstance.actions.incrementChild();
+
+    // Child state updated
+    expect(childInstance.state.value).toBe(1);
+
+    // Dispose parent
+    parentInstance.dispose();
+
+    // Disposal listener called
+    expect(disposeFn).toHaveBeenCalled();
+  });
+});
+
 describe("untrack()", () => {
   it("should not track reads inside untrack()", () => {
     const effectFn = vi.fn();
@@ -1656,7 +1850,7 @@ describe("reset()", () => {
   });
 });
 
-describe("StoreContext.use()", () => {
+describe("StoreContext.mixin()", () => {
   it("should use a mixin to compose actions", () => {
     type CounterState = { count: number };
     type CounterActions = {
@@ -1677,7 +1871,7 @@ describe("StoreContext.use()", () => {
 
     const myStore = store({
       state: { count: 0 },
-      setup: (ctx) => ctx.use(counterMixin),
+      setup: (ctx) => ctx.mixin(counterMixin),
     });
 
     const stores = container();
@@ -1704,7 +1898,7 @@ describe("StoreContext.use()", () => {
 
     const myStore = store({
       state: { count: 5 },
-      setup: (ctx) => ctx.use(multiplyMixin, 3),
+      setup: (ctx) => ctx.mixin(multiplyMixin, 3),
     });
 
     const stores = container();
@@ -1732,8 +1926,8 @@ describe("StoreContext.use()", () => {
     const myStore = store({
       state: { count: 0, name: "initial" },
       setup: (ctx) => ({
-        ...ctx.use(counterMixin),
-        ...ctx.use(nameMixin),
+        ...ctx.mixin(counterMixin),
+        ...ctx.mixin(nameMixin),
         reset: () => {
           ctx.reset();
         },
@@ -1776,7 +1970,7 @@ describe("StoreContext.use()", () => {
 
     const syncedStore = store({
       state: { synced: 0 },
-      setup: (ctx) => ctx.use(syncMixin, counter),
+      setup: (ctx) => ctx.mixin(syncMixin, counter),
     });
 
     const stores = container();
@@ -1788,7 +1982,7 @@ describe("StoreContext.use()", () => {
     expect(syncedInstance.state.synced).toBe(1);
   });
 
-  it("should throw when use() is called outside setup phase", () => {
+  it("should throw when mixin() is called outside setup phase", () => {
     let capturedCtx: import("../types").StoreContext<{ count: number }>;
 
     const myStore = store({
@@ -1797,8 +1991,8 @@ describe("StoreContext.use()", () => {
         capturedCtx = ctx;
         return {
           badAction: () => {
-            // Attempt to call use() inside action
-            capturedCtx.use(() => ({}));
+            // Attempt to call mixin() inside action
+            capturedCtx.mixin(() => ({}));
           },
         };
       },

@@ -63,6 +63,8 @@ export interface CreateStoreContextOptions<
   getInstance: () => StoreInstance<TState, TActions> | null;
   /** Callback when dependency is resolved */
   onDependency?: (instance: StoreInstance<any, any>) => void;
+  /** Callback when child store is created via create() */
+  onChildCreated?: (instance: StoreInstance<any, any>) => void;
   /** Check if in setup phase */
   isSetupPhase: () => boolean;
 }
@@ -250,9 +252,10 @@ function createUpdateFn<TState extends StateBase>(
  * The context provides:
  * - state: Mutable reactive state proxy
  * - get(): Get other store's state and actions
+ * - create(): Create a child store with automatic disposal
  * - update(): Update state with immer or partial object
  * - focus(): Create lens-like accessor for nested paths
- * - use(): Compose reusable mixins
+ * - mixin(): Compose reusable mixins
  * - dirty(): Check if state has been modified
  * - reset(): Reset state to initial values
  */
@@ -270,6 +273,7 @@ export function createStoreContext<
     reset,
     // getInstance - reserved for future use
     onDependency,
+    onChildCreated,
     isSetupPhase,
   } = options;
 
@@ -321,6 +325,42 @@ export function createStoreContext<
       }) as StoreTuple<S, A>;
     },
 
+    create<S extends StateBase, A extends ActionsBase>(
+      childSpec: StoreSpec<S, A>
+    ): StoreInstance<S, A> {
+      // Prevent dynamic store creation outside setup phase
+      if (!isSetupPhase()) {
+        throw new Error(
+          `create() can only be called during setup phase. ` +
+            `Do not call create() inside actions or async callbacks. ` +
+            `Declare all child stores at the top of your setup function.`
+        );
+      }
+
+      // Check lifetime compatibility:
+      // A keepAlive store cannot create an autoDispose child store
+      const childLifetime = childSpec.options.lifetime ?? "keepAlive";
+
+      if (currentLifetime === "keepAlive" && childLifetime === "autoDispose") {
+        const currentName = spec.options.name ?? "unknown";
+        const childName = childSpec.name ?? "unknown";
+        throw new Error(
+          `Lifetime mismatch: Store "${currentName}" (keepAlive) cannot create ` +
+            `child store "${childName}" (autoDispose). A long-lived store cannot create ` +
+            `a store that may be disposed before it. Either change "${currentName}" to autoDispose, ` +
+            `or change "${childName}" to keepAlive.`
+        );
+      }
+
+      // Get full instance from resolver
+      const instance = resolver.get(childSpec);
+
+      // Register for disposal when parent disposes
+      onChildCreated?.(instance);
+
+      return instance;
+    },
+
     update: createUpdateFn(update),
 
     dirty(prop?: keyof TState): boolean {
@@ -331,14 +371,14 @@ export function createStoreContext<
       reset();
     },
 
-    use<TResult, TArgs extends unknown[]>(
+    mixin<TResult, TArgs extends unknown[]>(
       mixin: StoreMixin<TState, TResult, TArgs>,
       ...args: TArgs
     ): TResult {
       if (!isSetupPhase()) {
         throw new Error(
-          `use() can only be called during setup phase. ` +
-            `Do not call use() inside actions or async callbacks.`
+          `mixin() can only be called during setup phase. ` +
+            `Do not call mixin() inside actions or async callbacks.`
         );
       }
       return mixin(ctx, ...args);

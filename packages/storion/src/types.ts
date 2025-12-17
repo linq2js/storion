@@ -203,7 +203,10 @@ export type Focus<TValue> = [
    * const addressFocus = userFocus.to("address");
    * const cityFocus = userFocus.to("address.city");
    */
-  to<TChild>(relativePath: string, options?: FocusOptions<TChild>): Focus<TChild>;
+  to<TChild>(
+    relativePath: string,
+    options?: FocusOptions<TChild>
+  ): Focus<TChild>;
 };
 
 // =============================================================================
@@ -371,10 +374,10 @@ export type SelectorMixin<TResult, TArgs extends unknown[] = []> = (
  * tuple.state.count;
  * tuple.actions.increment();
  */
-export type StoreTuple<
-  S extends StateBase,
-  A extends ActionsBase
-> = readonly [Readonly<S>, A] & {
+export type StoreTuple<S extends StateBase, A extends ActionsBase> = readonly [
+  Readonly<S>,
+  A
+] & {
   readonly state: Readonly<S>;
   readonly actions: A;
 };
@@ -454,6 +457,31 @@ export interface StoreContext<TState extends StateBase = StateBase>
   ): StoreTuple<S, A>;
 
   /**
+   * Create a child store instance that is automatically disposed
+   * when the parent store is disposed.
+   *
+   * Unlike `get()`, this returns the full StoreInstance with access to
+   * id, subscribe(), dispose(), etc.
+   *
+   * Use this when you need a store with the same lifecycle as the parent,
+   * or when you need full instance access.
+   *
+   * @example
+   * setup: (ctx) => {
+   *   // Create a child store - disposed when parent disposes
+   *   const childInstance = ctx.create(childSpec);
+   *
+   *   return {
+   *     getChildState: () => childInstance.state,
+   *     disposeChild: () => childInstance.dispose(),
+   *   };
+   * }
+   */
+  create<S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>
+  ): StoreInstance<S, A>;
+
+  /**
    * Update state using Immer-style updater function or partial object.
    *
    * Also provides `.action()` to create action functions that wrap updates.
@@ -500,15 +528,15 @@ export interface StoreContext<TState extends StateBase = StateBase>
   reset(): void;
 
   /**
-   * Use a mixin to compose reusable logic.
+   * Apply a mixin to compose reusable logic.
    * Mixins receive the same context and can return actions or values.
    * Only callable during setup phase.
    *
    * @example
-   * const counter = ctx.use(counterMixin);
-   * const multiplier = ctx.use(multiplyMixin, 2);
+   * const counter = ctx.mixin(counterMixin);
+   * const multiplier = ctx.mixin(multiplyMixin, 2);
    */
-  use<TResult, TArgs extends unknown[]>(
+  mixin<TResult, TArgs extends unknown[]>(
     mixin: StoreMixin<TState, TResult, TArgs>,
     ...args: TArgs
   ): TResult;
@@ -933,13 +961,13 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
   ): StoreTuple<S, A>;
 
   /**
-   * Use a mixin to compose reusable selector logic.
+   * Apply a mixin to compose reusable selector logic.
    * Mixins receive the same context and can return computed values.
    *
    * @example
-   * const total = ctx.use(sumMixin, [store1, store2]);
+   * const total = ctx.mixin(sumMixin, [store1, store2]);
    */
-  use<TResult, TArgs extends unknown[]>(
+  mixin<TResult, TArgs extends unknown[]>(
     mixin: SelectorMixin<TResult, TArgs>,
     ...args: TArgs
   ): TResult;

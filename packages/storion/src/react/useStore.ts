@@ -90,7 +90,7 @@ export function useStoreWithContainer<T extends object>(
         }) as StoreTuple<S, A>;
       },
 
-      use<TResult, TArgs extends unknown[]>(
+      mixin<TResult, TArgs extends unknown[]>(
         mixin: (context: SelectorContext, ...args: TArgs) => TResult,
         ...args: TArgs
       ): TResult {

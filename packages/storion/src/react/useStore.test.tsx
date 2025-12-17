@@ -586,7 +586,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
     });
   });
 
-  describe("SelectorContext.use()", () => {
+  describe("SelectorContext.mixin()", () => {
     it("should use a mixin to compose selector logic", () => {
       const counter = store({
         state: { count: 5 },
@@ -607,7 +607,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const { result } = renderHook(
         () =>
           useStore((ctx) => {
-            const doubled = ctx.use(doubledMixin, counter);
+            const doubled = ctx.mixin(doubledMixin, counter);
             return { doubled };
           }),
         { wrapper: createWrapper(stores) }
@@ -644,7 +644,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const { result } = renderHook(
         () =>
           useStore((ctx) => {
-            const total = ctx.use(sumMixin, [store1, store2]);
+            const total = ctx.mixin(sumMixin, [store1, store2]);
             return { total };
           }),
         { wrapper: createWrapper(stores) }
@@ -674,7 +674,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const { result, rerender } = renderHook(
         () =>
           useStore((ctx) => {
-            const count = ctx.use(countMixin, counter);
+            const count = ctx.mixin(countMixin, counter);
             return { count };
           }),
         { wrapper: createWrapper(stores) }
