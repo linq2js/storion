@@ -90,3 +90,6 @@ export {
   deepEqual,
   strictEqual,
 } from "./core/equality";
+
+// Trigger utility
+export { trigger, type TriggerOptions } from "./trigger";

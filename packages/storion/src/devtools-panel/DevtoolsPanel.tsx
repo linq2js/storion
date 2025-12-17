@@ -133,6 +133,21 @@ const IconMinimize = () => (
   </svg>
 );
 
+// Transparency icon (eye)
+const IconTransparency = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 // Position icons
 const IconDockLeft = () => (
   <svg
@@ -735,6 +750,45 @@ function ResizeHandle({ position, onResize }: ResizeHandleProps) {
     [position, onResize]
   );
 
+  // Touch support for mobile devices
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      e.preventDefault();
+      setActive(true);
+      const touch = e.touches[0];
+      lastPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+      // Disable text selection during drag for smooth resizing
+      document.body.style.userSelect = "none";
+
+      const handleTouchMove = (moveEvent: TouchEvent) => {
+        const touch = moveEvent.touches[0];
+        const lastPos = lastPosRef.current;
+
+        if (position === "bottom") {
+          const delta = lastPos.y - touch.clientY;
+          onResize(delta);
+        } else if (position === "left") {
+          const delta = touch.clientX - lastPos.x;
+          onResize(delta);
+        }
+
+        lastPosRef.current = { x: touch.clientX, y: touch.clientY };
+      };
+
+      const handleTouchEnd = () => {
+        setActive(false);
+        document.body.style.userSelect = "";
+        document.removeEventListener("touchmove", handleTouchMove);
+        document.removeEventListener("touchend", handleTouchEnd);
+      };
+
+      document.addEventListener("touchmove", handleTouchMove);
+      document.addEventListener("touchend", handleTouchEnd);
+    },
+    [position, onResize]
+  );
+
   // Position the handle on the correct edge:
   // - Panel on left: handle on RIGHT edge
   // - Panel on bottom: handle on TOP edge
@@ -745,6 +799,7 @@ function ResizeHandle({ position, onResize }: ResizeHandleProps) {
     <div
       className={`sdt-resize-handle ${handleClass} ${active ? "active" : ""}`}
       onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
     />
   );
 }
@@ -760,6 +815,7 @@ export interface DevtoolsPanelProps {
   position?: PanelPosition;
   onPositionChange?: (position: PanelPosition) => void;
   onCollapsedChange?: (collapsed: boolean) => void;
+  onTransparencyChange?: (transparent: boolean) => void;
   onResize?: (size: number) => void;
   initialSize?: number;
   initialCollapsed?: boolean;
@@ -770,6 +826,7 @@ export function DevtoolsPanel({
   position: initialPosition = "left",
   onPositionChange,
   onCollapsedChange,
+  onTransparencyChange,
   onResize,
   initialSize = 360,
   initialCollapsed = false,
@@ -817,6 +874,8 @@ export function DevtoolsPanel({
   const [flashingStores, setFlashingStores] = useState<Set<string>>(new Set());
   // Force expand/collapse all stores (null = use individual state)
   const [forceExpanded, setForceExpanded] = useState<boolean | null>(null);
+  // Transparency mode (when user holds the transparency button)
+  const [isTransparent, setIsTransparent] = useState(false);
 
   // Reset forceExpanded after it's applied to allow individual toggling
   useEffect(() => {
@@ -983,6 +1042,25 @@ export function DevtoolsPanel({
     onPositionChange?.(newPosition);
   }, [position, onPositionChange]);
 
+  // Transparency handlers (hold button to make panel transparent)
+  const handleTransparencyStart = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      setIsTransparent(true);
+      onTransparencyChange?.(true);
+    },
+    [onTransparencyChange]
+  );
+
+  const handleTransparencyEnd = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      setIsTransparent(false);
+      onTransparencyChange?.(false);
+    },
+    [onTransparencyChange]
+  );
+
   const handleResize = useCallback(
     (delta: number) => {
       setSize((prev) => {
@@ -1038,7 +1116,9 @@ export function DevtoolsPanel({
 
       {/* Expanded Panel - always mounted, moved off-screen when collapsed */}
       <div
-        className={`storion-devtools ${positionClass}`}
+        className={`storion-devtools ${positionClass} ${
+          isTransparent ? "transparent" : ""
+        }`}
         style={expandedStyle}
       >
         {/* Resize Handle */}
@@ -1051,6 +1131,18 @@ export function DevtoolsPanel({
             <span className="sdt-title">Storion</span>
           </div>
           <div className="sdt-header-actions">
+            <button
+              className="sdt-btn"
+              onMouseDown={handleTransparencyStart}
+              onMouseUp={handleTransparencyEnd}
+              onMouseLeave={handleTransparencyEnd}
+              onTouchStart={handleTransparencyStart}
+              onTouchEnd={handleTransparencyEnd}
+              onClick={(e) => e.preventDefault()}
+              title="Hold to see through"
+            >
+              <IconTransparency />
+            </button>
             <button
               className="sdt-btn"
               onClick={togglePosition}

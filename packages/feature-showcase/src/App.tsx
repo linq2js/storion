@@ -2,7 +2,7 @@
  * Feature Showcase App
  * Demonstrates all Storion features in an interactive UI
  */
-import { useState } from "react";
+import { memo, useState } from "react";
 import { CounterDemo, FocusDemo, AsyncDemo, TodoDemo } from "./components";
 
 type Tab = "counter" | "focus" | "async" | "selectors";
@@ -148,7 +148,7 @@ export function App() {
   );
 }
 
-function FeatureCard({
+const FeatureCard = memo(function FeatureCard({
   title,
   description,
   icon,
@@ -168,5 +168,4 @@ function FeatureCard({
       </div>
     </div>
   );
-}
-
+});

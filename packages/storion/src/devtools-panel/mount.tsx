@@ -312,6 +312,12 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
     updateContainerPosition(newPosition, currentSize, isCollapsed);
   };
 
+  // Handle transparency change from panel
+  const handleTransparencyChange = (transparent: boolean) => {
+    if (!panelContainer) return;
+    panelContainer.style.opacity = transparent ? "0.3" : "1";
+  };
+
   // Create React root and render
   panelRoot = createRoot(containerEl);
   panelRoot.render(
@@ -322,6 +328,7 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
       initialCollapsed={initialCollapsed}
       onCollapsedChange={handleCollapsedChange}
       onPositionChange={handlePositionChange}
+      onTransparencyChange={handleTransparencyChange}
       onResize={handleResize}
     />
   );

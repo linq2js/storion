@@ -84,6 +84,20 @@ export const panelStyles = `
     border-bottom: 1px solid ${colors.border.default};
     background: ${colors.bg.card};
     flex-shrink: 0;
+    position: relative;
+    z-index: 1; /* Keep header above transparent content */
+  }
+
+  /* Transparency mode: keep header interactive */
+  .storion-devtools.transparent .sdt-header {
+    pointer-events: auto;
+  }
+
+  /* Transparency mode: make content non-interactive */
+  .storion-devtools.transparent .sdt-tabs,
+  .storion-devtools.transparent .sdt-tab-content,
+  .storion-devtools.transparent .sdt-main-content {
+    pointer-events: none;
   }
 
   .sdt-logo {
@@ -688,8 +702,8 @@ export const panelStyles = `
     background: transparent;
     z-index: 10;
     transition: background 0.15s ease;
-    /* Increase hit area for easier grabbing */
-    padding: 0;
+    /* Touch-friendly: add invisible padding for larger hit area */
+    touch-action: none; /* Prevent default touch behaviors */
   }
 
   .sdt-resize-handle:hover,
@@ -702,6 +716,17 @@ export const panelStyles = `
     height: 100%;
     top: 0;
     cursor: ew-resize;
+    /* Add larger hit area for touch devices using ::before */
+  }
+
+  .sdt-resize-handle.horizontal::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -8px;
+    right: -8px;
+    /* Invisible 20px wide hit area (4px + 8px on each side) */
   }
 
   .sdt-resize-handle.vertical {
@@ -709,6 +734,16 @@ export const panelStyles = `
     width: 100%;
     left: 0;
     cursor: ns-resize;
+  }
+
+  .sdt-resize-handle.vertical::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -8px;
+    bottom: -8px;
+    /* Invisible 20px tall hit area (4px + 8px on each side) */
   }
 
   .sdt-resize-handle.left { left: 0; }
