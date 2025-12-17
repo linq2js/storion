@@ -12,6 +12,7 @@ export const colors = {
   bg: {
     base: "#09090b", // zinc-950
     card: "#18181b", // zinc-900
+    panel: "#18181b", // zinc-900 - for modals/panels
     elevated: "#27272a", // zinc-800
     hover: "#3f3f46", // zinc-700
     muted: "#52525b", // zinc-600
@@ -42,6 +43,12 @@ export const colors = {
     warning: "#fbbf24", // amber-400
     danger: "#f87171", // red-400
     info: "#38bdf8", // sky-400
+    blue: "#60a5fa", // blue-400
+    purple: "#a78bfa", // violet-400
+    // Aliases for compare modal
+    green: "#4ade80", // green-400
+    red: "#f87171", // red-400
+    yellow: "#fbbf24", // amber-400
   },
 };
 
@@ -574,11 +581,18 @@ export const panelStyles = `
     background: ${colors.bg.elevated};
   }
 
-  .sdt-history-index {
-    font-family: ${fonts.mono};
-    font-size: 10px;
-    color: ${colors.text.dim};
-    min-width: 24px;
+  .sdt-history-item.initial {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.2);
+  }
+
+  .sdt-history-item.initial:hover {
+    background: rgba(59, 130, 246, 0.15);
+  }
+
+  .sdt-history-item.initial .sdt-history-time {
+    color: ${colors.accent.blue};
+    font-weight: 500;
   }
 
   .sdt-history-time {
@@ -598,28 +612,29 @@ export const panelStyles = `
     white-space: nowrap;
   }
 
-  .sdt-history-revert {
-    font-family: ${fonts.sans};
-    font-size: 10px;
-    font-weight: 500;
+  .sdt-history-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .sdt-history-action-btn {
+    background: transparent;
+    border: none;
+    color: ${colors.text.muted};
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
+    transition: all 0.15s;
+  }
+
+  .sdt-history-action-btn:hover {
+    opacity: 1;
     background: ${colors.bg.hover};
     color: ${colors.text.primary};
-    border: 1px solid ${colors.border.subtle};
-    padding: 2px 6px;
-    border-radius: 3px;
-    cursor: pointer;
-    opacity: 0;
-    transition: all 0.15s ease;
-  }
-
-  .sdt-history-item:hover .sdt-history-revert {
-    opacity: 1;
-  }
-
-  .sdt-history-revert:hover {
-    background: ${colors.text.primary};
-    color: ${colors.bg.base};
-    border-color: ${colors.text.primary};
   }
 
   .sdt-history-expand {
@@ -652,10 +667,6 @@ export const panelStyles = `
      ============================================ */
   .sdt-metadata {
     margin-top: 8px;
-    padding: 6px 8px;
-    background: ${colors.bg.elevated};
-    border-radius: 4px;
-    border: 1px solid ${colors.border.default};
   }
 
   .sdt-metadata-row {
@@ -681,19 +692,6 @@ export const panelStyles = `
     font-family: ${fonts.mono};
     color: ${colors.text.secondary};
     word-break: break-all;
-  }
-
-  .sdt-metadata-value.code-location {
-    color: ${colors.accent.info};
-    font-size: 10px;
-    text-decoration: none;
-    cursor: pointer;
-    transition: color 0.15s, text-decoration 0.15s;
-  }
-
-  .sdt-metadata-value.code-location:hover {
-    color: ${colors.accent.blue};
-    text-decoration: underline;
   }
 
   /* ============================================
@@ -1139,27 +1137,6 @@ export const panelStyles = `
   }
 
   /* ============================================
-     History Compare Button
-     ============================================ */
-  .sdt-history-compare {
-    background: transparent;
-    border: 1px solid ${colors.border.subtle};
-    color: ${colors.text.muted};
-    font-size: 9px;
-    padding: 2px 5px;
-    border-radius: 3px;
-    cursor: pointer;
-    margin-right: 4px;
-    transition: all 0.15s;
-  }
-
-  .sdt-history-compare:hover {
-    background: ${colors.accent.blue}20;
-    border-color: ${colors.accent.blue};
-    color: ${colors.accent.blue};
-  }
-
-  /* ============================================
      Event Replay Button
      ============================================ */
   .sdt-event-actions {
@@ -1344,10 +1321,10 @@ export const panelStyles = `
   .sdt-compare-new pre {
     margin: 0;
     font-family: ${fonts.mono};
-    font-size: 10px;
+    font-size: 11px;
     white-space: pre-wrap;
     word-break: break-all;
-    color: ${colors.text.secondary};
+    color: ${colors.text.primary};
   }
 
   /* ============================================

@@ -23,37 +23,6 @@ import type {
 } from "./types";
 
 /**
- * Capture code location from stack trace.
- */
-function captureCodeLocation(): string | undefined {
-  try {
-    const stack = new Error().stack;
-    if (!stack) return undefined;
-
-    const lines = stack.split("\n");
-    // Skip Error, captureCodeLocation, devtoolsMiddleware internals
-    for (let i = 4; i < lines.length; i++) {
-      const line = lines[i];
-      // Skip node_modules and internal files
-      if (
-        line.includes("node_modules") ||
-        line.includes("devtools/middleware")
-      ) {
-        continue;
-      }
-      // Extract file:line:col from stack trace
-      const match = line.match(/at\s+(?:.*?\s+)?\(?(.+?:\d+:\d+)\)?/);
-      if (match) {
-        return match[1];
-      }
-    }
-  } catch {
-    // Ignore errors in stack trace parsing
-  }
-  return undefined;
-}
-
-/**
  * Create the devtools middleware.
  *
  * @example
@@ -71,8 +40,6 @@ export function devtoolsMiddleware(
 ): StoreMiddleware {
   const {
     maxHistory = 5,
-    captureLocation = typeof process === "undefined" ||
-      process.env?.NODE_ENV !== "production",
     windowObject = typeof window !== "undefined" ? window : undefined,
   } = options;
 
@@ -110,8 +77,6 @@ export function devtoolsMiddleware(
     spec: StoreSpec<S, A>,
     next: (spec: StoreSpec<S, A>) => StoreInstance<S, A>
   ): StoreInstance<S, A> => {
-    const codeLocation = captureLocation ? captureCodeLocation() : undefined;
-
     // Wrap the setup function to inject devtools actions
     const originalSetup = spec.options.setup;
 
@@ -151,7 +116,6 @@ export function devtoolsMiddleware(
       id: instance.id,
       name: spec.name,
       state: { ...instance.state },
-      codeLocation,
       disposed: false,
       instance,
       createdAt: Date.now(),

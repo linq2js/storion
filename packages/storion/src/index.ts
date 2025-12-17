@@ -93,3 +93,6 @@ export {
 
 // Trigger utility
 export { trigger, type TriggerOptions } from "./trigger";
+
+// Function wrapper utility
+export { wrapFn as wrapFn, unwrapFn, isWrappedFn } from "./core/fnWrapper";

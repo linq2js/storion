@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { trigger } from "./trigger";
+import { ORIGINAL_FN } from "./core/fnWrapper";
 import { deepEqual } from "./core/equality";
 
 describe("trigger", () => {
@@ -291,6 +292,106 @@ describe("trigger", () => {
       const user2 = trigger(fetchUser, [2], 2);
       expect(fetchUser).toHaveBeenCalledTimes(2);
       expect(user2).toEqual({ id: 2, name: "User 2" });
+    });
+  });
+
+  describe("wrapped function deduplication", () => {
+    it("should treat wrapped and original functions as the same", () => {
+      const original = vi.fn((x: number) => x * 2);
+      // Simulate store action wrapping
+      const wrapped = (...args: any[]) => original(...args);
+      (wrapped as any)[ORIGINAL_FN] = original;
+
+      // First call with original
+      const result1 = trigger(original, [10], 10);
+      expect(result1).toBe(20);
+      expect(original).toHaveBeenCalledTimes(1);
+
+      // Second call with wrapped, same deps - should NOT call again
+      const result2 = trigger(wrapped, [10], 10);
+      expect(result2).toBe(20);
+      expect(original).toHaveBeenCalledTimes(1); // Still 1!
+
+      // Third call with original, different deps - should call
+      const result3 = trigger(original, [5], 5);
+      expect(result3).toBe(10);
+      expect(original).toHaveBeenCalledTimes(2);
+
+      // Fourth call with wrapped, same deps as third - should NOT call
+      const result4 = trigger(wrapped, [5], 5);
+      expect(result4).toBe(10);
+      expect(original).toHaveBeenCalledTimes(2); // Still 2!
+    });
+
+    it("should work with different call orders (wrapped first)", () => {
+      const original = vi.fn((x: string) => `Hello ${x}`);
+      
+      const wrapped = (...args: any[]) => original(...args);
+      (wrapped as any)[ORIGINAL_FN] = original;
+
+      // First call with wrapped
+      const result1 = trigger(wrapped, ["World"], "World");
+      expect(result1).toBe("Hello World");
+      expect(original).toHaveBeenCalledTimes(1);
+
+      // Second call with original, same deps - should NOT call again
+      const result2 = trigger(original, ["World"], "World");
+      expect(result2).toBe("Hello World");
+      expect(original).toHaveBeenCalledTimes(1); // Still 1!
+    });
+
+    it("should handle store action scenario", () => {
+      // Simulate the user's example
+      const fetchUserApi = { dispatch: vi.fn((id: number) => ({ id, name: `User ${id}` })) };
+      
+      // This is what happens inside the store wrapper
+      const wrappedDispatch = (...args: any[]) => fetchUserApi.dispatch(...args);
+      (wrappedDispatch as any)[ORIGINAL_FN] = fetchUserApi.dispatch;
+
+      // Component calls with wrapped version
+      const user1 = trigger(wrappedDispatch, [1], 1);
+      expect(user1).toEqual({ id: 1, name: "User 1" });
+      expect(fetchUserApi.dispatch).toHaveBeenCalledTimes(1);
+
+      // Store internal method calls with original - should dedupe
+      const user2 = trigger(fetchUserApi.dispatch, [1], 1);
+      expect(user2).toEqual({ id: 1, name: "User 1" });
+      expect(fetchUserApi.dispatch).toHaveBeenCalledTimes(1); // No duplicate!
+
+      // Different deps, should call again
+      const user3 = trigger(wrappedDispatch, [2], 2);
+      expect(user3).toEqual({ id: 2, name: "User 2" });
+      expect(fetchUserApi.dispatch).toHaveBeenCalledTimes(2);
+    });
+
+    it("should handle exact user scenario with async actions", () => {
+      // Simulate async action API
+      const fetchUserApi = {
+        dispatch: vi.fn((userId: string) => Promise.resolve({ userId, name: `User ${userId}` })),
+      };
+
+      // Inside setup(), this is the original
+      const setupDispatch = fetchUserApi.dispatch;
+
+      // Store wraps it and exposes as action
+      const wrappedFetchUser = (...args: any[]) => fetchUserApi.dispatch(...args);
+      (wrappedFetchUser as any)[ORIGINAL_FN] = fetchUserApi.dispatch;
+
+      const d1 = "user123";
+
+      // Store's otherMethod() calls trigger with original
+      trigger(setupDispatch, [d1], d1);
+      expect(fetchUserApi.dispatch).toHaveBeenCalledTimes(1);
+
+      // Component calls trigger with wrapped version, same d1
+      // Should NOT call dispatch again - deduplication works!
+      trigger(wrappedFetchUser, [d1], d1);
+      expect(fetchUserApi.dispatch).toHaveBeenCalledTimes(1); // Still 1! ✅
+
+      // Different dependency
+      const d2 = "user456";
+      trigger(wrappedFetchUser, [d2], d2);
+      expect(fetchUserApi.dispatch).toHaveBeenCalledTimes(2); // Now 2
     });
   });
 });

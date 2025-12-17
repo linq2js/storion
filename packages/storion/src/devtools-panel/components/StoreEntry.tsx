@@ -13,6 +13,8 @@ import {
   IconSave,
   IconCancel,
   IconEvents,
+  IconCompare,
+  IconRevert,
 } from "./icons";
 
 const DEFAULT_HISTORY_COUNT = 5;
@@ -54,12 +56,23 @@ export const StoreEntry = memo(function StoreEntry({
   }, []);
 
   // History display logic
+  // Initial state is always shown at the bottom
+  // Recent entries appear above it (newest first, then older, then initial)
   const totalHistory = entry.history.length;
   const hasMoreHistory = totalHistory > DEFAULT_HISTORY_COUNT;
   const displayCount = historyExpanded
     ? Math.min(totalHistory, MAX_HISTORY_COUNT)
     : Math.min(totalHistory, DEFAULT_HISTORY_COUNT);
-  const displayHistory = entry.history.slice(-displayCount).reverse();
+
+  // Build display history: recent entries (excluding initial) + initial at bottom
+  const initialSnapshot = entry.history[0];
+  const recentEntries = entry.history.slice(1); // All entries except initial
+  const recentDisplayCount = Math.max(0, displayCount - 1); // Reserve 1 slot for initial
+  const displayRecentEntries = recentEntries.slice(-recentDisplayCount).reverse();
+  const displayHistory =
+    totalHistory > 0
+      ? [...displayRecentEntries, initialSnapshot]
+      : [];
 
   // Get changed props by comparing with previous snapshot
   const getChangedProps = useCallback(
@@ -104,12 +117,6 @@ export const StoreEntry = memo(function StoreEntry({
 
   // Meta entries
   const metaEntries = entry.meta ? Object.entries(entry.meta) : [];
-
-  // Extract file path from code location (remove line:column numbers)
-  const getFileUrl = (location: string): string => {
-    // Remove line:column suffix (e.g., "/path/file.ts:10:5" -> "/path/file.ts")
-    return location.replace(/:\d+:\d+$/, "").replace(/:\d+$/, "");
-  };
 
   // State editing handlers
   const handleStartEdit = useCallback(() => {
@@ -219,35 +226,41 @@ export const StoreEntry = memo(function StoreEntry({
               <div className="sdt-section-title">History ({totalHistory})</div>
               {displayHistory.map((snapshot) => {
                 const historyIndex = getSnapshotIndex(snapshot.id);
+                const isInitial = historyIndex === 0;
                 const changedProps = getChangedProps(historyIndex);
                 return (
-                  <div key={snapshot.id} className="sdt-history-item">
-                    <span className="sdt-history-index">[{historyIndex}]</span>
+                  <div
+                    key={snapshot.id}
+                    className={`sdt-history-item ${isInitial ? "initial" : ""}`}
+                  >
                     <span className="sdt-history-time">
-                      {formatTime(snapshot.timestamp)}
+                      {isInitial ? "Initial" : formatTime(snapshot.timestamp)}
                     </span>
                     <span className="sdt-history-props">
                       {changedProps.join(", ")}
                     </span>
-                    <button
-                      className="sdt-history-compare"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCompare?.(entry.id, snapshot);
-                      }}
-                      title="Compare with current state"
-                    >
-                      Compare
-                    </button>
-                    <button
-                      className="sdt-history-revert"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRevert(snapshot.id);
-                      }}
-                    >
-                      Revert
-                    </button>
+                    <div className="sdt-history-actions">
+                      <button
+                        className="sdt-history-action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCompare?.(entry.id, snapshot);
+                        }}
+                        title="Compare with current state"
+                      >
+                        <IconCompare />
+                      </button>
+                      <button
+                        className="sdt-history-action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRevert(snapshot.id);
+                        }}
+                        title="Revert to this state"
+                      >
+                        <IconRevert />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -288,20 +301,6 @@ export const StoreEntry = memo(function StoreEntry({
                 {formatDateTime(entry.createdAt)}
               </span>
             </div>
-            {entry.codeLocation && (
-              <div className="sdt-metadata-row">
-                <span className="sdt-metadata-label">Location:</span>
-                <a
-                  className="sdt-metadata-value code-location"
-                  href={getFileUrl(entry.codeLocation)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {entry.codeLocation}
-                </a>
-              </div>
-            )}
             {metaEntries.length > 0 && (
               <>
                 <div

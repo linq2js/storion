@@ -10,6 +10,7 @@ export const CounterDemo = memo(function CounterDemo() {
   // Read specific values inside selector for proper tracking
   const { count, step, history, actions } = useStore(({ get }) => {
     const [state, actions] = get(counterStore);
+
     return {
       count: state.count,
       step: state.step,

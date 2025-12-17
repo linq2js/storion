@@ -68,8 +68,6 @@ export interface DevtoolsStoreEntry {
   state: Record<string, unknown>;
   /** State history (last N snapshots) */
   history: StateSnapshot[];
-  /** Code location where spec was defined (if available) */
-  codeLocation?: string;
   /** Whether the store is disposed */
   disposed: boolean;
   /** Store instance reference */
@@ -138,8 +136,6 @@ export interface DevtoolsMiddlewareOptions {
   name?: string;
   /** Maximum history entries per store (default: 5) */
   maxHistory?: number;
-  /** Whether to capture code location (default: true in dev) */
-  captureLocation?: boolean;
   /** Custom window object (for testing) */
   windowObject?: typeof globalThis;
 }

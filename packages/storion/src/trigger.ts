@@ -6,6 +6,7 @@
  */
 
 import { resolveEquality, shallowEqual } from "./core/equality";
+import { unwrapFn } from "./core/fnWrapper";
 import { Equality } from "./types";
 
 /** Default key for unkeyed trigger calls */
@@ -118,8 +119,12 @@ export function trigger(
     args = depsOrFirstArg !== undefined ? [depsOrFirstArg, ...restArgs] : [];
   }
 
+  // Unwrap the function to get its original reference for cache key lookup
+  // This ensures wrapped store actions are treated the same as their originals
+  const cacheKey = unwrapFn(fn);
+
   const keyCache = getKeyCache(key);
-  const cached = keyCache.get(fn);
+  const cached = keyCache.get(cacheKey);
 
   // Use cached equality or provided equality or default shallowEqual
   const eq = equality ?? cached?.equality ?? shallowEqual;
@@ -129,9 +134,12 @@ export function trigger(
     return cached.result;
   }
 
-  // Run function and cache result
+  // Execute the WRAPPED function (what was passed to trigger)
+  // This preserves all wrapping behavior (error handling, middleware, etc.)
   const result = fn(...args);
-  keyCache.set(fn, { deps, result, equality });
+
+  // Cache using the unwrapped/original function as the key for deduplication
+  keyCache.set(cacheKey, { deps, result, equality });
 
   return result;
 }

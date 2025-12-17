@@ -32,6 +32,7 @@ import {
 } from "./tracking";
 import { resolveEquality, strictEqual } from "./equality";
 import { generateSpecName, generateStoreId } from "./generator";
+import { wrapFn } from "./fnWrapper";
 
 import { emitter, Emitter } from "../emitter";
 import { collection } from "../collection";
@@ -696,73 +697,78 @@ export function createStoreInstance<
       );
     }
 
-    // Create the wrapped action function
-    const wrappedAction = (...args: any[]) => {
-      if (disposed) {
-        throw new Error(`Cannot call action on disposed store: ${storeId}`);
-      }
+    // Create the wrapped action function with original marked
+    const wrappedAction = wrapFn(action, (originalAction) => {
+      const wrapper = (...args: any[]) => {
+        if (disposed) {
+          throw new Error(`Cannot call action on disposed store: ${storeId}`);
+        }
 
-      // Record dispatch info BEFORE action execution (for error cases)
-      // but DON'T emit to wildcard subscribers yet
-      const actionNameKey = name as keyof TActions;
-      const nthKey = name;
-      const nth = (actionNthCounters.get(nthKey) ?? 0) + 1;
-      actionNthCounters.set(nthKey, nth);
+        // Record dispatch info BEFORE action execution (for error cases)
+        // but DON'T emit to wildcard subscribers yet
+        const actionNameKey = name as keyof TActions;
+        const nthKey = name;
+        const nth = (actionNthCounters.get(nthKey) ?? 0) + 1;
+        actionNthCounters.set(nthKey, nth);
 
-      const prev = actionInvocations.get(nthKey);
-      const next: ActionDispatchEvent<TActions, typeof actionNameKey> =
-        Object.freeze({
-          name: actionNameKey,
-          args: args as Parameters<TActions[typeof actionNameKey]>,
-          nth,
-          timestamp: Date.now(),
-        });
-      actionInvocations.set(nthKey, next);
+        const prev = actionInvocations.get(nthKey);
+        const next: ActionDispatchEvent<TActions, typeof actionNameKey> =
+          Object.freeze({
+            name: actionNameKey,
+            args: args as Parameters<TActions[typeof actionNameKey]>,
+            nth,
+            timestamp: Date.now(),
+          });
+        actionInvocations.set(nthKey, next);
 
-      // Notify specific action emitter (@actionName) - before execution
-      const actionEmitter = actionEmitters.get(nthKey);
-      if (actionEmitter.size > 0) {
-        actionEmitter.emit({
-          next: next as DispatchEvent<TActions>,
-          prev: prev as DispatchEvent<TActions> | undefined,
-        });
-      }
-
-      // Also call options.onDispatch if provided
-      if (options.onDispatch) {
-        options.onDispatch(next as DispatchEvent<TActions>);
-      }
-
-      try {
-        const result = action(...args);
-
-        // Emit to wildcard subscribers AFTER action completes successfully
-        // This ensures state is captured after all mutations
-        if (wildcardActionEmitter.size > 0) {
-          wildcardActionEmitter.emit({
+        // Notify specific action emitter (@actionName) - before execution
+        const actionEmitter = actionEmitters.get(nthKey);
+        if (actionEmitter.size > 0) {
+          actionEmitter.emit({
             next: next as DispatchEvent<TActions>,
             prev: prev as DispatchEvent<TActions> | undefined,
           });
         }
 
-        return result;
-      } catch (error) {
-        // Still emit to wildcard on error (so devtools can see failed actions)
-        if (wildcardActionEmitter.size > 0) {
-          wildcardActionEmitter.emit({
-            next: next as DispatchEvent<TActions>,
-            prev: prev as DispatchEvent<TActions> | undefined,
-          });
+        // Also call options.onDispatch if provided
+        if (options.onDispatch) {
+          options.onDispatch(next as DispatchEvent<TActions>);
         }
-        if (options.onError) {
-          options.onError(error);
-        }
-        throw error;
-      }
-    };
 
-    // Add .last() method for reactive dispatch tracking
-    wrappedAction.last = () => getActionLastInvocation(name as keyof TActions);
+        try {
+          const result = originalAction(...args);
+
+          // Emit to wildcard subscribers AFTER action completes successfully
+          // This ensures state is captured after all mutations
+          if (wildcardActionEmitter.size > 0) {
+            wildcardActionEmitter.emit({
+              next: next as DispatchEvent<TActions>,
+              prev: prev as DispatchEvent<TActions> | undefined,
+            });
+          }
+
+          return result;
+        } catch (error) {
+          // Still emit to wildcard on error (so devtools can see failed actions)
+          if (wildcardActionEmitter.size > 0) {
+            wildcardActionEmitter.emit({
+              next: next as DispatchEvent<TActions>,
+              prev: prev as DispatchEvent<TActions> | undefined,
+            });
+          }
+          if (options.onError) {
+            options.onError(error);
+          }
+          throw error;
+        }
+      };
+
+      // Add .last() method for reactive dispatch tracking
+      (wrapper as any).last = () =>
+        getActionLastInvocation(name as keyof TActions);
+
+      return wrapper;
+    });
 
     (wrappedActions as any)[name] = wrappedAction;
   }
