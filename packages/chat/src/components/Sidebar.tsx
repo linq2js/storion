@@ -1,5 +1,12 @@
-import { withStore } from "storion/react";
-import { chatStore } from "../stores";
+import { useContainer, withStore } from "storion/react";
+import {
+  authStore,
+  usersStore,
+  roomsStore,
+  invitationsStore,
+  chatUIStore,
+  resetAllStores,
+} from "../stores";
 import type { Room, User, RoomInvitation } from "../types";
 
 // Status indicator component
@@ -9,7 +16,11 @@ function StatusDot({ status }: { status: User["status"] }) {
     away: "bg-chat-away",
     offline: "bg-chat-offline",
   };
-  return <div className={`w-2.5 h-2.5 rounded-full ${colors[status]} border-[1.5px] border-chat-surface`} />;
+  return (
+    <div
+      className={`w-2.5 h-2.5 rounded-full ${colors[status]} border-[1.5px] border-chat-surface`}
+    />
+  );
 }
 
 // Room list item
@@ -29,9 +40,13 @@ function RoomItem({
   const otherUserId = room.isDirectMessage
     ? room.members.find((id) => id !== currentUserId)
     : null;
-  const otherUser = otherUserId ? users.find((u) => u.id === otherUserId) : null;
+  const otherUser = otherUserId
+    ? users.find((u) => u.id === otherUserId)
+    : null;
 
-  const displayName = room.isDirectMessage ? otherUser?.nickname ?? "User" : room.name;
+  const displayName = room.isDirectMessage
+    ? otherUser?.nickname ?? "User"
+    : room.name;
   const avatar = room.isDirectMessage ? otherUser?.avatar : null;
 
   return (
@@ -45,7 +60,11 @@ function RoomItem({
     >
       {avatar ? (
         <div className="relative flex-shrink-0">
-          <img src={avatar} alt="" className="w-7 h-7 rounded-full bg-chat-elevated" />
+          <img
+            src={avatar}
+            alt=""
+            className="w-7 h-7 rounded-full bg-chat-elevated"
+          />
           {otherUser && (
             <div className="absolute -bottom-0.5 -right-0.5">
               <StatusDot status={otherUser.status} />
@@ -60,10 +79,14 @@ function RoomItem({
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium truncate">{displayName}</p>
         {room.isDirectMessage && otherUser && (
-          <p className="text-[10px] text-zinc-500 truncate">{otherUser.fullName}</p>
+          <p className="text-[10px] text-zinc-500 truncate">
+            {otherUser.fullName}
+          </p>
         )}
         {!room.isDirectMessage && room.description && (
-          <p className="text-[10px] text-zinc-500 truncate">{room.description}</p>
+          <p className="text-[10px] text-zinc-500 truncate">
+            {room.description}
+          </p>
         )}
       </div>
     </button>
@@ -95,7 +118,11 @@ function UserItem({
         className="relative flex-shrink-0 hover:opacity-80 transition-opacity"
         title="View profile"
       >
-        <img src={user.avatar} alt="" className="w-7 h-7 rounded-full bg-chat-elevated" />
+        <img
+          src={user.avatar}
+          alt=""
+          className="w-7 h-7 rounded-full bg-chat-elevated"
+        />
         <div className="absolute -bottom-0.5 -right-0.5">
           <StatusDot status={user.status} />
         </div>
@@ -103,7 +130,9 @@ function UserItem({
       <button
         onClick={onClick}
         disabled={isCurrentUser}
-        className={`flex-1 min-w-0 text-left ${isCurrentUser ? "cursor-not-allowed" : ""}`}
+        className={`flex-1 min-w-0 text-left ${
+          isCurrentUser ? "cursor-not-allowed" : ""
+        }`}
       >
         <p className="text-xs font-medium text-white truncate">
           {user.nickname}
@@ -117,7 +146,7 @@ function UserItem({
 
 // Invitation item
 function InvitationItem({
-  invitation,
+  invitation: _invitation,
   room,
   inviter,
   onAccept,
@@ -129,6 +158,7 @@ function InvitationItem({
   onAccept: () => void;
   onDecline: () => void;
 }) {
+  void _invitation; // Used for prop type definition
   return (
     <div className="p-1.5 bg-chat-elevated rounded-md">
       <div className="flex items-center gap-1.5 mb-1.5">
@@ -137,7 +167,10 @@ function InvitationItem({
         )}
         <div className="flex-1 min-w-0">
           <p className="text-[10px] text-white">
-            <span className="font-medium">{inviter?.nickname ?? "Someone"}</span> invited you to
+            <span className="font-medium">
+              {inviter?.nickname ?? "Someone"}
+            </span>{" "}
+            invited you to
           </p>
           <p className="text-[10px] font-medium text-chat-accent truncate">
             {room?.name ?? "a room"}
@@ -164,22 +197,27 @@ function InvitationItem({
 
 export const Sidebar = withStore(
   (ctx) => {
-    const [state, actions] = ctx.get(chatStore);
+    const [authState, authActions] = ctx.get(authStore);
+    const [usersState] = ctx.get(usersStore);
+    const [roomsState, roomsActions] = ctx.get(roomsStore);
+    const [invitationsState, invitationsActions] = ctx.get(invitationsStore);
+    const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+
     return {
-      currentUser: state.currentUser,
-      rooms: state.rooms.data ?? [],
-      users: state.users.data ?? [],
-      invitations: state.invitations.data ?? [],
-      activeRoomId: state.activeRoomId,
-      sidebarView: state.sidebarView,
-      setSidebarView: actions.setSidebarView,
-      selectRoom: actions.selectRoom,
-      startDirectMessage: actions.startDirectMessage,
-      setShowCreateRoom: actions.setShowCreateRoom,
-      acceptInvitation: actions.acceptInvitation,
-      declineInvitation: actions.declineInvitation,
-      setShowProfile: actions.setShowProfile,
-      logout: actions.logout,
+      currentUser: authState.currentUser,
+      rooms: roomsState.rooms.data ?? [],
+      users: usersState.users.data ?? [],
+      invitations: invitationsState.invitations.data ?? [],
+      activeRoomId: roomsState.activeRoomId,
+      sidebarView: chatUIState.sidebarView,
+      setSidebarView: chatUIActions.setSidebarView,
+      selectRoom: roomsActions.selectRoom,
+      startDirectMessage: roomsActions.startDirectMessage,
+      setShowCreateRoom: chatUIActions.setShowCreateRoom,
+      acceptInvitation: invitationsActions.acceptInvitation,
+      declineInvitation: invitationsActions.declineInvitation,
+      setShowProfile: chatUIActions.setShowProfile,
+      logout: authActions.logout,
     };
   },
   ({
@@ -198,6 +236,7 @@ export const Sidebar = withStore(
     setShowProfile,
     logout,
   }) => {
+    const app = useContainer();
     if (!currentUser) return null;
 
     const groupRooms = rooms.filter((r) => !r.isDirectMessage);
@@ -207,7 +246,11 @@ export const Sidebar = withStore(
     const tabs = [
       { id: "rooms" as const, label: "Rooms", count: rooms.length },
       { id: "users" as const, label: "Users", count: otherUsers.length },
-      { id: "invitations" as const, label: "Invites", count: invitations.length },
+      {
+        id: "invitations" as const,
+        label: "Invites",
+        count: invitations.length,
+      },
     ];
 
     return (
@@ -230,16 +273,28 @@ export const Sidebar = withStore(
                 </div>
               </div>
               <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-semibold text-white truncate">{currentUser.nickname}</p>
-                <p className="text-[10px] text-zinc-500 truncate">{currentUser.fullName}</p>
+                <p className="text-xs font-semibold text-white truncate">
+                  {currentUser.nickname}
+                </p>
+                <p className="text-[10px] text-zinc-500 truncate">
+                  {currentUser.fullName}
+                </p>
               </div>
             </button>
             <button
-              onClick={logout}
+              onClick={() => {
+                logout();
+                resetAllStores(app);
+              }}
               className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-chat-elevated rounded transition-colors flex-shrink-0"
               title="Logout"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -297,7 +352,12 @@ export const Sidebar = withStore(
                     className="p-0.5 text-zinc-500 hover:text-chat-accent transition-colors"
                     title="Create room"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -309,7 +369,9 @@ export const Sidebar = withStore(
                 </div>
                 <div className="space-y-0.5">
                   {groupRooms.length === 0 ? (
-                    <p className="px-1.5 py-1 text-[10px] text-zinc-500">No channels yet</p>
+                    <p className="px-1.5 py-1 text-[10px] text-zinc-500">
+                      No channels yet
+                    </p>
                   ) : (
                     groupRooms.map((room) => (
                       <RoomItem
@@ -332,7 +394,9 @@ export const Sidebar = withStore(
                 </h3>
                 <div className="space-y-0.5">
                   {dmRooms.length === 0 ? (
-                    <p className="px-1.5 py-1 text-[10px] text-zinc-500">No conversations yet</p>
+                    <p className="px-1.5 py-1 text-[10px] text-zinc-500">
+                      No conversations yet
+                    </p>
                   ) : (
                     dmRooms.map((room) => (
                       <RoomItem

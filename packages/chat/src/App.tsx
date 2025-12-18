@@ -1,6 +1,6 @@
 import { useEffect, useState, useLayoutEffect } from "react";
-import { withStore } from "storion/react";
-import { chatStore } from "./stores";
+import { useContainer, withStore } from "storion/react";
+import { authStore, loadInitialData } from "./stores";
 import {
   LoginScreen,
   Sidebar,
@@ -60,7 +60,7 @@ function LoadingScreen() {
 // Main chat layout
 const ChatLayout = withStore(
   (ctx) => {
-    const [state] = ctx.get(chatStore);
+    const [state] = ctx.get(authStore);
     return { currentUser: state.currentUser };
   },
   ({ currentUser }) => {
@@ -85,10 +85,11 @@ const ChatLayout = withStore(
 // App wrapper with initialization - needs to be inside StoreProvider
 const AppContent = withStore(
   (ctx) => {
-    const [, actions] = ctx.get(chatStore);
+    const [, actions] = ctx.get(authStore);
     return { restoreSession: actions.restoreSession };
   },
   ({ restoreSession }) => {
+    const app = useContainer();
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
@@ -97,13 +98,18 @@ const AppContent = withStore(
         await initDB();
 
         // Try to restore session
-        await restoreSession();
+        const user = await restoreSession();
+
+        // Load initial data if user was restored
+        if (user) {
+          await loadInitialData(app);
+        }
 
         setIsInitialized(true);
       }
 
       initialize();
-    }, [restoreSession]);
+    }, [restoreSession, app]);
 
     if (!isInitialized) {
       return <LoadingScreen />;

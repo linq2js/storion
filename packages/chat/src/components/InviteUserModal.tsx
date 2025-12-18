@@ -1,23 +1,28 @@
 import { useState } from "react";
 import { withStore } from "storion/react";
-import { chatStore } from "../stores";
+import { authStore, usersStore, roomsStore, invitationsStore, chatUIStore } from "../stores";
 import type { User } from "../types";
 
 export const InviteUserModal = withStore(
   (ctx) => {
-    const [state, actions] = ctx.get(chatStore);
-    const activeRoom = (state.rooms.data ?? []).find((r) => r.id === state.activeRoomId);
-    const usersNotInRoom = (state.users.data ?? []).filter(
+    const [authState] = ctx.get(authStore);
+    const [usersState] = ctx.get(usersStore);
+    const [roomsState] = ctx.get(roomsStore);
+    const [, invitationsActions] = ctx.get(invitationsStore);
+    const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+
+    const activeRoom = (roomsState.rooms.data ?? []).find((r) => r.id === roomsState.activeRoomId);
+    const usersNotInRoom = (usersState.users.data ?? []).filter(
       (u) =>
-        u.id !== state.currentUser?.id && !activeRoom?.members.includes(u.id)
+        u.id !== authState.currentUser?.id && !activeRoom?.members.includes(u.id)
     );
 
     return {
-      show: state.showInviteUser,
-      setShow: actions.setShowInviteUser,
+      show: chatUIState.showInviteUser,
+      setShow: chatUIActions.setShowInviteUser,
       activeRoom,
       usersNotInRoom,
-      inviteUser: actions.inviteUserToRoom,
+      inviteUser: invitationsActions.inviteUserToRoom,
     };
   },
   ({ show, setShow, activeRoom, usersNotInRoom, inviteUser }) => {

@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { withStore } from "storion/react";
-import { chatStore } from "../stores";
+import { roomsStore, chatUIStore } from "../stores";
 
 export const CreateRoomModal = withStore(
   (ctx) => {
-    const [state, actions] = ctx.get(chatStore);
+    const [, roomsActions] = ctx.get(roomsStore);
+    const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+
     return {
-      show: state.showCreateRoom,
-      setShow: actions.setShowCreateRoom,
-      createRoom: actions.createRoom,
-      selectRoom: actions.selectRoom,
+      show: chatUIState.showCreateRoom,
+      setShow: chatUIActions.setShowCreateRoom,
+      createRoom: roomsActions.createRoom,
+      selectRoom: roomsActions.selectRoom,
     };
   },
   ({ show, setShow, createRoom, selectRoom }) => {

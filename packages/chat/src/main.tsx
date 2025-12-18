@@ -5,7 +5,7 @@ import { StoreProvider } from "storion/react";
 import { devtoolsMiddleware } from "storion/devtools";
 import { mountDevtoolsPanel } from "storion/devtools-panel";
 import { App } from "./App";
-import { setupCrossTabSync, chatStore, toastStore } from "./stores";
+import { setupCrossTabSync, toastStore } from "./stores";
 import "./index.css";
 
 // Set default middleware for all containers (in development)
@@ -25,17 +25,8 @@ const app = container();
 
 // Setup cross-tab sync after mounting
 setTimeout(() => {
-  const chatInstance = app.get(chatStore);
-  const toastInstance = app.get(toastStore);
-
-  setupCrossTabSync(
-    chatInstance.actions,
-    { show: toastInstance.actions.show },
-    () => chatInstance.state.users.data ?? [],
-    () => chatInstance.state.rooms.data ?? [],
-    () => chatInstance.state.currentUser?.id ?? null,
-    () => chatInstance.state.activeRoomId
-  );
+  const [, toastActions] = app.get(toastStore);
+  setupCrossTabSync(app, { show: toastActions.show });
 }, 0);
 
 createRoot(document.getElementById("root")!).render(

@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { withStore } from "storion/react";
-import { chatStore } from "../stores";
+import {
+  authStore,
+  usersStore,
+  roomsStore,
+  messagesStore,
+  chatUIStore,
+} from "../stores";
 import type { Message, User, Room } from "../types";
 
 // Format timestamp
@@ -247,28 +253,33 @@ function RoomHeader({
 
 export const ChatRoom = withStore(
   (ctx) => {
-    const [state, actions] = ctx.get(chatStore);
-    const activeRoom = (state.rooms.data ?? []).find((r) => r.id === state.activeRoomId);
-    const messages = state.activeRoomId ? state.messages[state.activeRoomId]?.data ?? [] : [];
-    const typingUserIds = state.typingUsers
-      .filter((t) => t.roomId === state.activeRoomId)
+    const [authState] = ctx.get(authStore);
+    const [usersState] = ctx.get(usersStore);
+    const [roomsState, roomsActions] = ctx.get(roomsStore);
+    const [messagesState, messagesActions] = ctx.get(messagesStore);
+    const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+
+    const activeRoom = (roomsState.rooms.data ?? []).find((r) => r.id === roomsState.activeRoomId);
+    const messages = roomsState.activeRoomId ? messagesState.messages[roomsState.activeRoomId]?.data ?? [] : [];
+    const typingUserIds = chatUIState.typingUsers
+      .filter((t) => t.roomId === roomsState.activeRoomId)
       .map((t) => t.userId);
-    const typingUsers = (state.users.data ?? []).filter((u) => typingUserIds.includes(u.id));
+    const typingUsers = (usersState.users.data ?? []).filter((u) => typingUserIds.includes(u.id));
 
     return {
-      currentUser: state.currentUser,
+      currentUser: authState.currentUser,
       activeRoom,
       messages,
-      users: state.users.data ?? [],
+      users: usersState.users.data ?? [],
       typingUsers,
-      sendMessage: actions.sendMessage,
-      deleteMessage: actions.deleteMessage,
-      loadMessages: actions.loadMessages,
-      deleteRoom: actions.deleteRoom,
-      setShowInviteUser: actions.setShowInviteUser,
-      setShowProfile: actions.setShowProfile,
-      startTyping: actions.startTyping,
-      stopTyping: actions.stopTyping,
+      sendMessage: messagesActions.sendMessage,
+      deleteMessage: messagesActions.deleteMessage,
+      loadMessages: messagesActions.loadMessages,
+      deleteRoom: roomsActions.deleteRoom,
+      setShowInviteUser: chatUIActions.setShowInviteUser,
+      setShowProfile: chatUIActions.setShowProfile,
+      startTyping: chatUIActions.startTyping,
+      stopTyping: chatUIActions.stopTyping,
     };
   },
   ({

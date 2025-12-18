@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { withStore } from "storion/react";
-import { chatStore } from "../stores";
+import { useContainer, withStore } from "storion/react";
+import { authStore, loadInitialData } from "../stores";
 import { getAvatarUrl } from "../types";
 
 export const LoginScreen = withStore(
   (ctx) => {
-    const [, actions] = ctx.get(chatStore);
+    const [, actions] = ctx.get(authStore);
     return { login: actions.login };
   },
   ({ login }) => {
+    const app = useContainer();
     const [nickname, setNickname] = useState("");
     const [fullName, setFullName] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +23,7 @@ export const LoginScreen = withStore(
       setIsLoading(true);
       try {
         await login(nickname.trim(), fullName.trim());
+        await loadInitialData(app);
       } finally {
         setIsLoading(false);
       }

@@ -1,6 +1,5 @@
 import { withStore } from "storion/react";
-import { toastStore, type Toast, type ToastType } from "../stores/toastStore";
-import { chatStore } from "../stores";
+import { toastStore, roomsStore, type Toast, type ToastType } from "../stores";
 
 // Icon components for different toast types
 function ToastIcon({ type }: { type: ToastType }) {
@@ -120,11 +119,11 @@ function ToastItem({
 export const ToastContainer = withStore(
   (ctx) => {
     const [toastState, toastActions] = ctx.get(toastStore);
-    const [, chatActions] = ctx.get(chatStore);
+    const [, roomsActions] = ctx.get(roomsStore);
     return {
       toasts: toastState.toasts,
       dismiss: toastActions.dismiss,
-      selectRoom: chatActions.selectRoom,
+      selectRoom: roomsActions.selectRoom,
     };
   },
   ({ toasts, dismiss, selectRoom }) => {

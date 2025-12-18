@@ -1,5 +1,5 @@
 import { withStore } from "storion/react";
-import { chatStore } from "../stores";
+import { authStore, usersStore, roomsStore, chatUIStore } from "../stores";
 import type { User } from "../types";
 
 // Format date
@@ -44,16 +44,20 @@ function StatusBadge({ status }: { status: User["status"] }) {
 
 export const ProfileModal = withStore(
   (ctx) => {
-    const [state, actions] = ctx.get(chatStore);
-    const user = state.showProfile
-      ? (state.users.data ?? []).find((u) => u.id === state.showProfile)
+    const [authState] = ctx.get(authStore);
+    const [usersState] = ctx.get(usersStore);
+    const [, roomsActions] = ctx.get(roomsStore);
+    const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+
+    const user = chatUIState.showProfile
+      ? (usersState.users.data ?? []).find((u) => u.id === chatUIState.showProfile)
       : null;
 
     return {
       user,
-      isCurrentUser: user?.id === state.currentUser?.id,
-      close: () => actions.setShowProfile(null),
-      startDirectMessage: actions.startDirectMessage,
+      isCurrentUser: user?.id === authState.currentUser?.id,
+      close: () => chatUIActions.setShowProfile(null),
+      startDirectMessage: roomsActions.startDirectMessage,
     };
   },
   ({ user, isCurrentUser, close, startDirectMessage }) => {
