@@ -83,6 +83,55 @@ describe("focus()", () => {
       expect(instance.actions.get()).toBe(15);
     });
 
+    it("should support immer-style produce in setter (mutate draft, no return)", () => {
+      const userStore = store({
+        state: {
+          profile: { name: "John", age: 30 },
+        },
+        setup: (ctx) => {
+          const [get, set] = ctx.focus("profile");
+          return { get, set };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      // Produce-style: mutate draft, don't return
+      instance.actions.set((draft: { name: string; age: number }) => {
+        draft.name = "Jane";
+        draft.age = 25;
+      });
+
+      expect(instance.actions.get()).toEqual({ name: "Jane", age: 25 });
+      expect(instance.state.profile).toEqual({ name: "Jane", age: 25 });
+    });
+
+    it("should distinguish between reducer (returns value) and produce (returns undefined)", () => {
+      const userStore = store({
+        state: {
+          items: [1, 2, 3],
+        },
+        setup: (ctx) => {
+          const [get, set] = ctx.focus("items");
+          return { get, set };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      // Reducer style - returns new array
+      instance.actions.set((prev: number[]) => [...prev, 4]);
+      expect(instance.actions.get()).toEqual([1, 2, 3, 4]);
+
+      // Produce style - mutates array in place (immer draft)
+      instance.actions.set((draft: number[]) => {
+        draft.push(5);
+      });
+      expect(instance.actions.get()).toEqual([1, 2, 3, 4, 5]);
+    });
+
     it("should work with deeply nested paths", () => {
       const userStore = store({
         state: {

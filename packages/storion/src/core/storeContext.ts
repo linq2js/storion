@@ -118,10 +118,14 @@ export function createFocus<TState extends StateBase, TValue>(
 
   /**
    * Set the value at the focused path.
-   * Accepts either a direct value or a reducer function.
+   *
+   * Supports three overloads:
+   * - set(value) - direct value replacement
+   * - set((prev) => newValue) - reducer that returns new value
+   * - set((draft) => { draft.x = y }) - immer-style produce (mutate draft, no return)
    */
   const setter = (
-    valueOrReducer: TValue | ((prev: TValue) => TValue)
+    valueOrReducerOrProduce: TValue | ((prev: TValue) => TValue | void)
   ): void => {
     focusCtx.update((draft: TState) => {
       // Navigate to parent, auto-creating objects along the way
@@ -144,16 +148,23 @@ export function createFocus<TState extends StateBase, TValue>(
       // Apply fallback if current value is nullish
       if ((currentValue === null || currentValue === undefined) && fallback) {
         currentValue = fallback() as TValue;
+        // Set fallback value so produce-style mutations have something to work with
+        (current as Record<string, unknown>)[lastKey] = currentValue;
       }
 
-      // Compute new value
-      const newValue =
-        typeof valueOrReducer === "function"
-          ? (valueOrReducer as (prev: TValue) => TValue)(currentValue)
-          : valueOrReducer;
-
-      // Set the final value
-      (current as Record<string, unknown>)[lastKey] = newValue;
+      // Handle function (reducer or produce) vs direct value
+      if (typeof valueOrReducerOrProduce === "function") {
+        const fn = valueOrReducerOrProduce as (prev: TValue) => TValue | void;
+        const result = fn(currentValue);
+        // If function returns a value, use it (reducer style)
+        // If undefined, assume produce style - mutations already applied to draft
+        if (result !== undefined) {
+          (current as Record<string, unknown>)[lastKey] = result;
+        }
+      } else {
+        // Direct value replacement
+        (current as Record<string, unknown>)[lastKey] = valueOrReducerOrProduce;
+      }
     });
   };
 

@@ -1,875 +1,66 @@
-# 🏪 Storion
+<p align="center">
+  <img src="https://raw.githubusercontent.com/linq2js/storion/main/.github/logo.svg" alt="Storion Logo" width="120" height="120" />
+</p>
 
-**A tiny, type-safe reactive state management library with automatic dependency tracking.**
+<h1 align="center">Storion</h1>
 
-[![npm](https://img.shields.io/npm/v/storion)](https://www.npmjs.com/package/storion)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/storion)](https://bundlephobia.com/package/storion)
-[![license](https://img.shields.io/npm/l/storion)](LICENSE)
+<p align="center">
+  <strong>Reactive stores for modern apps. Type-safe. Auto-tracked. Effortlessly composable.</strong>
+</p>
 
-```bash
-npm install storion
-```
+<p align="center">
+  <a href="https://www.npmjs.com/package/storion"><img src="https://img.shields.io/npm/v/storion?style=flat-square&color=blue" alt="npm version"></a>
+  <a href="https://bundlephobia.com/package/storion"><img src="https://img.shields.io/bundlephobia/minzip/storion?style=flat-square&color=green" alt="bundle size"></a>
+  <a href="https://github.com/linq2js/storion/actions"><img src="https://img.shields.io/github/actions/workflow/status/linq2js/storion/ci.yml?style=flat-square&label=tests" alt="tests"></a>
+  <a href="https://github.com/linq2js/storion/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/storion?style=flat-square" alt="license"></a>
+  <a href="https://github.com/linq2js/storion"><img src="https://img.shields.io/github/stars/linq2js/storion?style=flat-square" alt="stars"></a>
+</p>
 
-## Why Storion?
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#api-reference">API Reference</a> •
+  <a href="#contributing">Contributing</a>
+</p>
 
-- 🎯 **Auto-tracking** — Dependencies tracked automatically. No selectors to optimize.
-- ⚡ **Fine-grained** — Only re-renders when _accessed_ properties change.
-- 🔗 **Cross-store** — Stores can compose other stores seamlessly.
-- 🎭 **Effects** — Built-in reactive effects with automatic cleanup.
-- 📦 **Tiny** — ~3KB gzipped. No dependencies.
-- 🦾 **Type-safe** — Full TypeScript inference. No awkward generics.
-- 🌐 **Framework-agnostic** — Works with React, or standalone with vanilla JS.
+---
 
-## Quick Start
+## What is Storion?
 
-### Single-Store App
+Storion is a lightweight state management library with **automatic dependency tracking**:
+
+- **You read state** → Storion tracks the read
+- **That read changes** → only then your effect/component updates
+
+No manual selectors to "optimize", no accidental over-subscription to large objects. Just write natural code and let Storion handle the reactivity.
 
 ```tsx
-import { create } from "storion/react";
-
-// Define and create in one step
-const [counter, useCounter] = create({
-  name: "counter",
-  state: { count: 0 },
-  setup({ state }) {
-    return {
-      increment: () => state.count++,
-      decrement: () => state.count--,
-    };
-  },
-});
-
+// Component only re-renders when `count` actually changes
 function Counter() {
-  const { count, increment } = useCounter((state, actions) => ({
-    count: state.count,
-    increment: actions.increment,
-  }));
-
-  return <button onClick={increment}>{count}</button>;
-}
-```
-
-**That's it.** No providers, no boilerplate.
-
-### Multi-Store App
-
-```tsx
-import { store, container, StoreProvider, useStore } from "storion/react";
-
-// Define stores
-const userStore = store({
-  name: "user",
-  state: { name: "" },
-  setup() {
-    return {};
-  },
-});
-const cartStore = store({
-  name: "cart",
-  state: { items: [] },
-  setup() {
-    return {};
-  },
-});
-
-// Create a container
-const app = container();
-
-function App() {
-  return (
-    <StoreProvider container={app}>
-      <MyComponent />
-    </StoreProvider>
-  );
-}
-
-function MyComponent() {
-  const { userName, items } = useStore(({ resolve }) => {
-    const [user] = resolve(userStore);
-    const [cart] = resolve(cartStore);
-    return { userName: user.name, items: cart.items };
-  });
-  // ...
-}
-```
-
-### Vanilla JS (No Framework)
-
-Storion works great without any framework:
-
-```ts
-import { store, container, effect } from "storion";
-
-const counterStore = store({
-  name: "counter",
-  state: { count: 0 },
-  setup({ state }) {
-    // Build DOM
-    document.body.innerHTML = `
-      <div>
-        <h1>Counter</h1>
-        <p>Count: <span id="count">0</span></p>
-        <button id="increment">+</button>
-        <button id="decrement">-</button>
-      </div>
-    `;
-
-    const $count = document.getElementById("count")!;
-    const $increment = document.getElementById("increment")!;
-    const $decrement = document.getElementById("decrement")!;
-
-    // Reactive DOM updates
-    effect(() => {
-      $count.textContent = String(state.count);
-    });
-
-    // Event listeners
-    $increment.addEventListener("click", () => state.count++);
-    $decrement.addEventListener("click", () => state.count--);
-
-    return {};
-  },
-});
-
-// Initialize the app
-container().get(counterStore);
-```
-
-**That's it!** The `effect()` automatically re-runs when `state.count` changes, updating the DOM.
-
----
-
-## Mental Model
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Container                               │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │   Store A       │  │   Store B       │  │   Store C       │  │
-│  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │  │
-│  │  │   State   │◄─┼──┼──│   State   │  │  │  │   State   │  │  │
-│  │  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │  │
-│  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │  │
-│  │  │  Actions  │──┼──┼─►│  Actions  │  │  │  │  Actions  │  │  │
-│  │  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
-│            ▲                   ▲                   ▲             │
-└────────────┼───────────────────┼───────────────────┼─────────────┘
-             │                   │                   │
-     ┌───────┴───────┐   ┌───────┴───────┐   ┌───────┴───────┐
-     │   useStore    │   │    Effect     │   │   subscribe   │
-     │  (React Hook) │   │  (Reactive)   │   │  (Vanilla JS) │
-     └───────────────┘   └───────────────┘   └───────────────┘
-```
-
-### Core Concepts
-
-| Concept            | Description                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| **Store Spec**     | Blueprint defining state shape, setup function, and options. Created with `store()`. |
-| **Store Instance** | Live store with reactive state and actions. Created when accessed via container.     |
-| **Container**      | Factory that creates and manages store instances. Enables dependency injection.      |
-| **Effect**         | Reactive function that auto-tracks dependencies and re-runs on changes.              |
-| **Action**         | Function returned from `setup()` that can mutate state.                              |
-
-### Data Flow Rules
-
-```
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│   UI / App   │─────►│    Action    │─────►│    State     │
-└──────────────┘      └──────────────┘      └──────────────┘
-       ▲                                           │
-       │              ┌──────────────┐             │
-       └──────────────│    Effect    │◄────────────┘
-                      └──────────────┘
-```
-
-**Key rule: Only Actions and Effects can mutate state.**
-
-```tsx
-// ✅ Correct - mutation inside action
-setup({ state }) {
-  return {
-    increment: () => { state.count++; },  // Action mutates state
-  };
-}
-
-// ✅ Correct - mutation inside effect
-effect(() => {
-  state.computed = state.a + state.b;  // Effect can mutate state
-});
-
-// ❌ Wrong - mutation outside action/effect
-function Component() {
-  const [s] = resolve(store);
-  s.count++;  // Don't do this! Use actions instead.
-}
-```
-
-### Store Lifecycle
-
-```
-store(options)          container.get(spec)         component unmounts
-      │                        │                           │
-      ▼                        ▼                           ▼
- ┌─────────┐              ┌─────────┐                ┌─────────┐
- │  Spec   │─────────────►│Instance │───────────────►│Disposed │
- │ Created │              │ Created │                │(if auto)│
- └─────────┘              └─────────┘                └─────────┘
-                               │
-                               ▼
-                     ┌───────────────────┐
-                     │ setup() runs      │
-                     │ • resolve() deps  │
-                     │ • effects start   │
-                     │ • actions created │
-                     └───────────────────┘
-```
-
----
-
-## Features That Set Storion Apart
-
-### 🎯 Automatic Dependency Tracking
-
-Unlike Redux/Zustand where you manually select state, Storion tracks what you _actually access_:
-
-```tsx
-// Zustand - manual selection, easy to over-select
-const { user } = useStore((state) => ({ user: state.user }));
-// If ANY property of user changes, component re-renders
-
-// Storion - automatic fine-grained tracking
-const { name } = useStore(({ resolve }) => {
-  const [state] = resolve(userStore);
-  return { name: state.user.name }; // Only tracks user.name
-});
-// Only re-renders when user.name specifically changes
-```
-
-### 🔬 Even Finer with `pick()`
-
-Need to track a computed value instead of a property path?
-
-```tsx
-import { pick, useStore } from "storion/react";
-
-const { fullName } = useStore(({ resolve }) => {
-  const [state] = resolve(userStore);
-  return {
-    // Only re-renders when the RESULT changes, not when first/last change
-    fullName: pick(() => `${state.user.first} ${state.user.last}`),
-  };
-});
-```
-
-### 🔗 Cross-Store Composition
-
-Stores can seamlessly depend on other stores:
-
-```tsx
-import { store } from "storion/react";
-
-const cartStore = store({
-  name: "cart",
-  state: { items: [] },
-  setup({ state, resolve }) {
-    // Access user store from within cart store
-    const [userState] = resolve(userStore);
-
-    return {
-      checkout: () => {
-        if (!userState.isLoggedIn) throw new Error("Must be logged in");
-        // ... checkout logic
-      },
-    };
-  },
-});
-```
-
-### 🎭 Reactive Effects
-
-Built-in effects that automatically track dependencies and clean up:
-
-```tsx
-import { store, effect } from "storion/react";
-
-const analyticsStore = store({
-  name: "analytics",
-  state: { pageViews: 0 },
-  setup({ state, resolve }) {
-    const [routerState] = resolve(routerStore);
-
-    // Runs whenever routerState.path changes
-    effect(() => {
-      trackPageView(routerState.path);
-      state.pageViews++;
-    });
-
-    return {};
-  },
-});
-```
-
-### 📝 Local Stores (Component-Scoped)
-
-Perfect for forms, modals, wizards — any component-local state:
-
-```tsx
-import { store, useStore } from "storion/react";
-
-const formStore = store({
-  name: "form",
-  state: { email: "", password: "" },
-  setup({ state }) {
-    return {
-      setEmail: (v: string) => {
-        state.email = v;
-      },
-      setPassword: (v: string) => {
-        state.password = v;
-      },
-    };
-  },
-});
-
-function LoginForm() {
-  // Each component instance gets its own store!
-  const [state, actions, { dirty, reset }] = useStore(formStore);
-
-  return (
-    <form>
-      <input
-        value={state.email}
-        onChange={(e) => actions.setEmail(e.target.value)}
-      />
-      <input
-        value={state.password}
-        onChange={(e) => actions.setPassword(e.target.value)}
-      />
-      <button disabled={!dirty()}>Submit</button>
-      <button type="button" onClick={reset}>
-        Reset
-      </button>
-    </form>
-  );
-}
-```
-
-### 🔄 Immer-Style Updates
-
-Update complex nested state with simple mutations:
-
-```tsx
-// In your store's setup function:
-setup({ state, update }) {
-  return {
-    addTodo: (text: string) => {
-      update(draft => {
-        draft.todos.push({ id: Date.now(), text, done: false });
-      });
-    },
-    toggleTodo: (id: number) => {
-      update(draft => {
-        const todo = draft.todos.find(t => t.id === id);
-        if (todo) todo.done = !todo.done;
-      });
-    },
-  };
-}
-```
-
-### ⚙️ Flexible Equality
-
-Configure how changes are detected per-property:
-
-```tsx
-import { store } from "storion/react";
-
-const userStore = store({
-  name: "user",
-  state: {
-    profile: { name: "", bio: "" },
-    settings: { theme: "dark" },
-    lastLogin: new Date(),
-  },
-  // Deep compare profile, shallow compare settings, strict for rest
-  equality: {
-    profile: "deep",
-    settings: "shallow",
-    default: "strict",
-  },
-  setup({ state }) {
-    /* ... */
-  },
-});
-```
-
-### 🎬 Action-Based Reactivity
-
-React to action dispatches, not just state changes:
-
-```tsx
-import { effect } from "storion/react";
-
-effect(() => {
-  const lastSave = saveAction.last();
-  if (!lastSave) return;
-
-  // Runs every time saveAction is dispatched
-  showNotification(`Saved at ${new Date()}`);
-});
-
-// Or subscribe directly
-instance.subscribe("@save", (event) => {
-  console.log("Save called with:", event.next.args);
-});
-```
-
-### 🧩 Mixins — Split & Reuse Store Logic
-
-Large stores can be split into mixins using `use()`. Each mixin only knows about its own state slice:
-
-```tsx
-import { store, effect, type StoreContext } from "storion/react";
-
-// Each mixin defines its OWN state shape
-interface UserState {
-  users: User[];
-}
-
-interface PostState {
-  posts: Post[];
-}
-
-interface NotificationState {
-  notifications: Notification[];
-}
-
-// Mixin 1: Notifications (base mixin)
-const notificationMixin = ({ state }: StoreContext<NotificationState>) => ({
-  notify: (msg: string) => {
-    state.notifications.push({ id: Date.now(), message: msg });
-  },
-  clearAll: () => {
-    state.notifications = [];
-  },
-});
-
-// Mixin 2: User management — uses notificationMixin!
-const userMixin = ({
-  state,
-  use,
-}: StoreContext<UserState & NotificationState>) => {
-  const { notify } = use(notificationMixin); // Compose another mixin
-
-  return {
-    addUser: (user: User) => {
-      state.users.push(user);
-      notify(`User ${user.name} added`); // Use action from other mixin
-    },
-    removeUser: (id: string) => {
-      state.users = state.users.filter((u) => u.id !== id);
-      notify(`User removed`);
-    },
-  };
-};
-
-// Mixin 3: Post management — also uses notificationMixin!
-const postMixin = ({
-  state,
-  use,
-}: StoreContext<PostState & NotificationState>) => {
-  const { notify } = use(notificationMixin);
-
-  effect(() => {
-    console.log(`Posts updated: ${state.posts.length} total`);
+  const { count, inc } = useStore(({ get }) => {
+    const [state, actions] = get(counterStore);
+    return { count: state.count, inc: actions.inc };
   });
 
-  return {
-    addPost: (post: Post) => {
-      state.posts.push(post);
-      notify(`New post: ${post.title}`);
-    },
-    deletePost: (id: string) => {
-      state.posts = state.posts.filter((p) => p.id !== id);
-      notify(`Post deleted`);
-    },
-  };
-};
-
-// Compose: AppState = UserState & PostState & NotificationState
-const appStore = store({
-  name: "app",
-  state: {
-    users: [] as User[],
-    posts: [] as Post[],
-    notifications: [] as Notification[],
-  },
-  setup({ use }) {
-    // Each mixin works with its slice of state
-    const userActions = use(userMixin);
-    const postActions = use(postMixin);
-    const notificationActions = use(notificationMixin);
-
-    return {
-      ...userActions,
-      ...postActions,
-      ...notificationActions,
-    };
-  },
-});
-```
-
-**Benefits:**
-
-- 📁 **Organization** — Split 500+ line stores into focused modules
-- ♻️ **Reuse** — Mixins are decoupled, reusable across stores
-- 🧪 **Testable** — Test mixins in isolation with minimal state
-- 🎭 **Effects** — Mixins can define their own reactive effects
-
-**Note:** `use()` runs the mixin fresh each call (no singleton). This enables parameterized mixins:
-
-```ts
-const apiMixin = ({ state }, endpoint: string) => ({
-  fetch: () => fetch(endpoint),
-});
-
-use(apiMixin, "/api/users"); // Different instances
-use(apiMixin, "/api/posts");
-```
-
-If you need singleton per store, use `memoize` (e.g., from lodash):
-
-```ts
-import memoize from "lodash/memoize";
-
-// Memoized by first arg (StoreContext) — singleton per store
-const notificationMixin = memoize(
-  ({ state }: StoreContext<NotificationState>) => ({
-    notify: (msg: string) =>
-      state.notifications.push({ id: Date.now(), message: msg }),
-    clearAll: () => {
-      state.notifications = [];
-    },
-  })
-);
-
-// Same store context → same mixin instance
-// Different store context → new mixin instance
+  return <button onClick={inc}>{count}</button>;
+}
 ```
 
 ---
 
-## API Reference
-
-### `store(options)` — Define a Store
-
-```ts
-import { store } from "storion";
-
-const myStore = store({
-  name: "myStore", // Optional, auto-generated if omitted
-  state: { count: 0 }, // Initial state (required)
-  setup({ state, resolve, update, dirty, reset, use, focus }) {
-    // state     - Mutable proxy, writes notify subscribers
-    // resolve   - Access other stores: [state, actions]
-    // update    - Immer-style or partial updates
-    // dirty     - Check if state modified: dirty() or dirty("prop")
-    // reset     - Reset to initial state
-    // use       - Apply mixins: use(mixin, ...args)
-    // focus     - Lens-like setter: focus("path.to.prop")
-
-    return {
-      increment: () => state.count++,
-    };
-  },
-  equality: "shallow", // Or per-prop: { count: "deep", default: "strict" }
-  lifetime: "autoDispose", // "keepAlive" (default) | "autoDispose"
-  meta: { persist: true }, // Custom metadata for middleware
-  onDispatch: (event) => {}, // Called after each action
-  onError: (error) => {}, // Called on effect/action errors
-  normalize: (state) => ({}), // For dehydrate() serialization
-  denormalize: (data) => ({}), // For hydrate() deserialization
-});
-```
-
-### `container(options?)` — Manage Store Instances
-
-```ts
-import { container } from "storion";
-
-const app = container({
-  middleware: [logger, devtools], // Applied to all stores
-  defaultLifetime: "autoDispose", // Override default lifetime
-});
-
-// Get or create a store instance
-const instance = app.get(myStore);
-
-// Check if store exists
-app.has(myStore); // boolean
-
-// Clear all instances
-app.clear();
-
-// Global container
-import { container } from "storion";
-const global = container.global;
-```
-
-### `effect(fn, options?)` — Reactive Effects
-
-```ts
-import { effect } from "storion";
-
-const dispose = effect((ctx) => {
-  // Runs immediately, re-runs when tracked values change
-  console.log(state.count);
-
-  // Register cleanup (runs before re-run and on dispose)
-  ctx.onCleanup(() => {
-    console.log("cleaning up");
-  });
-});
-
-// Options
-effect(fn, {
-  name: "myEffect", // For debugging
-  onError: "keepAlive", // "failFast" | "keepAlive" | custom handler
-});
-
-// Stop the effect
-dispose();
-```
-
-### `batch(fn)` — Batch Updates
-
-```ts
-import { batch } from "storion";
-
-// Multiple writes, single notification
-batch(() => {
-  state.a = 1;
-  state.b = 2;
-  state.c = 3;
-});
-```
-
-### `untrack(fn)` — Read Without Tracking
-
-```ts
-import { untrack } from "storion";
-
-effect(() => {
-  const tracked = state.count; // Creates dependency
-  const untracked = untrack(() => state.other); // No dependency
-});
-```
-
-### `pick(selector, equality?)` — Fine-Grained Tracking
-
-```ts
-import { pick } from "storion";
-
-// Only re-renders when the RESULT changes
-const fullName = pick(() => `${state.first} ${state.last}`);
-const total = pick(() => state.items.reduce((s, i) => s + i.price, 0), "deep");
-```
-
-### `focus(path)` — Lens-Like Setters
-
-Create setters for nested state paths. Auto-creates intermediate objects when null/undefined.
-
-```ts
-const userStore = store({
-  state: {
-    profile: {
-      name: "John",
-      address: { city: "NYC", street: "" },
-    },
-  },
-  setup({ focus }) {
-    // Create setter for nested path
-    const setCity = focus("profile.address.city");
-
-    // Chain with .to() for sub-paths
-    const setAddress = focus("profile.address");
-    const setStreet = setAddress.to("street");
-
-    // Return as actions
-    return { setCity, setAddress, setStreet };
-  },
-});
-
-// Usage
-instance.actions.setCity("LA");
-instance.actions.setAddress({ city: "SF", street: "Market St" });
-instance.actions.setStreet("5th Ave");
-```
-
-**Features:**
-
-- 🔗 Dot-notation paths: `"profile.address.city"`
-- 🔄 Chainable with `.to()`: `setAddress.to("city")`
-- 🏗️ Auto-creates objects: handles `null`/`undefined` parents
-- ⚡ Reactive: triggers proper change notifications
-- 🚫 No array indices (only object properties)
-
-### Store Instance
-
-```ts
-const instance = container.get(myStore);
-
-// Properties
-instance.id; // "myStore:1"
-instance.spec; // The StoreSpec
-instance.state; // Readonly state proxy
-instance.actions; // Actions with reactive last()
-instance.deps; // Dependency instances
-
-// Subscribe
-instance.subscribe(() => {}); // All changes
-instance.subscribe("count", ({ next, prev }) => {}); // Specific prop
-instance.subscribe("@increment", (event) => {}); // Specific action
-instance.subscribe("@*", (event) => {}); // All actions
-
-// Lifecycle
-instance.onDispose(() => {});
-instance.dispose();
-instance.disposed(); // boolean
-
-// State management
-instance.dirty(); // Any prop modified?
-instance.dirty("count"); // Specific prop modified?
-instance.reset(); // Reset to initial state
-
-// Persistence
-instance.dehydrate(); // Get serializable state
-instance.hydrate(data); // Restore state (skips dirty props)
-```
-
-### React Hooks
-
-```tsx
-import { useStore, StoreProvider, create } from "storion/react";
-
-// Selector-based (with container)
-const { count } = useStore(({ resolve }) => {
-  const [state, actions] = resolve(myStore);
-  return { count: state.count };
-});
-
-// Local store (no provider needed)
-const [state, actions, { dirty, reset }] = useStore(formStore);
-
-// Provider
-<StoreProvider container={app}>
-  <App />
-</StoreProvider>;
-
-// Shorthand for single-store apps
-const [instance, useCounter] = create({
-  state: { count: 0 },
-  setup({ state }) {
-    return { increment: () => state.count++ };
-  },
-});
-
-// useCounter selector receives (state, actions)
-const { count } = useCounter((state, actions) => ({ count: state.count }));
-```
-
-### Middleware
-
-```ts
-import { applyFor, applyExcept } from "storion";
-
-// Just pass an array of middleware
-container({ middleware: [logger, devtools, persist] });
-
-// Conditional middleware
-const conditionalLogger = applyFor("user*", logger); // Wildcard match
-const multiMiddleware = applyFor(/Store$/, [logger, devtools]); // RegExp match
-const persistOnly = applyFor((spec) => spec.meta?.persist, persistMiddleware); // Predicate
-
-// Exclude middleware
-const noInternalLogging = applyExcept("_internal*", logger);
-
-// Combine them
-container({ middleware: [conditionalLogger, persistOnly, noInternalLogging] });
-```
-
-### Middleware Signature
-
-```ts
-type StoreMiddleware = (
-  spec: StoreSpec,
-  next: (spec: StoreSpec) => StoreInstance
-) => StoreInstance;
-
-// Example: logging middleware
-const logger: StoreMiddleware = (spec, next) => {
-  console.log(`Creating store: ${spec.name}`);
-  const instance = next(spec); // Call next to create the instance
-  console.log(`Created: ${instance.id}`);
-  return instance;
-};
-```
-
----
-
-## Comparison
-
-| Feature             | Storion   | Zustand  | Redux Toolkit | Jotai     |
-| ------------------- | --------- | -------- | ------------- | --------- |
-| Bundle size         | ~3KB      | ~1KB     | ~10KB         | ~3KB      |
-| Boilerplate         | Minimal   | Minimal  | Moderate      | Minimal   |
-| Dependency tracking | Automatic | Manual   | Manual        | Automatic |
-| Cross-store deps    | Built-in  | Manual   | Manual        | Built-in  |
-| TypeScript          | Excellent | Good     | Good          | Excellent |
-| React Strict Mode   | ✅        | ✅       | ✅            | ✅        |
-| Effects             | Built-in  | External | External      | External  |
-| Middleware          | ✅        | ✅       | ✅            | Limited   |
-| DevTools            | 🚧        | ✅       | ✅            | ✅        |
-
----
-
-## TypeScript
-
-Storion is written in TypeScript and provides excellent type inference:
-
-```tsx
-import { store, useStore } from "storion/react";
-
-const todoStore = store({
-  name: "todos",
-  state: {
-    items: [] as Todo[],
-    filter: "all" as "all" | "active" | "done",
-  },
-  setup({ state }) {
-    return {
-      add: (text: string) => {
-        /* ... */
-      },
-      toggle: (id: number) => {
-        /* ... */
-      },
-      setFilter: (f: typeof state.filter) => {
-        state.filter = f;
-      },
-    };
-  },
-});
-
-// Full inference - no generics needed!
-const { items, add } = useStore(({ resolve }) => {
-  const [state, actions] = resolve(todoStore);
-  return { items: state.items, add: actions.add };
-});
-// items: Todo[], add: (text: string) => void
-```
+## Features
+
+- 🎯 **Auto-tracking** — Dependencies tracked automatically when you read state
+- 🔒 **Type-safe** — Full TypeScript support with excellent inference
+- ⚡ **Fine-grained updates** — Only re-render what actually changed
+- 🧩 **Composable** — Mix stores, use DI, create derived values
+- 🔄 **Reactive effects** — Side effects that automatically respond to state changes
+- 📦 **Tiny footprint** — ~4KB minified + gzipped
+- 🛠️ **DevTools** — Built-in devtools panel for debugging
+- 🔌 **Middleware** — Extensible with conditional middleware patterns
+- ⏳ **Async helpers** — First-class async state management with cancellation
 
 ---
 
@@ -879,17 +70,874 @@ const { items, add } = useStore(({ resolve }) => {
 # npm
 npm install storion
 
-# yarn
-yarn add storion
-
 # pnpm
 pnpm add storion
+
+# yarn
+yarn add storion
 ```
 
-### Requirements
+**Peer dependency:** React is optional, required only if using `storion/react`.
 
-- React 18+ (for React integration)
-- TypeScript 4.7+ (recommended)
+```bash
+# If using React integration
+npm install storion react
+```
+
+---
+
+## Quick Start
+
+### Option 1: Single Store with `create()` (Simplest)
+
+Perfect for small apps or isolated features:
+
+```tsx
+import { create } from "storion/react";
+
+const [counter, useCounter] = create({
+  name: "counter",
+  state: { count: 0 },
+  setup({ state }) {
+    return {
+      inc: () => state.count++,
+      dec: () => state.count--,
+    };
+  },
+});
+
+// Use in React
+function Counter() {
+  const { count, inc, dec } = useCounter((state, actions) => ({
+    count: state.count,
+    inc: actions.inc,
+    dec: actions.dec,
+  }));
+
+  return (
+    <div>
+      <button onClick={dec}>-</button>
+      <span>{count}</span>
+      <button onClick={inc}>+</button>
+    </div>
+  );
+}
+
+// Use outside React
+counter.actions.inc();
+console.log(counter.state.count);
+```
+
+### Option 2: Multi-Store with Container (Scalable)
+
+Best for larger apps with multiple stores:
+
+```tsx
+import { store, container } from "storion";
+import { StoreProvider, useStore } from "storion/react";
+
+// Define stores
+const authStore = store({
+  name: "auth",
+  state: { userId: null as string | null },
+  setup({ state }) {
+    return {
+      login: (id: string) => {
+        state.userId = id;
+      },
+      logout: () => {
+        state.userId = null;
+      },
+    };
+  },
+});
+
+const todosStore = store({
+  name: "todos",
+  state: { items: [] as string[] },
+  setup({ state, update }) {
+    return {
+      add: (text: string) => {
+        update((draft) => {
+          draft.items.push(text);
+        });
+      },
+      remove: (index: number) => {
+        update((draft) => {
+          draft.items.splice(index, 1);
+        });
+      },
+    };
+  },
+});
+
+// Create container
+const app = container();
+
+// Provide to React
+function App() {
+  return (
+    <StoreProvider container={app}>
+      <Screen />
+    </StoreProvider>
+  );
+}
+
+// Consume multiple stores
+function Screen() {
+  const { userId, items, add, login } = useStore(({ get }) => {
+    const [auth, authActions] = get(authStore);
+    const [todos, todosActions] = get(todosStore);
+    return {
+      userId: auth.userId,
+      items: todos.items,
+      add: todosActions.add,
+      login: authActions.login,
+    };
+  });
+
+  return (
+    <div>
+      <p>User: {userId ?? "Not logged in"}</p>
+      <button onClick={() => login("user-1")}>Login</button>
+      <ul>
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+      <button onClick={() => add("New todo")}>Add Todo</button>
+    </div>
+  );
+}
+```
+
+---
+
+## Usage
+
+### Defining a Store
+
+**The problem:** You have related pieces of state and operations that belong together, but managing them with `useState` leads to scattered logic and prop drilling.
+
+**With Storion:** Group state and actions in a single store. Actions have direct access to state, and the store can be shared across your app.
+
+```ts
+import { store } from "storion";
+
+export const userStore = store({
+  name: "user",
+  state: {
+    profile: { name: "", email: "" },
+    theme: "light" as "light" | "dark",
+  },
+  setup({ state, update }) {
+    return {
+      // Direct mutation - only works for first-level properties
+      setTheme: (theme: "light" | "dark") => {
+        state.theme = theme;
+      },
+
+      // For nested state, use update() with immer-style draft
+      setName: (name: string) => {
+        update((draft) => {
+          draft.profile.name = name;
+        });
+      },
+
+      // Batch update multiple nested properties
+      updateProfile: (profile: Partial<typeof state.profile>) => {
+        update((draft) => {
+          Object.assign(draft.profile, profile);
+        });
+      },
+    };
+  },
+});
+```
+
+> **Important:** Direct mutation (`state.prop = value`) only works for **first-level properties**. For nested state or array mutations, always use `update()` which provides an immer-powered draft.
+
+### Using Focus (Lens-like State Access)
+
+**The problem:** Updating deeply nested state is verbose. You end up writing `update(draft => { draft.a.b.c = value })` repeatedly, or creating many small `update()` calls.
+
+**With Storion:** `focus()` gives you a getter/setter pair for any path. The setter supports direct values, reducers, and immer-style mutations.
+
+```ts
+import { store } from "storion";
+
+export const settingsStore = store({
+  name: "settings",
+  state: {
+    user: { name: "", email: "" },
+    preferences: {
+      theme: "light" as "light" | "dark",
+      notifications: true,
+    },
+  },
+  setup({ focus }) {
+    // Focus on nested paths - returns [getter, setter]
+    const [getTheme, setTheme] = focus("preferences.theme");
+    const [getUser, setUser] = focus("user");
+
+    return {
+      // Direct value
+      setTheme: (theme: "light" | "dark") => {
+        setTheme(theme);
+      },
+
+      // Reducer - returns new value
+      toggleTheme: () => {
+        setTheme((prev) => (prev === "light" ? "dark" : "light"));
+      },
+
+      // Produce - immer-style mutation (no return)
+      updateUserName: (name: string) => {
+        setUser((draft) => {
+          draft.name = name;
+        });
+      },
+
+      // Getter is reactive - can be used in effects
+      getTheme,
+    };
+  },
+});
+```
+
+**Focus setter supports three patterns:**
+
+| Pattern      | Example                         | Use when                      |
+| ------------ | ------------------------------- | ----------------------------- |
+| Direct value | `set(newValue)`                 | Replacing entire value        |
+| Reducer      | `set(prev => newValue)`         | Computing from previous       |
+| Produce      | `set(draft => { draft.x = y })` | Partial updates (immer-style) |
+
+### Reactive Effects
+
+**The problem:** You need to sync with external systems (WebSocket, localStorage, event listeners) when state changes, and properly clean up when the state changes again or the component unmounts.
+
+**With Storion:** Effects automatically track which state properties you read and re-run only when those change. Register cleanup with `ctx.onCleanup()`.
+
+```ts
+import { store, effect } from "storion";
+
+export const syncStore = store({
+  name: "sync",
+  state: {
+    userId: null as string | null,
+    syncStatus: "idle" as "idle" | "syncing" | "synced",
+  },
+  setup({ state }) {
+    effect((ctx) => {
+      // Effect tracks state.userId and re-runs when it changes
+      if (!state.userId) return;
+
+      const ws = new WebSocket(`/ws?user=${state.userId}`);
+      state.syncStatus = "syncing";
+
+      ws.onopen = () => {
+        state.syncStatus = "synced";
+      };
+
+      // Cleanup when effect re-runs or store disposes
+      ctx.onCleanup(() => ws.close());
+    });
+
+    return {
+      login: (id: string) => {
+        state.userId = id;
+      },
+      logout: () => {
+        state.userId = null;
+      },
+    };
+  },
+});
+```
+
+### Effect with Safe Async
+
+**The problem:** When an effect re-runs before an async operation completes, you get stale data or "state update on unmounted component" warnings. Managing this manually is error-prone.
+
+**With Storion:** Use `ctx.safe()` to wrap promises that should be ignored if stale, or `ctx.signal` for fetch cancellation.
+
+```ts
+effect((ctx) => {
+  const userId = state.userId;
+  if (!userId) return;
+
+  // ctx.safe() wraps promises to never resolve if stale
+  ctx.safe(fetchUserData(userId)).then((data) => {
+    // Only runs if effect hasn't re-run
+    state.userData = data;
+  });
+
+  // Or use abort signal for fetch
+  fetch(`/api/user/${userId}`, { signal: ctx.signal })
+    .then((res) => res.json())
+    .then((data) => {
+      state.userData = data;
+    });
+});
+```
+
+### Fine-Grained Updates with `pick()`
+
+**The problem:** Your component re-renders when _any_ property of a nested object changes, even though you only use one field. For example, reading `state.profile.name` triggers re-renders when `profile.email` changes too.
+
+**With Storion:** Wrap computed values in `pick()` to track the _result_ instead of the _path_. Re-renders only happen when the picked value actually changes.
+
+```tsx
+import { pick } from "storion";
+
+function UserName() {
+  // Without pick: re-renders when ANY profile property changes
+  const { name } = useStore(({ get }) => {
+    const [state] = get(userStore);
+    return { name: state.profile.name };
+  });
+
+  // With pick: re-renders ONLY when profile.name changes
+  const { name } = useStore(({ get }) => {
+    const [state] = get(userStore);
+    return { name: pick(() => state.profile.name) };
+  });
+
+  return <h1>{name}</h1>;
+}
+```
+
+### Async State Management
+
+**The problem:** Every async operation needs loading, error, and success states. You write the same boilerplate: `isLoading`, `error`, `data`, plus handling race conditions, retries, and cancellation.
+
+**With Storion:** The `async()` helper manages all async states automatically. Choose "fresh" mode (clear data while loading) or "stale" mode (keep previous data like SWR).
+
+```ts
+import { store } from "storion";
+import { async, type AsyncState } from "storion/async";
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export const productStore = store({
+  name: "products",
+  state: {
+    // Fresh mode: data is undefined during loading
+    featured: async.fresh<Product>(),
+    // Stale mode: preserves previous data during loading (SWR pattern)
+    list: async.stale<Product[]>([]),
+  },
+  setup({ focus }) {
+    const featuredActions = async<Product, "fresh", [string]>(
+      focus("featured"),
+      async (ctx, productId) => {
+        const res = await fetch(`/api/products/${productId}`, {
+          signal: ctx.signal,
+        });
+        return res.json();
+      },
+      {
+        retry: { count: 3, delay: (attempt) => attempt * 1000 },
+        onError: (err) => console.error("Failed to fetch product:", err),
+      }
+    );
+
+    const listActions = async<Product[], "stale", []>(
+      focus("list"),
+      async () => {
+        const res = await fetch("/api/products");
+        return res.json();
+      }
+    );
+
+    return {
+      fetchFeatured: featuredActions.dispatch,
+      fetchList: listActions.dispatch,
+      refreshList: listActions.refresh,
+      cancelFeatured: featuredActions.cancel,
+    };
+  },
+});
+
+// In React - handle async states
+function ProductList() {
+  const { list, fetchList } = useStore(({ get }) => {
+    const [state, actions] = get(productStore);
+    return { list: state.list, fetchList: actions.fetchList };
+  });
+
+  useEffect(() => {
+    fetchList();
+  }, []);
+
+  if (list.status === "pending" && !list.data?.length) {
+    return <Spinner />;
+  }
+
+  if (list.status === "error") {
+    return <Error message={list.error.message} />;
+  }
+
+  return (
+    <ul>
+      {list.data?.map((p) => (
+        <li key={p.id}>{p.name}</li>
+      ))}
+      {list.status === "pending" && <li>Loading more...</li>}
+    </ul>
+  );
+}
+```
+
+### Dependency Injection
+
+**The problem:** Your stores need shared services (API clients, loggers, config) but you don't want to import singletons directly—it makes testing hard and creates tight coupling.
+
+**With Storion:** The container acts as a DI container. Define factory functions and resolve them with `get()`. Services are cached as singletons automatically.
+
+```ts
+import { container, type Resolver } from "storion";
+
+// Define service factory
+interface ApiService {
+  get<T>(url: string): Promise<T>;
+  post<T>(url: string, data: unknown): Promise<T>;
+}
+
+function createApiService(resolver: Resolver): ApiService {
+  const baseUrl = resolver.get(configFactory).apiUrl;
+
+  return {
+    async get(url) {
+      const res = await fetch(`${baseUrl}${url}`);
+      return res.json();
+    },
+    async post(url, data) {
+      const res = await fetch(`${baseUrl}${url}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      return res.json();
+    },
+  };
+}
+
+function configFactory(): { apiUrl: string } {
+  return { apiUrl: process.env.API_URL ?? "http://localhost:3000" };
+}
+
+// Use in store
+const userStore = store({
+  name: "user",
+  state: { user: null },
+  setup({ get }) {
+    const api = get(createApiService); // Singleton, cached
+
+    return {
+      fetchUser: async (id: string) => {
+        return api.get(`/users/${id}`);
+      },
+    };
+  },
+});
+```
+
+### Middleware
+
+**The problem:** You need cross-cutting behavior (logging, persistence, devtools) applied to some or all stores, without modifying each store individually.
+
+**With Storion:** Compose middleware and apply it conditionally using patterns like `"user*"` (startsWith), `"*Store"` (endsWith), or custom predicates.
+
+```ts
+import { container, compose, applyFor, applyExcept } from "storion";
+
+// Logging middleware
+const loggingMiddleware = (spec, next) => {
+  const instance = next(spec);
+  console.log(`Store created: ${spec.name}`);
+  return instance;
+};
+
+// Persistence middleware
+const persistMiddleware = (spec, next) => {
+  const instance = next(spec);
+  // Add persistence logic...
+  return instance;
+};
+
+const app = container({
+  middleware: compose(
+    // Apply logging to all stores starting with "user"
+    applyFor("user*", loggingMiddleware),
+
+    // Apply persistence except for cache stores
+    applyExcept("*Cache", persistMiddleware),
+
+    // Apply to specific stores
+    applyFor(["authStore", "settingsStore"], loggingMiddleware),
+
+    // Apply based on custom condition
+    applyFor((spec) => spec.options.meta?.persist === true, persistMiddleware)
+  ),
+});
+```
+
+---
+
+## API Reference
+
+### Core (`storion`)
+
+| Export                 | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `store(options)`       | Create a store specification                   |
+| `container(options?)`  | Create a container for store instances and DI  |
+| `effect(fn, options?)` | Create reactive side effects with cleanup      |
+| `pick(fn, equality?)`  | Fine-grained derived value tracking            |
+| `batch(fn)`            | Batch multiple mutations into one notification |
+| `untrack(fn)`          | Read state without tracking dependencies       |
+
+#### Store Options
+
+```ts
+interface StoreOptions<TState, TActions> {
+  name?: string; // Store name for debugging
+  state: TState; // Initial state
+  setup: (ctx: StoreContext) => TActions; // Setup function
+  lifetime?: "singleton" | "autoDispose"; // Instance lifetime
+  equality?: Equality | EqualityMap; // Custom equality for state
+  onDispatch?: (event: DispatchEvent) => void; // Action dispatch callback
+  onError?: (error: unknown) => void; // Error callback
+}
+```
+
+#### StoreContext (in setup)
+
+```ts
+interface StoreContext<TState, TActions> {
+  state: TState; // First-level props only (state.x = y)
+  get<T>(spec: StoreSpec<T>): StoreTuple; // Get dependency store
+  get<T>(factory: Factory<T>): T; // Get DI service
+  focus<P extends Path>(path: P): Focus; // Lens-like accessor
+  update(fn: (draft: TState) => void): void; // For nested/array mutations
+  dirty(prop?: keyof TState): boolean; // Check if state changed
+  reset(): void; // Reset to initial state
+  onDispose(fn: VoidFunction): void; // Register cleanup
+}
+```
+
+> **Note:** `state` allows direct assignment only for first-level properties. Use `update()` for nested objects, arrays, or batch updates.
+
+### React (`storion/react`)
+
+| Export                     | Description                               |
+| -------------------------- | ----------------------------------------- |
+| `StoreProvider`            | Provides container to React tree          |
+| `useStore(selector)`       | Hook to consume stores with selector      |
+| `useStore(spec)`           | Hook for component-local store            |
+| `useContainer()`           | Access container from context             |
+| `create(options)`          | Create store + hook for single-store apps |
+| `withStore(hook, render?)` | HOC pattern for store consumption         |
+
+#### useStore Selector
+
+```ts
+// Selector receives context with get() for accessing stores
+const result = useStore(({ get, mixin, once }) => {
+  const [state, actions] = get(myStore);
+  const service = get(myFactory);
+
+  // Run once on mount
+  once(() => actions.init());
+
+  return { value: state.value, action: actions.doSomething };
+});
+```
+
+### Async (`storion/async`)
+
+| Export                            | Description                                 |
+| --------------------------------- | ------------------------------------------- |
+| `async(focus, handler, options?)` | Create async action                         |
+| `async.fresh<T>()`                | Create fresh mode initial state             |
+| `async.stale<T>(initial)`         | Create stale mode initial state             |
+| `async.wait(state)`               | Extract data or throw (Suspense-compatible) |
+| `async.all(...states)`            | Wait for all states to be ready             |
+| `async.any(...states)`            | Get first ready state                       |
+| `async.race(states)`              | Race between states                         |
+| `async.hasData(state)`            | Check if state has data                     |
+| `async.isLoading(state)`          | Check if state is loading                   |
+| `async.isError(state)`            | Check if state has error                    |
+
+#### AsyncState Types
+
+```ts
+interface AsyncState<T, M extends "fresh" | "stale"> {
+  status: "idle" | "pending" | "success" | "error";
+  mode: M;
+  data: M extends "stale" ? T : T | undefined;
+  error: Error | undefined;
+  timestamp: number | undefined;
+}
+```
+
+### Devtools (`storion/devtools`)
+
+```ts
+import { devtools } from "storion/devtools";
+
+const app = container({
+  middleware: devtools({
+    name: "My App",
+    // Enable in development only
+    enabled: process.env.NODE_ENV === "development",
+  }),
+});
+```
+
+### Devtools Panel (`storion/devtools-panel`)
+
+```tsx
+import { DevtoolsPanel } from "storion/devtools-panel";
+
+// Mount anywhere in your app (dev only)
+function App() {
+  return (
+    <>
+      <MyApp />
+      {process.env.NODE_ENV === "development" && <DevtoolsPanel />}
+    </>
+  );
+}
+```
+
+---
+
+## Edge Cases & Best Practices
+
+### ❌ Don't directly mutate nested state or arrays
+
+Direct mutation only works for first-level properties. Use `update()` for nested objects and arrays:
+
+```ts
+// ❌ Wrong - nested mutation won't trigger reactivity
+setup({ state }) {
+  return {
+    setName: (name: string) => {
+      state.profile.name = name; // Won't work!
+    },
+    addItem: (item: string) => {
+      state.items.push(item); // Won't work!
+    },
+  };
+}
+
+// ✅ Correct - use update() for nested/array mutations
+setup({ state, update }) {
+  return {
+    setName: (name: string) => {
+      update((draft) => {
+        draft.profile.name = name;
+      });
+    },
+    addItem: (item: string) => {
+      update((draft) => {
+        draft.items.push(item);
+      });
+    },
+    // First-level props can be assigned directly
+    setCount: (n: number) => {
+      state.count = n; // This works!
+    },
+  };
+}
+```
+
+### ❌ Don't call `get()` inside actions
+
+`get()` is for declaring dependencies during setup, not runtime:
+
+```ts
+// ❌ Wrong - calling get() inside action
+setup({ get }) {
+  return {
+    doSomething: () => {
+      const [other] = get(otherStore); // Don't do this!
+    },
+  };
+}
+
+// ✅ Correct - declare dependency at setup time
+setup({ get }) {
+  const [otherState, otherActions] = get(otherStore);
+
+  return {
+    doSomething: () => {
+      if (otherState.ready) {
+        // Use the reactive state captured during setup
+      }
+    },
+  };
+}
+```
+
+### ❌ Don't return Promises from effects
+
+Effects must be synchronous. Use `ctx.safe()` for async:
+
+```ts
+// ❌ Wrong - async effect
+effect(async (ctx) => {
+  const data = await fetchData(); // Don't do this!
+});
+
+// ✅ Correct - use ctx.safe()
+effect((ctx) => {
+  ctx.safe(fetchData()).then((data) => {
+    state.data = data;
+  });
+});
+```
+
+### ✅ Use `pick()` for computed values from nested state
+
+When reading nested state in selectors, use `pick()` for fine-grained reactivity:
+
+```ts
+// Re-renders when profile object changes (coarse tracking)
+const name = state.profile.name;
+
+// Re-renders only when the actual name value changes (fine tracking)
+const name = pick(() => state.profile.name);
+const fullName = pick(() => `${state.profile.first} ${state.profile.last}`);
+```
+
+### ✅ Use stale mode for SWR patterns
+
+```ts
+// Fresh mode: data is undefined during loading
+state: {
+  data: async.fresh<Data>(),
+}
+
+// Stale mode: preserves previous data during loading (SWR pattern)
+state: {
+  data: async.stale<Data>(initialData),
+}
+```
+
+---
+
+## TypeScript
+
+Storion is written in TypeScript and provides excellent type inference:
+
+```ts
+// State and action types are inferred
+const myStore = store({
+  name: "my-store",
+  state: { count: 0, name: "" },
+  setup({ state }) {
+    return {
+      inc: () => state.count++, // () => void
+      setName: (n: string) => (state.name = n), // (n: string) => string
+    };
+  },
+});
+
+// Using with explicit types when needed (unions, nullable)
+interface MyState {
+  userId: string | null;
+  status: "idle" | "loading" | "ready";
+}
+
+const typedStore = store({
+  name: "typed",
+  state: {
+    userId: null as string | null,
+    status: "idle" as "idle" | "loading" | "ready",
+  } satisfies MyState,
+  setup({ state }) {
+    return {
+      setUser: (id: string | null) => {
+        state.userId = id;
+      },
+    };
+  },
+});
+```
+
+---
+
+## Contributing
+
+We welcome contributions! Here's how to get started:
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm 8+
+
+### Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/linq2js/storion.git
+cd storion
+
+# Install dependencies
+pnpm install
+
+# Build the library
+pnpm --filter storion build
+```
+
+### Development
+
+```bash
+# Watch mode
+pnpm --filter storion dev
+
+# Run tests
+pnpm --filter storion test
+
+# Run tests with UI
+pnpm --filter storion test:ui
+
+# Type check
+pnpm --filter storion build:check
+```
+
+### Code Style
+
+- Prefer **type inference** over explicit interfaces (add types only for unions, nullable, discriminated unions)
+- Keep examples **copy/paste runnable**
+- Write tests for new features
+- Follow existing patterns in the codebase
+
+### Commit Messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(core): add new feature
+fix(react): resolve hook issue
+docs: update README
+chore: bump dependencies
+```
+
+### Pull Requests
+
+1. Fork the repo and create your branch from `main`
+2. Add tests for new functionality
+3. Ensure all tests pass
+4. Update documentation as needed
+5. Submit a PR with a clear description
 
 ---
 
@@ -900,5 +948,5 @@ MIT © [linq2js](https://github.com/linq2js)
 ---
 
 <p align="center">
-  <sub>Built with ❤️ for developers who want state management that just works.</sub>
+  <sub>Built with ❤️ for the React community</sub>
 </p>

@@ -167,8 +167,11 @@ export interface FocusOptions<T> {
  * // Set value directly
  * setName("Jane");
  *
- * // Set value with reducer
+ * // Set value with reducer (returns new value)
  * setName(prev => prev.toUpperCase());
+ *
+ * // Set value with produce (immer-style, mutate draft)
+ * setName(draft => { draft.nested = "value"; });
  *
  * // Listen to changes
  * const unsubscribe = ctx.focus("profile.name").on(({ next, prev }) => {
@@ -178,8 +181,13 @@ export interface FocusOptions<T> {
 export type Focus<TValue> = [
   /** Get the current value at the focused path */
   getter: () => TValue,
-  /** Set the value at the focused path (accepts value or reducer) */
-  setter: (valueOrReducer: TValue | ((prev: TValue) => TValue)) => void
+  /**
+   * Set the value at the focused path.
+   * - Direct value: `set(newValue)`
+   * - Reducer: `set(prev => newValue)` - returns new value
+   * - Produce: `set(draft => { draft.x = y })` - immer-style mutation, no return
+   */
+  setter: (valueOrReducerOrProduce: TValue | ((prev: TValue) => TValue | void)) => void
 ] & {
   readonly [STORION_TYPE]: "focus";
   /**
