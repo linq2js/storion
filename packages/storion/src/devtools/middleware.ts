@@ -15,6 +15,8 @@ import type {
   StateBase,
   ActionsBase,
 } from "../types";
+import { STORION_TYPE } from "../types";
+import { createStoreInstance } from "../core/store";
 import { createDevtoolsController } from "./controller";
 import type {
   DevtoolsController,
@@ -80,36 +82,47 @@ export function devtoolsMiddleware(
     // Wrap the setup function to inject devtools actions
     const originalSetup = spec.options.setup;
 
-    const modifiedSpec: StoreSpec<S, A & DevtoolsActions> = {
-      ...spec,
-      options: {
-        ...spec.options,
-        setup: (context) => {
-          // Call original setup
-          const originalActions = originalSetup(context);
+    // Create modified options with devtools actions injected
+    const modifiedOptions = {
+      ...spec.options,
+      setup: (context: any) => {
+        // Call original setup
+        const originalActions = originalSetup(context);
 
-          // Create devtools actions
-          const devtoolsActions: DevtoolsActions = {
-            __revertState: (newState: Record<string, unknown>) => {
-              // Use update to replace state
-              context.update(() => newState as any);
-            },
-            __takeSnapshot: () => {
-              // Trigger a snapshot (placeholder - controller handles this)
-            },
-          };
+        // Create devtools actions
+        const devtoolsActions: DevtoolsActions = {
+          __revertState: (newState: Record<string, unknown>) => {
+            // Use update to replace state
+            context.update(() => newState as any);
+          },
+          __takeSnapshot: () => {
+            // Trigger a snapshot (placeholder - controller handles this)
+          },
+        };
 
-          // Return merged actions
-          return {
-            ...originalActions,
-            ...devtoolsActions,
-          } as A & DevtoolsActions;
-        },
+        // Return merged actions
+        return {
+          ...originalActions,
+          ...devtoolsActions,
+        } as A & DevtoolsActions;
       },
     };
 
+    // Create a new callable spec with modified options
+    // StoreSpec is now a callable function that creates instances
+    const modifiedSpec = function (resolver: any) {
+      return createStoreInstance(modifiedSpec as any, resolver, {});
+    } as StoreSpec<S, A>;
+
+    // Assign properties to make it a valid StoreSpec
+    Object.defineProperties(modifiedSpec, {
+      [STORION_TYPE]: { value: "store.spec", enumerable: false },
+      name: { value: spec.name, enumerable: true, writable: false },
+      options: { value: modifiedOptions, enumerable: true, writable: false },
+    });
+
     // Create instance with modified spec
-    const instance = next(modifiedSpec as unknown as StoreSpec<S, A>);
+    const instance = next(modifiedSpec);
 
     // Register store with devtools
     registerStore({

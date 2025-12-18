@@ -1,7 +1,12 @@
 /**
  * Container implementation.
  *
- * Manages store instances - creation, caching, disposal.
+ * Manages store instances with resolver pattern:
+ * - Factory-based dependency injection
+ * - Caching (singleton per spec)
+ * - Override support for testing
+ * - Scoped containers
+ * - Lifecycle events
  */
 
 import {
@@ -11,12 +16,10 @@ import {
   type StoreSpec,
   type StoreInstance,
   type StoreContainer,
-  type StoreResolver,
   type ContainerOptions,
   type StoreMiddleware,
 } from "../types";
 
-import { createStoreInstance } from "./store";
 import { emitter } from "../emitter";
 import { untrack } from "./tracking";
 
@@ -34,51 +37,43 @@ interface DefaultMiddlewareConfig {
 let defaultMiddlewareConfig: DefaultMiddlewareConfig = {};
 
 /**
+ * Internal container options (includes parent for scoped containers).
+ */
+interface InternalContainerOptions extends ContainerOptions {
+  /** Parent container for scoped lookups (internal use) */
+  _parent?: StoreContainer;
+}
+
+/**
  * Container function with static defaults method.
  */
 interface ContainerFn {
   (options?: ContainerOptions): StoreContainer;
   /**
    * Add default middleware that will be applied to all new containers.
-   * Multiple calls merge the middleware arrays.
-   * - `pre`: runs before container's own middleware
-   * - `post`: runs after container's own middleware
-   *
-   * @example
-   * ```ts
-   * import { container } from "storion";
-   * import { devtoolsMiddleware } from "storion/devtools";
-   *
-   * // Add default middleware (typically in app entry)
-   * container.defaults({
-   *   pre: [devtoolsMiddleware()],  // runs first
-   * });
-   *
-   * // Add more defaults (merges with existing)
-   * container.defaults({
-   *   post: [loggingMiddleware()],  // runs last
-   * });
-   *
-   * // All containers now include defaults
-   * const app = container(); // has pre + post
-   * const other = container({ middleware: [myMiddleware] }); // pre + myMiddleware + post
-   *
-   * // Clear all default middleware
-   * container.defaults.clear();
-   * ```
    */
   defaults: {
     (config?: DefaultMiddlewareConfig): void;
-    /** Clear all default middleware */
     clear(): void;
   };
 }
 
 /**
  * Create a store container.
+ *
+ * Container provides resolver methods plus store-specific lifecycle:
+ * - get(spec): cached instance
+ * - create(spec): fresh instance
+ * - set(spec, override): override for DI/testing
+ * - has(spec): check cache
+ * - tryGet(spec): get if cached
+ * - delete(spec): remove from cache
+ * - clear(): dispose all
+ * - scope(): child container
+ * - onCreate/onDispose: lifecycle events
  */
 export const container: ContainerFn = function (
-  options: ContainerOptions = {}
+  options: InternalContainerOptions = {}
 ): StoreContainer {
   // Merge: pre + container's middleware + post
   const middleware = [
@@ -88,13 +83,13 @@ export const container: ContainerFn = function (
   ];
 
   // Instance cache: spec → instance
-  const instancesBySpec = new Map<
-    StoreSpec<any, any>,
-    StoreInstance<any, any>
-  >();
+  const cache = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
 
-  // Instance cache: id → instance (for tracking lookup)
+  // Instance cache: id → instance (for ID lookup)
   const instancesById = new Map<string, StoreInstance<any, any>>();
+
+  // Overrides: spec → replacement spec
+  const overrides = new Map<StoreSpec<any, any>, StoreSpec<any, any>>();
 
   // Creation order (for disposal in reverse order)
   const creationOrder: StoreSpec<any, any>[] = [];
@@ -106,106 +101,28 @@ export const container: ContainerFn = function (
   // Currently creating (for circular dependency detection)
   const creating = new Set<StoreSpec<any, any>>();
 
+  // Parent container (for scoped containers)
+  const parent = options._parent;
+
   // ==========================================================================
-  // Resolver
+  // Helpers
   // ==========================================================================
 
   /**
-   * Resolver object passed to store instances.
-   * Allows stores to:
-   * - get() other stores (cached)
-   * - create() new uncached instances (e.g., child stores)
+   * Resolve spec to actual spec (respecting overrides).
    */
-  const resolver: StoreResolver = {
-    get<S extends StateBase, A extends ActionsBase>(
-      specOrId: StoreSpec<S, A> | string
-    ): any {
-      if (typeof specOrId === "string") {
-        return instancesById.get(specOrId);
-      }
-      return containerApi.get(specOrId);
-    },
-
-    has(spec) {
-      return instancesBySpec.has(spec);
-    },
-
-    /**
-     * Create a new store instance WITHOUT caching.
-     *
-     * Unlike get(), this always creates a fresh instance that is NOT
-     * managed by the container. Useful for:
-     * - Child/nested stores owned by a parent store
-     * - Temporary stores for specific operations
-     * - Dynamic stores created at runtime
-     *
-     * The caller is responsible for disposing the instance when done.
-     *
-     * @example
-     * ```ts
-     * setup: ({ update }, ctx) => {
-     *   // Create a child store (not cached in container)
-     *   const childInstance = ctx.create(childStore);
-     *
-     *   // Clean up when parent disposes
-     *   return {
-     *     dispose: () => childInstance.dispose(),
-     *   };
-     * }
-     * ```
-     */
-    create<S extends StateBase, A extends ActionsBase>(
-      spec: StoreSpec<S, A>
-    ): StoreInstance<S, A> {
-      // Create instance through middleware chain but DON'T cache
-      // Use untrack to avoid tracking during creation
-      return untrack(() => createWithMiddleware(spec));
-    },
-  };
-
-  // ==========================================================================
-  // Create Instance (core logic)
-  // ==========================================================================
-
-  function createInstance<S extends StateBase, A extends ActionsBase>(
+  const resolve = <S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
-  ): StoreInstance<S, A> {
-    // Create instance
-    const instance = createStoreInstance(spec, resolver, {
-      autoDispose: options.autoDispose,
-    });
-
-    instance.onDispose(() => {
-      // Notify listeners via emitter
-      disposeEmitter.emit(instance);
-
-      // Remove from caches
-      instancesBySpec.delete(spec);
-      instancesById.delete(instance.id);
-
-      // Remove from creation order
-      const index = creationOrder.indexOf(spec);
-      if (index !== -1) {
-        creationOrder.splice(index, 1);
-      }
-    });
-
-    return instance;
-  }
-
-  // ==========================================================================
-  // Middleware Chain
-  // ==========================================================================
+  ): StoreSpec<S, A> => (overrides.get(spec) as StoreSpec<S, A>) ?? spec;
 
   /**
-   * Build middleware chain: each middleware wraps the next.
-   * Final function in chain is the actual createInstance.
+   * Build middleware chain for store creation.
    */
   function buildMiddlewareChain(): <S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ) => StoreInstance<S, A> {
-    // Start with the core create function
-    let chain: StoreMiddleware = (_spec, next) => next(_spec);
+    // Start with direct spec invocation
+    let chain: StoreMiddleware = (spec, next) => next(spec);
 
     // Wrap in reverse order so first middleware runs first
     for (let i = middleware.length - 1; i >= 0; i--) {
@@ -216,126 +133,190 @@ export const container: ContainerFn = function (
     }
 
     // Return function that starts the chain
+    // Note: Cast containerApi as Resolver since StoreSpec expects Resolver
+    // StoreContainer has compatible methods for what StoreSpec needs
     return <S extends StateBase, A extends ActionsBase>(
       spec: StoreSpec<S, A>
-    ) => chain(spec, createInstance) as StoreInstance<S, A>;
+    ) => chain(spec, (s) => s(containerApi as any)) as StoreInstance<S, A>;
   }
 
   const createWithMiddleware = buildMiddlewareChain();
 
-  // ==========================================================================
-  // Get Instance
-  // ==========================================================================
-
-  function getOrCreateInstance<S extends StateBase, A extends ActionsBase>(
+  /**
+   * Create instance and set up disposal handling.
+   */
+  function createInstance<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): StoreInstance<S, A> {
-    // Check cache
-    let instance = instancesBySpec.get(spec);
-    if (instance) {
-      return instance as StoreInstance<S, A>;
-    }
+    const instance = untrack(() => createWithMiddleware(spec));
 
-    // Check for circular dependency
-    if (creating.has(spec)) {
-      const name = spec.name ?? "unknown";
-      throw new Error(
-        `Circular dependency detected: "${name}" is being created while it's already in the creation stack.`
-      );
-    }
-
-    // Mark as creating
-    creating.add(spec);
-
-    try {
-      // Create instance through middleware chain
-      // untrack to avoid tracking the creation of the instance
-      instance = untrack(() => createWithMiddleware(spec));
-
-      // Cache instance
-      instancesBySpec.set(spec, instance);
-      instancesById.set(instance.id, instance);
-      creationOrder.push(spec);
-
-      // Clean up container when instance is disposed directly
-      instance.onDispose?.(() => {
-        instancesBySpec.delete(spec);
-        instancesById.delete(instance!.id);
+    // Set up disposal cleanup (if instance supports it)
+    // Middleware may return mock instances without onDispose
+    if (typeof instance.onDispose === "function") {
+      instance.onDispose(() => {
+        disposeEmitter.emit(instance);
+        cache.delete(spec);
+        instancesById.delete(instance.id);
         const index = creationOrder.indexOf(spec);
         if (index !== -1) {
           creationOrder.splice(index, 1);
         }
       });
-
-      // Notify listeners via emitter
-      createEmitter.emit(instance);
-
-      return instance as StoreInstance<S, A>;
-    } finally {
-      // Unmark creating
-      creating.delete(spec);
     }
+
+    return instance;
   }
 
   // ==========================================================================
-  // Container API
+  // Container API (implements Resolver + container-specific methods)
   // ==========================================================================
 
   const containerApi: StoreContainer = {
     [STORION_TYPE]: "container",
 
+    // ========================================================================
+    // Resolver Methods
+    // ========================================================================
+
     get<S extends StateBase, A extends ActionsBase>(
       specOrId: StoreSpec<S, A> | string
     ): any {
+      // ID lookup
       if (typeof specOrId === "string") {
         return instancesById.get(specOrId);
       }
-      return getOrCreateInstance(specOrId);
-    },
 
-    has(spec) {
-      return instancesBySpec.has(spec);
-    },
+      const spec = specOrId;
 
-    clear() {
-      // Dispose in reverse creation order
-      const specs = [...creationOrder].reverse();
-
-      for (const spec of specs) {
-        const instance = instancesBySpec.get(spec);
-        if (instance) {
-          instance.dispose();
-
-          // Remove from id map
-          instancesById.delete(instance.id);
-        }
+      // Check local cache (use original spec as key)
+      if (cache.has(spec)) {
+        return cache.get(spec) as StoreInstance<S, A>;
       }
 
-      instancesBySpec.clear();
+      // Check parent (only if no local overrides)
+      if (parent && overrides.size === 0 && parent.has(spec)) {
+        return parent.get(spec);
+      }
+
+      // Circular dependency check
+      if (creating.has(spec)) {
+        const name = spec.name ?? "unknown";
+        throw new Error(
+          `Circular dependency detected: "${name}" is being created while already in creation stack.`
+        );
+      }
+
+      creating.add(spec);
+
+      try {
+        // Create instance using mapped spec
+        const mapped = resolve(spec);
+        const instance = createInstance(mapped);
+
+        // Cache with original spec as key
+        cache.set(spec, instance);
+        instancesById.set(instance.id, instance);
+        creationOrder.push(spec);
+
+        // Emit creation event
+        createEmitter.emit(instance);
+
+        return instance as StoreInstance<S, A>;
+      } finally {
+        creating.delete(spec);
+      }
+    },
+
+    create<S extends StateBase, A extends ActionsBase>(
+      spec: StoreSpec<S, A>
+    ): StoreInstance<S, A> {
+      // Create fresh instance using mapped spec (no caching)
+      const mapped = resolve(spec);
+      return createInstance(mapped);
+    },
+
+    set<S extends StateBase, A extends ActionsBase>(
+      spec: StoreSpec<S, A>,
+      override: StoreSpec<S, A>
+    ): void {
+      overrides.set(spec, override);
+      // Invalidate cache - dispose existing instance if any
+      const existing = cache.get(spec);
+      if (existing) {
+        existing.dispose();
+      }
+    },
+
+    has(spec: StoreSpec<any, any>): boolean {
+      const inParent = parent && overrides.size === 0 && parent.has(spec);
+      return cache.has(spec) || (inParent ?? false);
+    },
+
+    tryGet<S extends StateBase, A extends ActionsBase>(
+      spec: StoreSpec<S, A>
+    ): StoreInstance<S, A> | undefined {
+      if (cache.has(spec)) {
+        return cache.get(spec) as StoreInstance<S, A>;
+      }
+      if (parent && overrides.size === 0) {
+        return parent.tryGet(spec);
+      }
+      return undefined;
+    },
+
+    delete(spec: StoreSpec<any, any>): boolean {
+      const instance = cache.get(spec);
+      if (instance) {
+        instance.dispose();
+        return true;
+      }
+      return false;
+    },
+
+    // ========================================================================
+    // Container-Specific Methods
+    // ========================================================================
+
+    clear(): void {
+      // Dispose in reverse creation order
+      const specs = [...creationOrder].reverse();
+      for (const spec of specs) {
+        const instance = cache.get(spec);
+        if (instance) {
+          instance.dispose();
+        }
+      }
+      cache.clear();
+      instancesById.clear();
       creationOrder.length = 0;
     },
 
-    dispose(spec) {
-      const instance = instancesBySpec.get(spec);
-      if (!instance) return false;
+    dispose(spec: StoreSpec<any, any>): boolean {
+      return containerApi.delete(spec);
+    },
 
-      // Dispose instance
-      instance.dispose();
-
-      return true;
+    scope(scopeOptions: ContainerOptions = {}): StoreContainer {
+      // Create child container with this as parent
+      return container({
+        ...options,
+        ...scopeOptions,
+        middleware: scopeOptions.middleware ?? middleware,
+        _parent: containerApi,
+      } as InternalContainerOptions);
     },
 
     onCreate: createEmitter.on,
-
     onDispose: disposeEmitter.on,
   };
 
   return containerApi;
 };
 
-// Create defaults function with clear method
+// ==========================================================================
+// Default Middleware Configuration
+// ==========================================================================
+
 const defaultsFn = (config: DefaultMiddlewareConfig = {}): void => {
-  // Merge with existing defaults
   defaultMiddlewareConfig = {
     pre: [...(defaultMiddlewareConfig.pre ?? []), ...(config.pre ?? [])],
     post: [...(defaultMiddlewareConfig.post ?? []), ...(config.post ?? [])],
@@ -345,5 +326,4 @@ defaultsFn.clear = (): void => {
   defaultMiddlewareConfig = {};
 };
 
-// Add defaults method to container function
 container.defaults = defaultsFn;

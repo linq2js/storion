@@ -307,8 +307,21 @@ export type ReactiveActions<TActions extends ActionsBase> = {
 // =============================================================================
 
 /**
- * Store specification (definition).
+ * Store specification (definition) that is also a factory function.
  * A spec describes HOW to create a store instance - it holds no state.
+ *
+ * Can be called directly as a factory: `spec(resolver) => instance`
+ *
+ * @example
+ * ```ts
+ * const counterSpec = store({ count: state(0) });
+ *
+ * // Use with container (recommended)
+ * const instance = container.get(counterSpec);
+ *
+ * // Or call directly as factory
+ * const instance = counterSpec(resolver);
+ * ```
  */
 export interface StoreSpec<
   TState extends StateBase = StateBase,
@@ -319,6 +332,12 @@ export interface StoreSpec<
 
   /** Store options (state, setup, lifetime, etc.) */
   readonly options: StoreOptions<TState, TActions>;
+
+  /**
+   * Factory function - creates a new store instance.
+   * Called by container/resolver internally.
+   */
+  (resolver: Resolver): StoreInstance<TState, TActions>;
 }
 
 // =============================================================================
@@ -863,13 +882,139 @@ export interface ContainerOptions {
   middleware?: StoreMiddleware[];
 }
 
+// =============================================================================
+// Resolver (Factory-based Dependency Injection)
+// =============================================================================
+
 /**
- * Resolver interface to get store instances.
- * StoreContainer implements this interface.
+ * Factory function that creates an instance using the resolver.
+ * The factory itself is used as the cache key (by reference).
+ *
+ * StoreSpec is a specialized factory that returns StoreInstance.
  */
-export interface StoreResolver {
+export type Factory<T = any> = (resolver: Resolver) => T;
+
+/**
+ * Context passed to resolver middleware functions.
+ */
+export interface MiddlewareContext<T = any> {
+  /** The factory being invoked */
+  readonly factory: Factory<T>;
+  /** The resolver instance */
+  readonly resolver: Resolver;
+  /** Call the next middleware or the factory itself */
+  readonly next: () => T;
+}
+
+/**
+ * Resolver middleware function that can intercept factory creation.
+ *
+ * @example
+ * ```ts
+ * const loggingMiddleware: Middleware = (ctx) => {
+ *   console.log("Creating:", ctx.factory.name);
+ *   const result = ctx.next();
+ *   console.log("Created:", result);
+ *   return result;
+ * };
+ *
+ * // Type-specific middleware using is() guards
+ * const storeMiddleware: Middleware = (ctx) => {
+ *   if (is(ctx.factory, "store.spec")) {
+ *     // Apply store-specific logic
+ *   }
+ *   return ctx.next();
+ * };
+ * ```
+ */
+export type Middleware = <T>(ctx: MiddlewareContext<T>) => T;
+
+/**
+ * Options for creating a resolver.
+ */
+export interface ResolverOptions {
+  /** Middleware to apply to factory creation */
+  middleware?: Middleware[];
+  /** Parent resolver for hierarchical lookup */
+  parent?: Resolver;
+}
+
+/**
+ * Resolver interface for factory-based dependency injection.
+ * Provides caching, override support, and scoped resolvers.
+ *
+ * StoreContainer extends this with store-specific lifecycle methods.
+ */
+export interface Resolver {
   /**
-   * Get a store instance by spec.
+   * Get or create a cached instance from a factory.
+   * Returns the same instance on subsequent calls.
+   */
+  get<T>(factory: Factory<T>): T;
+
+  /**
+   * Create a fresh instance from a factory (bypasses cache).
+   */
+  create<T>(factory: Factory<T>): T;
+
+  /**
+   * Override a factory with a custom implementation.
+   * Useful for testing or environment-specific behavior.
+   * Clears the cached instance if one exists.
+   */
+  set<T>(factory: Factory<T>, override: Factory<T>): void;
+
+  /**
+   * Check if a factory has a cached instance.
+   */
+  has(factory: Factory): boolean;
+
+  /**
+   * Get a cached instance if it exists, otherwise return undefined.
+   * Does NOT create the instance if not cached.
+   */
+  tryGet<T>(factory: Factory<T>): T | undefined;
+
+  /**
+   * Delete a cached instance.
+   * Returns true if an instance was deleted.
+   */
+  delete(factory: Factory): boolean;
+
+  /**
+   * Clear all cached instances.
+   */
+  clear(): void;
+
+  /**
+   * Create a child resolver that inherits from this resolver.
+   * Child can override factories without affecting parent.
+   */
+  scope(options?: ResolverOptions): Resolver;
+}
+
+export type AutoDisposeOptions = {
+  /** Grace period in ms before disposing the store (default: 100) */
+  gracePeriodMs?: number;
+};
+
+/**
+ * Store container - manages store instances with resolver pattern.
+ *
+ * The container is responsible for:
+ * - Creating instances on first access (lazy)
+ * - Caching instances (singleton per spec)
+ * - Resolving dependencies between stores
+ * - Managing lifetime and disposal
+ * - Supporting DI via set() overrides
+ * - Scoped containers via scope()
+ *
+ * Note: StoreContainer has store-specific method signatures.
+ * For generic factory DI, use createResolver() instead.
+ */
+export interface StoreContainer extends StorionObject<"container"> {
+  /**
+   * Get a store instance by spec (cached).
    * First call creates instance, subsequent calls return cached.
    */
   get<S extends StateBase, A extends ActionsBase>(
@@ -882,34 +1027,41 @@ export interface StoreResolver {
   get(id: string): StoreInstance<any, any> | undefined;
 
   /**
-   * Check if a store instance exists.
+   * Create a fresh instance (bypasses cache).
+   * Useful for child stores or temporary instances.
    */
-  has(spec: StoreSpec<any, any>): boolean;
-
   create<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): StoreInstance<S, A>;
-}
 
-export type AutoDisposeOptions = {
-  /** Grace period in ms before disposing the store (default: 100) */
-  gracePeriodMs?: number;
-};
-
-/**
- * Store container - manages store instances.
- *
- * The container is responsible for:
- * - Creating instances on first access (lazy)
- * - Caching instances (singleton per spec)
- * - Resolving dependencies between stores
- * - Managing lifetime and disposal
- */
-export interface StoreContainer
-  extends StoreResolver,
-    StorionObject<"container"> {
   /**
-   * Dispose all cached instances.
+   * Override a spec with a custom implementation.
+   * Useful for testing or environment-specific behavior.
+   */
+  set<S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>,
+    override: StoreSpec<S, A>
+  ): void;
+
+  /**
+   * Check if a store instance is cached.
+   */
+  has(spec: StoreSpec<any, any>): boolean;
+
+  /**
+   * Get cached instance if exists, otherwise undefined.
+   * Does NOT create the instance.
+   */
+  tryGet<S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>
+  ): StoreInstance<S, A> | undefined;
+
+  /**
+   * Remove a cached instance.
+   */
+  delete(spec: StoreSpec<any, any>): boolean;
+  /**
+   * Clear all cached instances (disposes them).
    */
   clear(): void;
 
@@ -917,6 +1069,12 @@ export interface StoreContainer
    * Dispose a specific store instance.
    */
   dispose(spec: StoreSpec<any, any>): boolean;
+
+  /**
+   * Create a child container that inherits from this one.
+   * Child can override specs without affecting parent.
+   */
+  scope(options?: ContainerOptions): StoreContainer;
 
   /**
    * Subscribe to store creation events.

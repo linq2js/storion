@@ -40,7 +40,7 @@ export function is<K extends StorionKind>(
 ): value is StorionObjectForKind<K> {
   return (
     value !== null &&
-    typeof value === "object" &&
+    (typeof value === "object" || typeof value === "function") &&
     STORION_TYPE in value &&
     (value as StorionObject)[STORION_TYPE] === kind
   );
@@ -57,7 +57,7 @@ export function is<K extends StorionKind>(
 export function isStorion(value: unknown): value is StorionObject {
   return (
     value !== null &&
-    typeof value === "object" &&
+    (typeof value === "object" || typeof value === "function") &&
     STORION_TYPE in value &&
     typeof (value as StorionObject)[STORION_TYPE] === "string"
   );

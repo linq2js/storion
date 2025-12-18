@@ -10,7 +10,7 @@ import {
   type ActionsBase,
   type StoreSpec,
   type StoreInstance,
-  type StoreResolver,
+  type Resolver,
   type StoreContext,
   type StoreUpdate,
   type StoreTuple,
@@ -47,8 +47,8 @@ export interface CreateStoreContextOptions<
 > {
   /** The store specification */
   spec: StoreSpec<TState, TActions>;
-  /** The store resolver for dependencies */
-  resolver: StoreResolver;
+  /** The resolver for dependencies */
+  resolver: Resolver;
   /** Get current mutable state */
   getMutableState: () => TState;
   /** Update state using immer */

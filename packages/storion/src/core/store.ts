@@ -11,7 +11,7 @@ import {
   type StoreSpec,
   type StoreOptions,
   type StoreInstance,
-  type StoreResolver,
+  type Resolver,
   type DispatchEvent,
   type ActionDispatchEvent,
   type ReactiveActions,
@@ -45,18 +45,30 @@ import { collection } from "../collection";
 /**
  * Create a store specification.
  *
- * The spec is a pure definition - no instance is created.
- * Instances are created lazily via container.get().
+ * The spec is both a definition AND a factory function:
+ * - As object: holds name, options, and STORION_TYPE
+ * - As function: `spec(resolver) => StoreInstance`
+ *
+ * Instances are created lazily via container.get() or by calling spec directly.
  */
 export function store<TState extends StateBase, TActions extends ActionsBase>(
   options: StoreOptions<TState, TActions>
 ): StoreSpec<TState, TActions> {
   const name = options.name ?? generateSpecName();
-  return {
-    [STORION_TYPE]: "store.spec",
-    name,
-    options,
-  };
+
+  // Create callable factory function
+  const spec = function (resolver: Resolver): StoreInstance<TState, TActions> {
+    return createStoreInstance(spec as StoreSpec<TState, TActions>, resolver, {});
+  } as StoreSpec<TState, TActions>;
+
+  // Assign properties to make it a valid StoreSpec
+  Object.defineProperties(spec, {
+    [STORION_TYPE]: { value: "store.spec", enumerable: false },
+    name: { value: name, enumerable: true, writable: false },
+    options: { value: options, enumerable: true, writable: false },
+  });
+
+  return spec;
 }
 
 // =============================================================================
@@ -84,7 +96,7 @@ export function createStoreInstance<
   TActions extends ActionsBase
 >(
   spec: StoreSpec<TState, TActions>,
-  resolver: StoreResolver,
+  resolver: Resolver,
   instanceOptions: CreateStoreInstanceOptions = {}
 ): StoreInstance<TState, TActions> {
   const options = spec.options;

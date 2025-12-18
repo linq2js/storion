@@ -24,7 +24,6 @@ export {
   type StoreMixin,
   type StoreOptions,
   type StoreInstance,
-  type StoreResolver,
   type StoreContainer,
   type ContainerOptions,
   type StoreMiddleware,
@@ -41,6 +40,12 @@ export {
   type FocusOptions,
   type FocusChangeEvent,
   type NonNullish,
+  // Resolver types
+  type Factory,
+  type Middleware,
+  type MiddlewareContext,
+  type Resolver,
+  type ResolverOptions,
 } from "./types";
 
 // Type guards
@@ -68,11 +73,6 @@ export {
   when,
   createLoggingMiddleware,
   createValidationMiddleware,
-  type Factory,
-  type Middleware,
-  type MiddlewareContext,
-  type Resolver,
-  type ResolverOptions,
 } from "./core/createResolver";
 
 // Fine-grained reactivity

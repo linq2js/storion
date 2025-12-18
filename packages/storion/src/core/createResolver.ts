@@ -27,111 +27,16 @@
  * ```
  */
 
-// =============================================================================
-// Types
-// =============================================================================
+import type { Factory, Middleware, Resolver, ResolverOptions } from "../types";
 
-/**
- * Factory function that creates an instance using the resolver.
- * The factory itself is used as the cache key (by reference).
- */
-export type Factory<T = any> = (resolver: Resolver) => T;
-
-/**
- * Context passed to middleware functions.
- */
-export interface MiddlewareContext<T = any> {
-  /** The factory being invoked */
-  readonly factory: Factory<T>;
-  /** The resolver instance */
-  readonly resolver: Resolver;
-  /** Call the next middleware or the factory itself */
-  readonly next: () => T;
-}
-
-/**
- * Middleware function that can intercept factory creation.
- *
- * @example
- * ```ts
- * const loggingMiddleware: Middleware = (ctx) => {
- *   console.log("Creating:", ctx.factory.name);
- *   const result = ctx.next();
- *   console.log("Created:", result);
- *   return result;
- * };
- *
- * // Type-specific middleware using is() guards
- * const storeMiddleware: Middleware = (ctx) => {
- *   if (is(ctx.factory, "store.spec")) {
- *     // Apply store-specific logic
- *   }
- *   return ctx.next();
- * };
- * ```
- */
-export type Middleware = <T>(ctx: MiddlewareContext<T>) => T;
-
-/**
- * Resolver interface for factory-based dependency injection.
- */
-export interface Resolver {
-  /**
-   * Get or create a cached instance from a factory.
-   * Returns the same instance on subsequent calls.
-   */
-  get<T>(factory: Factory<T>): T;
-
-  /**
-   * Create a fresh instance from a factory (bypasses cache).
-   */
-  create<T>(factory: Factory<T>): T;
-
-  /**
-   * Override a factory with a custom implementation.
-   * Useful for testing or environment-specific behavior.
-   * Clears the cached instance if one exists.
-   */
-  set<T>(factory: Factory<T>, override: Factory<T>): void;
-
-  /**
-   * Check if a factory has a cached instance.
-   */
-  has(factory: Factory): boolean;
-
-  /**
-   * Get a cached instance if it exists, otherwise return undefined.
-   * Does NOT create the instance if not cached.
-   */
-  tryGet<T>(factory: Factory<T>): T | undefined;
-
-  /**
-   * Delete a cached instance.
-   * Returns true if an instance was deleted.
-   */
-  delete(factory: Factory): boolean;
-
-  /**
-   * Clear all cached instances.
-   */
-  clear(): void;
-
-  /**
-   * Create a child resolver that inherits from this resolver.
-   * Child can override factories without affecting parent.
-   */
-  scope(options?: ResolverOptions): Resolver;
-}
-
-/**
- * Options for creating a resolver.
- */
-export interface ResolverOptions {
-  /** Middleware to apply to factory creation */
-  middleware?: Middleware[];
-  /** Parent resolver for hierarchical lookup */
-  parent?: Resolver;
-}
+// Re-export types for convenience
+export type {
+  Factory,
+  Middleware,
+  MiddlewareContext,
+  Resolver,
+  ResolverOptions,
+} from "../types";
 
 // =============================================================================
 // Implementation
