@@ -4,6 +4,12 @@
  * Separates the hook phase (always runs) from the render phase (memoized).
  * Only re-renders when hook output changes.
  *
+ * ## Exposed Properties
+ *
+ * Every withStore result exposes its parts for reuse and testing:
+ * - `Component.use(ctx, props)` - The hook function
+ * - `Component.render(output)` - The render function (direct mode only)
+ *
  * @example
  * // Direct usage - no ref
  * const MyComponent = withStore(
@@ -32,6 +38,84 @@
  * });
  *
  * const Profile = withUserData(({ name }) => <div>{name}</div>);
+ *
+ * @example
+ * // ============================================================
+ * // REUSABILITY PATTERNS
+ * // ============================================================
+ *
+ * // 1. Reuse hook in another withStore component
+ * const UserCard = withStore(hook, render);
+ *
+ * const UserCardWithAvatar = withStore(
+ *   (ctx, props) => {
+ *     // Reuse the existing hook logic
+ *     const userData = UserCard.use(ctx, props);
+ *     // Extend with additional data
+ *     const [settings] = ctx.get(settingsStore);
+ *     return { ...userData, showAvatar: settings.showAvatars };
+ *   },
+ *   ({ name, showAvatar }) => (
+ *     <div>
+ *       {showAvatar && <Avatar />}
+ *       {name}
+ *     </div>
+ *   )
+ * );
+ *
+ * // 2. Reuse render with different data source
+ * const UserCard = withStore(hook, render);
+ *
+ * // Use same render with mock data (e.g., in Storybook)
+ * export const MockUserCard = () => UserCard.render({ name: 'Mock User' });
+ *
+ * // 3. Compose multiple hooks
+ * const UserInfo = withStore(userHook, userRender);
+ * const UserStats = withStore(statsHook, statsRender);
+ *
+ * const FullProfile = withStore(
+ *   (ctx, props) => ({
+ *     user: UserInfo.use(ctx, props),
+ *     stats: UserStats.use(ctx, { userId: props.userId }),
+ *   }),
+ *   ({ user, stats }) => (
+ *     <div>
+ *       {UserInfo.render(user)}
+ *       {UserStats.render(stats)}
+ *     </div>
+ *   )
+ * );
+ *
+ * // 4. HOC hook reuse
+ * const withAuth = withStore((ctx) => {
+ *   const [auth] = ctx.get(authStore);
+ *   return { user: auth.currentUser, isLoggedIn: !!auth.currentUser };
+ * });
+ *
+ * // Reuse the auth hook in another HOC
+ * const withProtectedRoute = withStore((ctx, props) => {
+ *   const auth = withAuth.use(ctx, {});
+ *   return { ...props, ...auth, redirectTo: auth.isLoggedIn ? null : '/login' };
+ * });
+ *
+ * @example
+ * // ============================================================
+ * // TESTING PATTERNS
+ * // ============================================================
+ *
+ * const MyComponent = withStore(hook, render);
+ *
+ * // Test the hook separately (unit test)
+ * it('should extract user name', () => {
+ *   const result = MyComponent.use(mockCtx, { userId: '123' });
+ *   expect(result.name).toBe('John');
+ * });
+ *
+ * // Test the render separately (snapshot/visual test)
+ * it('should render name', () => {
+ *   const { getByText } = render(MyComponent.render({ name: 'John' }));
+ *   expect(getByText('John')).toBeInTheDocument();
+ * });
  */
 
 import {
@@ -126,21 +210,112 @@ export type WithStoreRenderWithRef<TOutput extends object, TRef = unknown> = (
 ) => ReactNode;
 
 // =============================================================================
+// Testing Utility Types
+// =============================================================================
+
+/**
+ * Testing utilities exposed on components created with withStore(hook, render)
+ */
+export interface WithStoreTestUtils<
+  TInput extends object,
+  TOutput extends object
+> {
+  /**
+   * The hook function for testing.
+   * Call this to test the hook logic independently.
+   *
+   * @example
+   * ```ts
+   * const result = MyComponent.use(mockCtx, { userId: '123' });
+   * expect(result.name).toBe('John');
+   * ```
+   */
+  use: WithStoreHook<TInput, TOutput>;
+
+  /**
+   * The render function for testing.
+   * Call this to test the render output independently.
+   *
+   * @example
+   * ```tsx
+   * const element = MyComponent.render({ name: 'John' });
+   * // Or with testing-library:
+   * render(MyComponent.render({ name: 'John' }));
+   * ```
+   */
+  render: (props: TOutput) => ReactNode;
+}
+
+/**
+ * Testing utilities exposed on HOCs created with withStore(hook)
+ */
+export interface WithStoreHOCTestUtils<
+  TInput extends object,
+  TOutput extends object
+> {
+  /**
+   * The hook function for testing.
+   * Call this to test the hook logic independently.
+   *
+   * @example
+   * ```ts
+   * const result = withUserData.use(mockCtx, { userId: '123' });
+   * expect(result.name).toBe('John');
+   * ```
+   */
+  use: WithStoreHook<TInput, TOutput>;
+}
+
+// =============================================================================
+// Component Return Types with Test Utils
+// =============================================================================
+
+/**
+ * Component type with testing utilities (no ref)
+ */
+export type WithStoreComponent<
+  TInput extends object,
+  TOutput extends object
+> = FC<TInput> & WithStoreTestUtils<TInput, TOutput>;
+
+/**
+ * Component type with testing utilities (with ref)
+ */
+export type WithStoreComponentWithRef<
+  TInput extends object,
+  TOutput extends object,
+  TRef = unknown
+> = ForwardRefExoticComponent<TInput & RefAttributes<TRef>> &
+  WithStoreTestUtils<TInput, TOutput>;
+
+/**
+ * HOC type with testing utilities
+ */
+export type WithStoreHOC<TInput extends object, TOutput extends object> = {
+  (component: FC<TOutput>): FC<TInput>;
+  <TRef = unknown>(
+    component: ForwardRefRenderFunction<TRef, TOutput>
+  ): ForwardRefExoticComponent<TInput & RefAttributes<TRef>>;
+} & WithStoreHOCTestUtils<TInput, TOutput>;
+
+// =============================================================================
 // Overloads
 // =============================================================================
 
 /**
  * Direct mode: Create component with hook and render function (no ref).
+ * Returns component with `use` and `render` properties for testing.
  */
 export function withStore<TInput extends object, TOutput extends object>(
   hook: WithStoreHook<TInput, TOutput>,
   render: WithStoreRender<TOutput>,
   options?: WithStoreOptions<TOutput>
-): FC<TInput>;
+): WithStoreComponent<TInput, TOutput>;
 
 /**
  * Direct mode: Create component with hook and render function (with ref).
  * Automatically detected when render function has 2 parameters.
+ * Returns component with `use` and `render` properties for testing.
  */
 export function withStore<
   TInput extends object,
@@ -150,21 +325,16 @@ export function withStore<
   hook: WithStoreHook<TInput, TOutput>,
   render: WithStoreRenderWithRef<TOutput, TRef>,
   options?: WithStoreOptions<TOutput>
-): ForwardRefExoticComponent<TInput & RefAttributes<TRef>>;
+): WithStoreComponentWithRef<TInput, TOutput, TRef>;
 
 /**
  * HOC mode: Create HOC that transforms props using hook.
- * Returns a function that accepts a component.
+ * Returns a function that accepts a component, with `use` property for testing.
  */
 export function withStore<TInput extends object, TOutput extends object>(
   hook: WithStoreHook<TInput, TOutput>,
   options?: WithStoreOptions<TOutput>
-): {
-  (component: FC<TOutput>): FC<TInput>;
-  <TRef = unknown>(
-    component: ForwardRefRenderFunction<TRef, TOutput>
-  ): ForwardRefExoticComponent<TInput & RefAttributes<TRef>>;
-};
+): WithStoreHOC<TInput, TOutput>;
 
 // =============================================================================
 // Implementation
@@ -209,6 +379,10 @@ export function withStore<TInput extends object, TOutput extends object>(
         WrappedComponent.displayName = customDisplayName;
       }
 
+      // Attach testing utilities
+      WrappedComponent.use = hook;
+      WrappedComponent.render = (props: TOutput) => render(props, null as any);
+
       return WrappedComponent;
     }
 
@@ -219,7 +393,9 @@ export function withStore<TInput extends object, TOutput extends object>(
         ) as any)
       : (memo(render as WithStoreRender<TOutput>) as any);
 
-    const WrappedComponent: FC<TInput> = (props: TInput) => {
+    const WrappedComponent: FC<TInput> & WithStoreTestUtils<TInput, TOutput> = (
+      props: TInput
+    ) => {
       const output = useStore((ctx) => hook(ctx, props)) as any;
       return <MemoizedRender {...output} />;
     };
@@ -228,11 +404,15 @@ export function withStore<TInput extends object, TOutput extends object>(
       WrappedComponent.displayName = customDisplayName;
     }
 
+    // Attach testing utilities
+    WrappedComponent.use = hook;
+    WrappedComponent.render = render as (props: TOutput) => ReactNode;
+
     return WrappedComponent;
   }
 
   // HOC mode: only hook provided, return function that accepts component
-  return (Component: any) => {
+  const hoc = ((Component: any) => {
     // Auto-detect if Component is a forwardRef component
     // Check if it's already a forwardRef (has $$typeof)
     const isForwardRef = Component.$$typeof === Symbol.for("react.forward_ref");
@@ -281,5 +461,10 @@ export function withStore<TInput extends object, TOutput extends object>(
     }
 
     return WrappedComponent;
-  };
+  }) as WithStoreHOC<TInput, TOutput>;
+
+  // Attach testing utilities to HOC
+  hoc.use = hook;
+
+  return hoc;
 }
