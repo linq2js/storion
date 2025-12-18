@@ -13,7 +13,7 @@
 import { store, type ActionsBase } from "storion";
 import type { User } from "../types";
 import { generateId, getAvatarUrl } from "../types";
-import { indexedDBService } from "../services/indexedDB";
+import { indexedDBUsersService } from "../services/indexedDB";
 import { crossTabSyncService } from "../services/crossTabSync";
 
 // ============================================================================
@@ -72,7 +72,7 @@ export const authStore = store<AuthState, AuthActions>({
     const { state, update, get } = ctx;
 
     // Get service instances via factory (cached by container)
-    const db = get(indexedDBService);
+    const users = get(indexedDBUsersService);
     const sync = get(crossTabSyncService);
 
     return {
@@ -95,7 +95,7 @@ export const authStore = store<AuthState, AuthActions>({
         };
 
         // Persist to IndexedDB
-        await db.users.save(user);
+        await users.save(user);
 
         // Save session to sessionStorage (tab-specific)
         sync.session.save(id);
@@ -125,7 +125,7 @@ export const authStore = store<AuthState, AuthActions>({
           sync.activeUsers.stopHeartbeat();
 
           // Update user status in IndexedDB
-          db.users.updateStatus(userId, "offline", Date.now());
+          users.updateStatus(userId, "offline", Date.now());
 
           // Notify other tabs
           sync.broadcast("USER_LOGGED_OUT", { userId });
@@ -148,9 +148,8 @@ export const authStore = store<AuthState, AuthActions>({
         const userId = sync.session.get();
         if (!userId) return null;
 
-        // Initialize IndexedDB and fetch user
-        await db.init();
-        const user = await db.users.get(userId);
+        // Fetch user from IndexedDB
+        const user = await users.get(userId);
 
         // If user doesn't exist in DB, clear invalid session
         if (!user) {
@@ -161,7 +160,7 @@ export const authStore = store<AuthState, AuthActions>({
         // Update user status to online
         user.status = "online";
         user.lastActiveAt = Date.now();
-        await db.users.save(user);
+        await users.save(user);
 
         // Start heartbeat for this session
         sync.activeUsers.startHeartbeat(user.id);

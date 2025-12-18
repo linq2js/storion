@@ -15,7 +15,11 @@ import { store, type ActionsBase } from "storion";
 import { async, type AsyncState } from "storion/async";
 import type { Room } from "../types";
 import { generateId, getDMRoomId } from "../types";
-import { indexedDBService } from "../services/indexedDB";
+import {
+  indexedDBRoomsService,
+  indexedDBUsersService,
+  indexedDBMessagesService,
+} from "../services/indexedDB";
 import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
 
@@ -102,7 +106,9 @@ export const roomsStore = store<RoomsState, RoomsActions>({
     const { focus, update, get } = ctx;
 
     // Get service instances via factory (cached by container)
-    const db = get(indexedDBService);
+    const rooms = get(indexedDBRoomsService);
+    const users = get(indexedDBUsersService);
+    const messages = get(indexedDBMessagesService);
     const sync = get(crossTabSyncService);
 
     // Get store references during setup phase (MUST be at top level)
@@ -115,7 +121,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       if (!authState.currentUser) return [];
 
       // Load rooms where user is a member
-      return db.rooms.getForUser(authState.currentUser.id);
+      return rooms.getForUser(authState.currentUser.id);
     });
 
     return {
@@ -156,7 +162,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
         };
 
         // Persist to IndexedDB
-        await db.rooms.save(room);
+        await rooms.save(room);
 
         // Broadcast to other tabs
         sync.broadcast("ROOM_CREATED", room);
@@ -175,10 +181,10 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // ========================
       deleteRoom: async (roomId: string) => {
         // Delete messages first (foreign key constraint)
-        await db.messages.deleteForRoom(roomId);
+        await messages.deleteForRoom(roomId);
 
         // Delete the room
-        await db.rooms.delete(roomId);
+        await rooms.delete(roomId);
 
         // Broadcast to other tabs
         sync.broadcast("ROOM_DELETED", { roomId });
@@ -216,11 +222,11 @@ export const roomsStore = store<RoomsState, RoomsActions>({
         const dmRoomId = getDMRoomId(authState.currentUser.id, userId);
 
         // Check if DM room already exists
-        let room = await db.rooms.get(dmRoomId);
+        let room = await rooms.get(dmRoomId);
 
         if (!room) {
           // Create new DM room
-          const otherUser = await db.users.get(userId);
+          const otherUser = await users.get(userId);
           room = {
             id: dmRoomId,
             name: otherUser?.nickname ?? "Direct Message",
@@ -231,7 +237,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
             lastMessageAt: Date.now(),
           };
 
-          await db.rooms.save(room);
+          await rooms.save(room);
           sync.broadcast("ROOM_CREATED", room);
         }
 

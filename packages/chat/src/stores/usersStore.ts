@@ -13,7 +13,7 @@
 import { store, type ActionsBase } from "storion";
 import { async, type AsyncState } from "storion/async";
 import type { User } from "../types";
-import { indexedDBService } from "../services/indexedDB";
+import { indexedDBUsersService } from "../services/indexedDB";
 
 // ============================================================================
 // Helpers
@@ -92,12 +92,12 @@ export const usersStore = store<UsersState, UsersActions>({
     const { focus, update, get } = ctx;
 
     // Get service instance via factory (cached by container)
-    const db = get(indexedDBService);
+    const users = get(indexedDBUsersService);
 
     // Create async action for loading users
     // focus("users") creates a lens to the users field for the async helper
     const usersAsync = async(focus("users"), async () => {
-      return db.users.getAll();
+      return users.getAll();
     });
 
     return {

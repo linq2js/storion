@@ -7,10 +7,22 @@ import {
   chatUIStore,
   resetAllStores,
 } from "../stores";
+import { crossTabSyncService } from "../services/crossTabSync";
 import type { Room, User, RoomInvitation } from "../types";
 
 // Status indicator component
-function StatusDot({ status }: { status: User["status"] }) {
+// isOnline overrides the stored status with real-time heartbeat check
+function StatusDot({
+  status,
+  isOnline,
+}: {
+  status: User["status"];
+  isOnline?: boolean;
+}) {
+  // If isOnline is provided, use it; otherwise fall back to stored status
+  const effectiveStatus =
+    isOnline !== undefined ? (isOnline ? "online" : "offline") : status;
+
   const colors = {
     online: "bg-chat-online",
     away: "bg-chat-away",
@@ -18,7 +30,7 @@ function StatusDot({ status }: { status: User["status"] }) {
   };
   return (
     <div
-      className={`w-2.5 h-2.5 rounded-full ${colors[status]} border-[1.5px] border-chat-surface`}
+      className={`w-2.5 h-2.5 rounded-full ${colors[effectiveStatus]} border-[1.5px] border-chat-surface`}
     />
   );
 }
@@ -29,12 +41,14 @@ function RoomItem({
   isActive,
   users,
   currentUserId,
+  isUserActive,
   onClick,
 }: {
   room: Room;
   isActive: boolean;
   users: User[];
   currentUserId: string;
+  isUserActive: (userId: string) => boolean;
   onClick: () => void;
 }) {
   const otherUserId = room.isDirectMessage
@@ -67,7 +81,10 @@ function RoomItem({
           />
           {otherUser && (
             <div className="absolute -bottom-0.5 -right-0.5">
-              <StatusDot status={otherUser.status} />
+              <StatusDot
+                status={otherUser.status}
+                isOnline={isUserActive(otherUser.id)}
+              />
             </div>
           )}
         </div>
@@ -97,11 +114,13 @@ function RoomItem({
 function UserItem({
   user,
   isCurrentUser,
+  isOnline,
   onClick,
   onShowProfile,
 }: {
   user: User;
   isCurrentUser: boolean;
+  isOnline: boolean;
   onClick: () => void;
   onShowProfile: () => void;
 }) {
@@ -124,7 +143,7 @@ function UserItem({
           className="w-7 h-7 rounded-full bg-chat-elevated"
         />
         <div className="absolute -bottom-0.5 -right-0.5">
-          <StatusDot status={user.status} />
+          <StatusDot status={user.status} isOnline={isOnline} />
         </div>
       </button>
       <button
@@ -202,6 +221,7 @@ export const Sidebar = withStore(
     const [roomsState, roomsActions] = ctx.get(roomsStore);
     const [invitationsState, invitationsActions] = ctx.get(invitationsStore);
     const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+    const sync = ctx.get(crossTabSyncService);
 
     return {
       currentUser: authState.currentUser,
@@ -218,6 +238,8 @@ export const Sidebar = withStore(
       declineInvitation: invitationsActions.declineInvitation,
       setShowProfile: chatUIActions.setShowProfile,
       logout: authActions.logout,
+      // Use heartbeat-based check for real-time online status
+      isUserActive: (userId: string) => sync.activeUsers.isActive(userId),
     };
   },
   ({
@@ -235,6 +257,7 @@ export const Sidebar = withStore(
     declineInvitation,
     setShowProfile,
     logout,
+    isUserActive,
   }) => {
     const app = useContainer();
     if (!currentUser) return null;
@@ -380,6 +403,7 @@ export const Sidebar = withStore(
                         isActive={activeRoomId === room.id}
                         users={users}
                         currentUserId={currentUser.id}
+                        isUserActive={isUserActive}
                         onClick={() => selectRoom(room.id)}
                       />
                     ))
@@ -405,6 +429,7 @@ export const Sidebar = withStore(
                         isActive={activeRoomId === room.id}
                         users={users}
                         currentUserId={currentUser.id}
+                        isUserActive={isUserActive}
                         onClick={() => selectRoom(room.id)}
                       />
                     ))
@@ -428,6 +453,7 @@ export const Sidebar = withStore(
                     key={user.id}
                     user={user}
                     isCurrentUser={user.id === currentUser.id}
+                    isOnline={isUserActive(user.id)}
                     onClick={() => startDirectMessage(user.id)}
                     onShowProfile={() => setShowProfile(user.id)}
                   />

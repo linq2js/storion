@@ -15,7 +15,7 @@ import { store, type ActionsBase } from "storion";
 import type { AsyncState } from "storion/async";
 import type { Message } from "../types";
 import { generateId } from "../types";
-import { indexedDBService } from "../services/indexedDB";
+import { indexedDBMessagesService } from "../services/indexedDB";
 import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
 import { roomsStore } from "./roomsStore";
@@ -99,7 +99,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
     const { update, get } = ctx;
 
     // Get service instances via factory (cached by container)
-    const db = get(indexedDBService);
+    const messages = get(indexedDBMessagesService);
     const sync = get(crossTabSyncService);
 
     // Get store references during setup phase (MUST be at top level)
@@ -113,11 +113,11 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       loadMessages: async (roomId: string) => {
         // Fetch messages from IndexedDB
-        const messages = await db.messages.getForRoom(roomId);
+        const roomMessages = await messages.getForRoom(roomId);
 
         // Update state for this specific room
         update((s: MessagesState) => {
-          s.messages[roomId] = success(messages);
+          s.messages[roomId] = success(roomMessages);
         });
       },
 
@@ -147,7 +147,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         };
 
         // Persist to IndexedDB
-        await db.messages.save(message);
+        await messages.save(message);
 
         // Broadcast to other tabs
         sync.broadcast("MESSAGE_SENT", message);
@@ -167,26 +167,26 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       editMessage: async (messageId: string, content: string) => {
         // Fetch the message to edit
-        const message = await db.messages.get(messageId);
+        const msg = await messages.get(messageId);
 
         // Only the sender can edit their message
-        if (!message || message.senderId !== authState.currentUser?.id) return;
+        if (!msg || msg.senderId !== authState.currentUser?.id) return;
 
         // Update message content and mark as edited
-        message.content = content;
-        message.editedAt = Date.now();
+        msg.content = content;
+        msg.editedAt = Date.now();
 
         // Persist changes
-        await db.messages.save(message);
+        await messages.save(msg);
 
         // Broadcast to other tabs
-        sync.broadcast("MESSAGE_EDITED", message);
+        sync.broadcast("MESSAGE_EDITED", msg);
 
         // Update local state
         update((s: MessagesState) => {
-          const roomMessages = s.messages[message.roomId]?.data ?? [];
-          s.messages[message.roomId] = success(
-            roomMessages.map((m: Message) => (m.id === messageId ? message : m))
+          const roomMessages = s.messages[msg.roomId]?.data ?? [];
+          s.messages[msg.roomId] = success(
+            roomMessages.map((m: Message) => (m.id === messageId ? msg : m))
           );
         });
       },
@@ -196,24 +196,24 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       deleteMessage: async (messageId: string) => {
         // Fetch the message to delete
-        const message = await db.messages.get(messageId);
+        const msg = await messages.get(messageId);
 
         // Only the sender can delete their message
-        if (!message || message.senderId !== authState.currentUser?.id) return;
+        if (!msg || msg.senderId !== authState.currentUser?.id) return;
 
         // Delete from IndexedDB
-        await db.messages.delete(messageId);
+        await messages.delete(messageId);
 
         // Broadcast to other tabs
         sync.broadcast("MESSAGE_DELETED", {
           messageId,
-          roomId: message.roomId,
+          roomId: msg.roomId,
         });
 
         // Update local state
         update((s: MessagesState) => {
-          const roomMessages = s.messages[message.roomId]?.data ?? [];
-          s.messages[message.roomId] = success(
+          const roomMessages = s.messages[msg.roomId]?.data ?? [];
+          s.messages[msg.roomId] = success(
             roomMessages.filter((m: Message) => m.id !== messageId)
           );
         });
