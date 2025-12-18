@@ -11,7 +11,7 @@
  * - authStore: To get current user for room operations
  */
 
-import { store, type ActionsBase, type StoreContext } from "storion";
+import { store, type ActionsBase } from "storion";
 import { async, type AsyncState } from "storion/async";
 import type { Room } from "../types";
 import { generateId, getDMRoomId } from "../types";
@@ -97,13 +97,17 @@ export const roomsStore = store<RoomsState, RoomsActions>({
     activeRoomId: null,
   },
 
-  // Setup receives StoreContext as second argument for accessing other stores
-  setup: ({ state, focus, update }, ctx: StoreContext) => {
+  // Setup receives StoreContext for accessing other stores
+  setup: (ctx) => {
+    const { focus, update, get } = ctx;
+
+    // Get store references during setup phase (MUST be at top level)
+    // State is reactive - reads current value when accessed later
+    const [authState] = get(authStore);
+
     // Async action for loading rooms
-    // Uses ctx.get(authStore) to access authStore state
     const roomsAsync = async(focus("rooms"), async () => {
-      // Get current user from authStore
-      const [authState] = ctx.get(authStore);
+      // Access reactive state (NOT calling get() here)
       if (!authState.currentUser) return [];
 
       // Load rooms where user is a member
@@ -123,7 +127,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // ========================
       reset: () => {
         roomsAsync.reset();
-        update((s) => {
+        update((s: RoomsState) => {
           s.activeRoomId = null;
         });
       },
@@ -132,8 +136,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // Create Room Action
       // ========================
       createRoom: async (name: string, description?: string) => {
-        // Access authStore to get current user
-        const [authState] = ctx.get(authStore);
+        // Access reactive state obtained during setup
         if (!authState.currentUser) throw new Error("Not logged in");
 
         // Create room object
@@ -155,7 +158,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
         broadcastEvent("ROOM_CREATED", room);
 
         // Optimistically update local state
-        update((s) => {
+        update((s: RoomsState) => {
           const rooms = s.rooms.data ?? [];
           s.rooms = success([...rooms, room]);
         });
@@ -177,9 +180,9 @@ export const roomsStore = store<RoomsState, RoomsActions>({
         broadcastEvent("ROOM_DELETED", { roomId });
 
         // Update local state
-        update((s) => {
+        update((s: RoomsState) => {
           const rooms = s.rooms.data ?? [];
-          s.rooms = success(rooms.filter((r) => r.id !== roomId));
+          s.rooms = success(rooms.filter((r: Room) => r.id !== roomId));
 
           // Clear active room if it was deleted
           if (s.activeRoomId === roomId) {
@@ -192,7 +195,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // Select Room Action
       // ========================
       // Simple synchronous action using update.action
-      selectRoom: update.action((draft, roomId: string | null) => {
+      selectRoom: update.action((draft: RoomsState, roomId: string | null) => {
         draft.activeRoomId = roomId;
       }),
 
@@ -200,7 +203,6 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // Start Direct Message Action
       // ========================
       startDirectMessage: async (userId: string) => {
-        const [authState] = ctx.get(authStore);
         if (!authState.currentUser) return;
 
         // Can't DM yourself
@@ -231,7 +233,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
 
         // Refresh rooms list and select the DM room
         await roomsAsync.dispatch();
-        update((s) => {
+        update((s: RoomsState) => {
           s.activeRoomId = room!.id;
         });
       },
@@ -240,16 +242,15 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // Add Room Action (for cross-tab sync)
       // ========================
       addRoom: (room: Room) => {
-        const [authState] = ctx.get(authStore);
         if (!authState.currentUser) return;
 
         // Only add if user is a member
         if (!room.members.includes(authState.currentUser.id)) return;
 
-        update((s) => {
+        update((s: RoomsState) => {
           const rooms = s.rooms.data ?? [];
           // Prevent duplicates
-          if (!rooms.find((r) => r.id === room.id)) {
+          if (!rooms.find((r: Room) => r.id === room.id)) {
             s.rooms = success([...rooms, room]);
           }
         });
@@ -259,9 +260,9 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // Remove Room Action (for cross-tab sync)
       // ========================
       removeRoom: (roomId: string) => {
-        update((s) => {
+        update((s: RoomsState) => {
           const rooms = s.rooms.data ?? [];
-          s.rooms = success(rooms.filter((r) => r.id !== roomId));
+          s.rooms = success(rooms.filter((r: Room) => r.id !== roomId));
 
           // Clear active room if removed
           if (s.activeRoomId === roomId) {
@@ -274,9 +275,9 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // Add Member to Room Action (for cross-tab sync)
       // ========================
       addMemberToRoom: (roomId: string, userId: string) => {
-        update((s) => {
+        update((s: RoomsState) => {
           const rooms = s.rooms.data ?? [];
-          const room = rooms.find((r) => r.id === roomId);
+          const room = rooms.find((r: Room) => r.id === roomId);
 
           if (room && !room.members.includes(userId)) {
             room.members.push(userId);

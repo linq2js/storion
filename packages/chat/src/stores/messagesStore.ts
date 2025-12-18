@@ -11,7 +11,7 @@
  * - roomsStore: To get active room for sending messages
  */
 
-import { store, type ActionsBase, type StoreContext } from "storion";
+import { store, type ActionsBase } from "storion";
 import type { AsyncState } from "storion/async";
 import type { Message } from "../types";
 import { generateId } from "../types";
@@ -95,7 +95,14 @@ export const messagesStore = store<MessagesState, MessagesActions>({
   },
 
   // Setup receives StoreContext for accessing other stores
-  setup: ({ state, update }, ctx: StoreContext) => {
+  setup: (ctx) => {
+    const { update, get } = ctx;
+
+    // Get store references during setup phase (MUST be at top level)
+    // State is reactive - reads current value when accessed later
+    const [authState] = get(authStore);
+    const [roomsState] = get(roomsStore);
+
     return {
       // ========================
       // Load Messages Action
@@ -105,7 +112,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         const messages = await db.getMessagesForRoom(roomId);
 
         // Update state for this specific room
-        update((s) => {
+        update((s: MessagesState) => {
           s.messages[roomId] = success(messages);
         });
       },
@@ -113,7 +120,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       // Reset Action
       // ========================
-      reset: update.action((draft) => {
+      reset: update.action((draft: MessagesState) => {
         // Clear all messages
         draft.messages = {};
       }),
@@ -122,12 +129,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // Send Message Action
       // ========================
       sendMessage: async (content: string, replyTo?: string) => {
-        // Get current user from authStore
-        const [authState] = ctx.get(authStore);
-        // Get active room from roomsStore
-        const [roomsState] = ctx.get(roomsStore);
-
-        // Validate we have user and room
+        // Access reactive state obtained during setup
         if (!authState.currentUser || !roomsState.activeRoomId) return;
 
         // Create message object
@@ -147,7 +149,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         broadcastEvent("MESSAGE_SENT", message);
 
         // Optimistically update local state
-        update((s) => {
+        update((s: MessagesState) => {
           const roomMessages = s.messages[message.roomId]?.data ?? [];
           s.messages[message.roomId] = success([...roomMessages, message]);
         });
@@ -160,8 +162,6 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // Edit Message Action
       // ========================
       editMessage: async (messageId: string, content: string) => {
-        const [authState] = ctx.get(authStore);
-
         // Fetch the message to edit
         const message = await db.getMessage(messageId);
 
@@ -179,10 +179,10 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         broadcastEvent("MESSAGE_EDITED", message);
 
         // Update local state
-        update((s) => {
+        update((s: MessagesState) => {
           const roomMessages = s.messages[message.roomId]?.data ?? [];
           s.messages[message.roomId] = success(
-            roomMessages.map((m) => (m.id === messageId ? message : m))
+            roomMessages.map((m: Message) => (m.id === messageId ? message : m))
           );
         });
       },
@@ -191,8 +191,6 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // Delete Message Action
       // ========================
       deleteMessage: async (messageId: string) => {
-        const [authState] = ctx.get(authStore);
-
         // Fetch the message to delete
         const message = await db.getMessage(messageId);
 
@@ -209,10 +207,10 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         });
 
         // Update local state
-        update((s) => {
+        update((s: MessagesState) => {
           const roomMessages = s.messages[message.roomId]?.data ?? [];
           s.messages[message.roomId] = success(
-            roomMessages.filter((m) => m.id !== messageId)
+            roomMessages.filter((m: Message) => m.id !== messageId)
           );
         });
       },
@@ -221,11 +219,11 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // Add Message Action (for cross-tab sync)
       // ========================
       addMessage: (message: Message) => {
-        update((s) => {
+        update((s: MessagesState) => {
           const roomMessages = s.messages[message.roomId]?.data ?? [];
 
           // Prevent duplicate messages
-          if (!roomMessages.find((m) => m.id === message.id)) {
+          if (!roomMessages.find((m: Message) => m.id === message.id)) {
             s.messages[message.roomId] = success([...roomMessages, message]);
           }
         });
@@ -235,10 +233,10 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // Update Message Action (for cross-tab sync)
       // ========================
       updateMessage: (message: Message) => {
-        update((s) => {
+        update((s: MessagesState) => {
           const roomMessages = s.messages[message.roomId]?.data ?? [];
           s.messages[message.roomId] = success(
-            roomMessages.map((m) => (m.id === message.id ? message : m))
+            roomMessages.map((m: Message) => (m.id === message.id ? message : m))
           );
         });
       },
@@ -247,10 +245,10 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // Remove Message Action (for cross-tab sync)
       // ========================
       removeMessage: (messageId: string, roomId: string) => {
-        update((s) => {
+        update((s: MessagesState) => {
           const roomMessages = s.messages[roomId]?.data ?? [];
           s.messages[roomId] = success(
-            roomMessages.filter((m) => m.id !== messageId)
+            roomMessages.filter((m: Message) => m.id !== messageId)
           );
         });
       },
@@ -259,7 +257,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // Clear Room Messages Action
       // ========================
       clearRoomMessages: (roomId: string) => {
-        update((s) => {
+        update((s: MessagesState) => {
           delete s.messages[roomId];
         });
       },

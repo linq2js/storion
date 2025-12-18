@@ -29,14 +29,22 @@
  *
  * Cross-Store Communication:
  * -------------------------
- * Stores access each other using StoreContext.get(otherStore), which is
- * passed as the second argument to the setup function.
+ * Stores get references to other stores during setup phase using get().
+ * The returned state is reactive - reads return current values when accessed.
  *
  * Example:
  * ```ts
- * setup: ({ update }, ctx: StoreContext) => {
- *   const [authState] = ctx.get(authStore);
- *   // Now you can access authState.currentUser
+ * setup: (ctx) => {
+ *   const { update, get } = ctx;
+ *   // Get store references at top of setup (MUST be here, not in actions)
+ *   const [authState] = get(authStore);
+ *   
+ *   return {
+ *     someAction: () => {
+ *       // authState is reactive - reads current value
+ *       if (authState.currentUser) { ... }
+ *     }
+ *   };
  * }
  * ```
  */
@@ -70,7 +78,7 @@ export { toastStore, type Toast, type ToastType, type ToastState, type ToastActi
 // Cross-Tab Sync Setup
 // ============================================================================
 
-import type { Container } from "storion";
+import type { StoreContainer } from "storion";
 import type { User, Room, Message, RoomInvitation } from "../types";
 import { subscribeToCrossTabSync } from "../services/crossTabSync";
 import { authStore } from "./authStore";
@@ -117,23 +125,23 @@ export interface ToastNotifier {
  * ```
  */
 export function setupCrossTabSync(
-  app: Container,
+  app: StoreContainer,
   toast?: ToastNotifier
 ): () => void {
   // Get actions from all stores we need to update
-  const [, usersActions] = app.get(usersStore);
-  const [, roomsActions] = app.get(roomsStore);
-  const [, messagesActions] = app.get(messagesStore);
-  const [, invitationsActions] = app.get(invitationsStore);
+  const { actions: usersActions } = app.get(usersStore);
+  const { actions: roomsActions } = app.get(roomsStore);
+  const { actions: messagesActions } = app.get(messagesStore);
+  const { actions: invitationsActions } = app.get(invitationsStore);
 
   // Subscribe to cross-tab events via localStorage
   return subscribeToCrossTabSync((event) => {
     const { type, payload } = event;
 
     // Get current state for making decisions (e.g., should we show toast?)
-    const [authState] = app.get(authStore);
-    const [usersState] = app.get(usersStore);
-    const [roomsState] = app.get(roomsStore);
+    const { state: authState } = app.get(authStore);
+    const { state: usersState } = app.get(usersStore);
+    const { state: roomsState } = app.get(roomsStore);
 
     const currentUserId = authState.currentUser?.id ?? null;
     const activeRoomId = roomsState.activeRoomId;
@@ -242,8 +250,8 @@ export function setupCrossTabSync(
           // Don't notify if user is viewing this room
           if (message.roomId === activeRoomId) break;
 
-          const sender = users.find((u) => u.id === message.senderId);
-          const room = rooms.find((r) => r.id === message.roomId);
+          const sender = users.find((u: User) => u.id === message.senderId);
+          const room = rooms.find((r: Room) => r.id === message.roomId);
           const roomName = room?.isDirectMessage ? sender?.nickname : room?.name ?? "Unknown";
 
           toast.show({
@@ -263,8 +271,8 @@ export function setupCrossTabSync(
           // Only show if we're the invitee
           if (invitation.inviteeId !== currentUserId) break;
 
-          const inviter = users.find((u) => u.id === invitation.inviterId);
-          const room = rooms.find((r) => r.id === invitation.roomId);
+          const inviter = users.find((u: User) => u.id === invitation.inviterId);
+          const room = rooms.find((r: Room) => r.id === invitation.roomId);
 
           toast.show({
             type: "info",
@@ -285,7 +293,7 @@ export function setupCrossTabSync(
           // Only notify if we're a member
           if (!room.members.includes(currentUserId ?? "")) break;
 
-          const creator = users.find((u) => u.id === room.createdBy);
+          const creator = users.find((u: User) => u.id === room.createdBy);
           toast.show({
             type: "success",
             title: "Added to Room",
@@ -336,10 +344,10 @@ export function setupCrossTabSync(
  * await loadInitialData(app);
  * ```
  */
-export async function loadInitialData(app: Container): Promise<void> {
-  const [, usersActions] = app.get(usersStore);
-  const [, roomsActions] = app.get(roomsStore);
-  const [, invitationsActions] = app.get(invitationsStore);
+export async function loadInitialData(app: StoreContainer): Promise<void> {
+  const { actions: usersActions } = app.get(usersStore);
+  const { actions: roomsActions } = app.get(roomsStore);
+  const { actions: invitationsActions } = app.get(invitationsStore);
 
   // Load all data in parallel for faster initialization
   await Promise.all([
@@ -363,12 +371,12 @@ export async function loadInitialData(app: Container): Promise<void> {
  * resetAllStores(app);
  * ```
  */
-export function resetAllStores(app: Container): void {
-  const [, usersActions] = app.get(usersStore);
-  const [, roomsActions] = app.get(roomsStore);
-  const [, messagesActions] = app.get(messagesStore);
-  const [, invitationsActions] = app.get(invitationsStore);
-  const [, chatUIActions] = app.get(chatUIStore);
+export function resetAllStores(app: StoreContainer): void {
+  const { actions: usersActions } = app.get(usersStore);
+  const { actions: roomsActions } = app.get(roomsStore);
+  const { actions: messagesActions } = app.get(messagesStore);
+  const { actions: invitationsActions } = app.get(invitationsStore);
+  const { actions: chatUIActions } = app.get(chatUIStore);
 
   // Reset all stores to their initial state
   usersActions.reset();

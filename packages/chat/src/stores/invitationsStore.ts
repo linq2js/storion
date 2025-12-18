@@ -11,7 +11,7 @@
  * - roomsStore: To refresh rooms after accepting an invitation
  */
 
-import { store, type ActionsBase, type StoreContext } from "storion";
+import { store, type ActionsBase } from "storion";
 import { async, type AsyncState } from "storion/async";
 import type { RoomInvitation } from "../types";
 import { generateId } from "../types";
@@ -63,11 +63,17 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
   },
 
   // Setup receives StoreContext for accessing other stores
-  setup: ({ focus }, ctx: StoreContext) => {
+  setup: (ctx) => {
+    const { focus, get } = ctx;
+
+    // Get store references during setup phase (MUST be at top level)
+    // State is reactive - reads current value when accessed later
+    const [authState] = get(authStore);
+    const [, roomsActions] = get(roomsStore);
+
     // Async action for loading invitations
     const invitationsAsync = async(focus("invitations"), async () => {
-      // Get current user from authStore
-      const [authState] = ctx.get(authStore);
+      // Access reactive state (NOT calling get() here)
       if (!authState.currentUser) return [];
 
       // Load pending invitations where user is the invitee
@@ -93,7 +99,6 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
       // Invite User to Room Action
       // ========================
       inviteUserToRoom: async (userId: string, roomId: string) => {
-        const [authState] = ctx.get(authStore);
         if (!authState.currentUser) return;
 
         // Create invitation object
@@ -117,10 +122,6 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
       // Accept Invitation Action
       // ========================
       acceptInvitation: async (invitationId: string) => {
-        const [authState] = ctx.get(authStore);
-        // Get roomsActions to refresh rooms list
-        const [, roomsActions] = ctx.get(roomsStore);
-
         // Fetch the invitation
         const invitation = await db.getInvitation(invitationId);
         if (!invitation || !authState.currentUser) return;

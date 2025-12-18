@@ -11,7 +11,7 @@
  * - roomsStore: To get active room for typing operations
  */
 
-import { store, type ActionsBase, type StoreContext } from "storion";
+import { store, type ActionsBase } from "storion";
 import type { TypingIndicator } from "../types";
 import {
   broadcastTypingStart,
@@ -89,7 +89,14 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
   },
 
   // Setup receives StoreContext for accessing other stores
-  setup: ({ update }, ctx: StoreContext) => {
+  setup: (ctx) => {
+    const { update, get } = ctx;
+
+    // Get store references during setup phase (MUST be at top level)
+    // State is reactive - reads current value when accessed later
+    const [authState] = get(authStore);
+    const [roomsState] = get(roomsStore);
+
     // Interval for periodically refreshing typing indicators
     let typingInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -97,22 +104,22 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       // ========================
       // Sidebar View Action
       // ========================
-      setSidebarView: update.action((draft, view: ChatUIState["sidebarView"]) => {
+      setSidebarView: update.action((draft: ChatUIState, view: ChatUIState["sidebarView"]) => {
         draft.sidebarView = view;
       }),
 
       // ========================
       // Modal Actions
       // ========================
-      setShowCreateRoom: update.action((draft, show: boolean) => {
+      setShowCreateRoom: update.action((draft: ChatUIState, show: boolean) => {
         draft.showCreateRoom = show;
       }),
 
-      setShowInviteUser: update.action((draft, show: boolean) => {
+      setShowInviteUser: update.action((draft: ChatUIState, show: boolean) => {
         draft.showInviteUser = show;
       }),
 
-      setShowProfile: update.action((draft, userId: string | null) => {
+      setShowProfile: update.action((draft: ChatUIState, userId: string | null) => {
         draft.showProfile = userId;
       }),
 
@@ -120,10 +127,6 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       // Start Typing Action
       // ========================
       startTyping: () => {
-        // Get current user and active room from other stores
-        const [authState] = ctx.get(authStore);
-        const [roomsState] = ctx.get(roomsStore);
-
         if (!authState.currentUser || !roomsState.activeRoomId) return;
 
         // Broadcast typing start to localStorage (for cross-tab sync)
@@ -133,21 +136,17 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
         // This is needed because typing status expires after a few seconds
         if (!typingInterval) {
           typingInterval = setInterval(() => {
-            // Re-fetch current state (might have changed)
-            const [auth] = ctx.get(authStore);
-            const [rooms] = ctx.get(roomsStore);
-
-            if (rooms.activeRoomId) {
+            if (roomsState.activeRoomId) {
               // Get list of users currently typing (excluding self)
               const typingUserIds = getTypingUsersForRoom(
-                rooms.activeRoomId,
-                auth.currentUser?.id
+                roomsState.activeRoomId,
+                authState.currentUser?.id
               );
 
               // Update state with typing indicators
-              update((s) => {
+              update((s: ChatUIState) => {
                 s.typingUsers = typingUserIds.map((userId) => ({
-                  roomId: rooms.activeRoomId!,
+                  roomId: roomsState.activeRoomId!,
                   userId,
                   timestamp: Date.now(),
                 }));
@@ -161,9 +160,6 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       // Stop Typing Action
       // ========================
       stopTyping: () => {
-        const [authState] = ctx.get(authStore);
-        const [roomsState] = ctx.get(roomsStore);
-
         if (!authState.currentUser || !roomsState.activeRoomId) return;
 
         // Broadcast typing stop to localStorage
@@ -174,9 +170,6 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       // Update Typing Users Action
       // ========================
       updateTypingUsers: () => {
-        const [authState] = ctx.get(authStore);
-        const [roomsState] = ctx.get(roomsStore);
-
         if (roomsState.activeRoomId) {
           // Get users typing in the active room (excluding self)
           const typingUserIds = getTypingUsersForRoom(
@@ -184,7 +177,7 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
             authState.currentUser?.id
           );
 
-          update((s) => {
+          update((s: ChatUIState) => {
             s.typingUsers = typingUserIds.map((userId) => ({
               roomId: roomsState.activeRoomId!,
               userId,
@@ -197,7 +190,7 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       // ========================
       // Reset Action
       // ========================
-      reset: update.action((draft) => {
+      reset: update.action((draft: ChatUIState) => {
         // Reset all UI state to defaults
         draft.sidebarView = "rooms";
         draft.showCreateRoom = false;

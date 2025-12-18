@@ -1,5 +1,4 @@
 import type { Focus } from "../types";
-import { untrack } from "../core/tracking";
 import type {
   AsyncState,
   AsyncMode,

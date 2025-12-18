@@ -25,7 +25,7 @@ const app = container();
 
 // Setup cross-tab sync after mounting
 setTimeout(() => {
-  const [, toastActions] = app.get(toastStore);
+  const { actions: toastActions } = app.get(toastStore);
   setupCrossTabSync(app, { show: toastActions.show });
 }, 0);
 
