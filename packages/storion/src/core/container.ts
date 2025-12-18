@@ -112,7 +112,9 @@ export const container: ContainerFn = function (
 
   /**
    * Resolver object passed to store instances.
-   * Allows stores to get other stores via get().
+   * Allows stores to:
+   * - get() other stores (cached)
+   * - create() new uncached instances (e.g., child stores)
    */
   const resolver: StoreResolver = {
     get<S extends StateBase, A extends ActionsBase>(
@@ -123,8 +125,41 @@ export const container: ContainerFn = function (
       }
       return containerApi.get(specOrId);
     },
+
     has(spec) {
       return instancesBySpec.has(spec);
+    },
+
+    /**
+     * Create a new store instance WITHOUT caching.
+     *
+     * Unlike get(), this always creates a fresh instance that is NOT
+     * managed by the container. Useful for:
+     * - Child/nested stores owned by a parent store
+     * - Temporary stores for specific operations
+     * - Dynamic stores created at runtime
+     *
+     * The caller is responsible for disposing the instance when done.
+     *
+     * @example
+     * ```ts
+     * setup: ({ update }, ctx) => {
+     *   // Create a child store (not cached in container)
+     *   const childInstance = ctx.create(childStore);
+     *
+     *   // Clean up when parent disposes
+     *   return {
+     *     dispose: () => childInstance.dispose(),
+     *   };
+     * }
+     * ```
+     */
+    create<S extends StateBase, A extends ActionsBase>(
+      spec: StoreSpec<S, A>
+    ): StoreInstance<S, A> {
+      // Create instance through middleware chain but DON'T cache
+      // Use untrack to avoid tracking during creation
+      return untrack(() => createWithMiddleware(spec));
     },
   };
 

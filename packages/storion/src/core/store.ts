@@ -408,13 +408,7 @@ export function createStoreInstance<
       actionInvocations.clear();
       actionNthCounters.clear();
 
-      // Dispose all child stores created via create()
-      for (const child of children) {
-        child.dispose();
-      }
-      children.clear();
-
-      // Notify disposal listeners
+      // Notify disposal listeners (including child store disposals)
       disposeEmitter.emit();
     },
 
@@ -551,7 +545,6 @@ export function createStoreInstance<
   // ==========================================================================
 
   const deps = new Set<StoreInstance<any, any>>();
-  const children = new Set<StoreInstance<any, any>>();
 
   /**
    * Update state using immer-style updater.
@@ -648,7 +641,7 @@ export function createStoreInstance<
     reset: () => instance!.reset(),
     getInstance: () => instance,
     onDependency: (depInstance) => deps.add(depInstance),
-    onChildCreated: (childInstance) => children.add(childInstance),
+    onDispose: (callback) => disposeEmitter.on(callback),
     isSetupPhase: () => isSetupPhase,
   });
 

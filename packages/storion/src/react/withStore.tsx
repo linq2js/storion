@@ -364,26 +364,29 @@ export function withStore<TInput extends object, TOutput extends object>(
     // Auto-detect ref support based on function arity
     if (render.length >= 2) {
       // Render function expects ref (2nd parameter)
-      const MemoizedRender = equalityFn
-        ? (memo(forwardRef(render as any), (prev: any, next: any) =>
-            equalityFn(prev, next)
-          ) as any)
-        : (memo(forwardRef(render as any)) as any);
-
+      // Create a single forwardRef component that handles both hook and render
       const WrappedComponent = forwardRef(((props: TInput, ref: any) => {
         const output = useStore((ctx) => hook(ctx, props)) as any;
-        return <MemoizedRender {...output} ref={ref} />;
-      }) as any) as any;
+        // Call render directly with output and ref
+        return render(output, ref);
+      }) as any);
+
+      // Wrap with memo for performance (comparing hook output)
+      const MemoizedComponent = equalityFn
+        ? (memo(WrappedComponent as any, (prev: any, next: any) =>
+            equalityFn(prev, next)
+          ) as any)
+        : (memo(WrappedComponent as any) as any);
 
       if (customDisplayName) {
-        WrappedComponent.displayName = customDisplayName;
+        MemoizedComponent.displayName = customDisplayName;
       }
 
       // Attach testing utilities
-      WrappedComponent.use = hook;
-      WrappedComponent.render = (props: TOutput) => render(props, null as any);
+      MemoizedComponent.use = hook;
+      MemoizedComponent.render = (props: TOutput) => render(props, null as any);
 
-      return WrappedComponent;
+      return MemoizedComponent;
     }
 
     // Normal component (no ref)
@@ -422,26 +425,29 @@ export function withStore<TInput extends object, TOutput extends object>(
       (componentDisplayName ? `withStore(${componentDisplayName})` : undefined);
 
     if (isForwardRef || Component.length >= 2) {
-      // Component expects ref
-      const MemoizedComponent = equalityFn
-        ? (memo(
-            isForwardRef ? Component : forwardRef(Component as any),
-            (prev: any, next: any) => equalityFn(prev, next)
-          ) as any)
-        : (memo(
-            isForwardRef ? Component : forwardRef(Component as any)
-          ) as any);
-
+      // Component expects ref - create single forwardRef wrapper
       const WrappedComponent = forwardRef(((props: TInput, ref: any) => {
         const output = useStore((ctx) => hook(ctx, props)) as any;
-        return <MemoizedComponent {...output} ref={ref} />;
-      }) as any) as any;
+        // Call Component directly with output and ref
+        return isForwardRef ? (
+          <Component {...output} ref={ref} />
+        ) : (
+          Component(output, ref)
+        );
+      }) as any);
+
+      // Wrap with memo for performance
+      const MemoizedComponent = equalityFn
+        ? (memo(WrappedComponent as any, (prev: any, next: any) =>
+            equalityFn(prev, next)
+          ) as any)
+        : (memo(WrappedComponent as any) as any);
 
       if (finalDisplayName) {
-        WrappedComponent.displayName = finalDisplayName;
+        MemoizedComponent.displayName = finalDisplayName;
       }
 
-      return WrappedComponent;
+      return MemoizedComponent;
     }
 
     // Normal component (no ref)

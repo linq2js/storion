@@ -885,6 +885,10 @@ export interface StoreResolver {
    * Check if a store instance exists.
    */
   has(spec: StoreSpec<any, any>): boolean;
+
+  create<S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>
+  ): StoreInstance<S, A>;
 }
 
 export type AutoDisposeOptions = {

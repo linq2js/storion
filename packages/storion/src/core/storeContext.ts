@@ -63,8 +63,8 @@ export interface CreateStoreContextOptions<
   getInstance: () => StoreInstance<TState, TActions> | null;
   /** Callback when dependency is resolved */
   onDependency?: (instance: StoreInstance<any, any>) => void;
-  /** Callback when child store is created via create() */
-  onChildCreated?: (instance: StoreInstance<any, any>) => void;
+  /** Register a callback to run when parent store disposes */
+  onDispose?: (callback: () => void) => void;
   /** Check if in setup phase */
   isSetupPhase: () => boolean;
 }
@@ -273,7 +273,7 @@ export function createStoreContext<
     reset,
     // getInstance - reserved for future use
     onDependency,
-    onChildCreated,
+    onDispose,
     isSetupPhase,
   } = options;
 
@@ -353,10 +353,10 @@ export function createStoreContext<
       }
 
       // Get full instance from resolver
-      const instance = resolver.get(childSpec);
+      const instance = resolver.create(childSpec);
 
-      // Register for disposal when parent disposes
-      onChildCreated?.(instance);
+      // Register child's dispose to run when parent disposes
+      onDispose?.(instance.dispose);
 
       return instance;
     },
