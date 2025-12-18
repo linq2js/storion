@@ -1,4 +1,5 @@
 import type { Focus } from "../types";
+import { untrack } from "../core/tracking";
 import type {
   AsyncState,
   AsyncMode,
@@ -6,6 +7,7 @@ import type {
   AsyncHandler,
   AsyncOptions,
   AsyncActions,
+  AsyncLastInvocation,
   CancellablePromise,
   AsyncRetryOptions,
   InferAsyncData,
@@ -105,15 +107,16 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
   focus: Focus<AsyncState<T, M>>,
   handler: AsyncHandler<T, TArgs>,
   options?: AsyncOptions
-): AsyncActions<T, TArgs> {
+): AsyncActions<T, M, TArgs> {
   const [getState, setState] = focus;
 
   // Stable key for this async instance (used for promise tracking)
   const asyncKey: AsyncKey<T> = {};
 
-  // Track last cancel function and last args
+  // Track last cancel function, last args, and invocation count (in closure)
   let lastCancel: (() => void) | null = null;
   let lastArgs: TArgs | null = null;
+  let invocationCount = 0;
 
   // Dispatch implementation
   function dispatch(...args: TArgs): CancellablePromise<T> {
@@ -149,9 +152,10 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
       }
     };
 
-    // Store as lastCancel
+    // Store as lastCancel and increment invocation count
     lastCancel = cancel;
     lastArgs = args;
+    invocationCount++;
 
     // Get current state to determine mode and stale data
     const prevState = getState();
@@ -402,11 +406,28 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     }
   }
 
+  // Get last invocation info (reactive via state read)
+  function last(): AsyncLastInvocation<T, M, TArgs> | undefined {
+    // Check if ever dispatched
+    const hasDispatched = !!lastArgs;
+    if (!hasDispatched) {
+      return undefined;
+    }
+
+    return {
+      args: lastArgs!,
+      nth: invocationCount,
+      // Read state to trigger reactivity (via focus getter) - this is the only tracked read
+      state: getState(),
+    };
+  }
+
   return {
     dispatch,
     refresh,
     cancel,
     reset,
+    last,
   };
 }
 

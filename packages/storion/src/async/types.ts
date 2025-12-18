@@ -249,12 +249,30 @@ export type CancellablePromise<T> = Promise<T> & {
   cancel(): void;
 };
 
+// ===== Async Last Invocation =====
+
+/**
+ * Last invocation info for async action (for typing asyncAction.last())
+ */
+export interface AsyncLastInvocation<
+  T,
+  M extends AsyncMode,
+  TArgs extends any[]
+> {
+  /** Arguments passed to the last dispatch */
+  readonly args: TArgs;
+  /** Invocation count (1-indexed) */
+  readonly nth: number;
+  /** Current async state (reactive) */
+  readonly state: AsyncState<T, M>;
+}
+
 // ===== Async Actions API =====
 
 /**
  * API returned from async() mixin.
  */
-export interface AsyncActions<T, TArgs extends any[]> {
+export interface AsyncActions<T, M extends AsyncMode, TArgs extends any[]> {
   /** Dispatch the async operation */
   dispatch(...args: TArgs): CancellablePromise<T>;
   /** Re-dispatch with last args. Returns undefined if no previous dispatch. */
@@ -263,6 +281,13 @@ export interface AsyncActions<T, TArgs extends any[]> {
   cancel(): void;
   /** Reset to idle state */
   reset(): void;
+  /**
+   * Get the last invocation info including current async state.
+   * Reactive - reads from the async state, triggers re-render when state changes.
+   *
+   * @returns Last invocation info with state, or undefined if never dispatched
+   */
+  last(): AsyncLastInvocation<T, M, TArgs> | undefined;
 }
 
 // ===== Type Utilities =====

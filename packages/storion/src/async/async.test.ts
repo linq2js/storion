@@ -1160,4 +1160,174 @@ describe("async", () => {
       });
     });
   });
+
+  describe("last()", () => {
+    it("should return undefined if never dispatched", () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      const actions = async(focus, async () => "result");
+
+      expect(actions.last()).toBeUndefined();
+    });
+
+    it("should return invocation info after dispatch", async () => {
+      const [focus] = createMockFocus(async.fresh<number>());
+      const actions = async<number, "fresh", [number, string]>(
+        focus,
+        async (_ctx, num, str) => num + str.length
+      );
+
+      await actions.dispatch(10, "hello");
+
+      const last = actions.last();
+      expect(last).toBeDefined();
+      expect(last!.args).toEqual([10, "hello"]);
+      expect(last!.nth).toBe(1);
+      expect(last!.state.status).toBe("success");
+      expect(last!.state.data).toBe(15);
+    });
+
+    it("should increment nth on each dispatch", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      const actions = async<string, "fresh", [string]>(
+        focus,
+        async (_ctx, msg) => msg
+      );
+
+      await actions.dispatch("first");
+      expect(actions.last()!.nth).toBe(1);
+      expect(actions.last()!.args).toEqual(["first"]);
+
+      await actions.dispatch("second");
+      expect(actions.last()!.nth).toBe(2);
+      expect(actions.last()!.args).toEqual(["second"]);
+
+      await actions.dispatch("third");
+      expect(actions.last()!.nth).toBe(3);
+      expect(actions.last()!.args).toEqual(["third"]);
+    });
+
+    it("should reflect current state (pending)", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let resolvePromise: (value: string) => void;
+      const actions = async(focus, async () => {
+        return new Promise<string>((resolve) => {
+          resolvePromise = resolve;
+        });
+      });
+
+      const promise = actions.dispatch();
+
+      // While pending
+      const lastPending = actions.last();
+      expect(lastPending).toBeDefined();
+      expect(lastPending!.state.status).toBe("pending");
+
+      // Resolve
+      resolvePromise!("done");
+      await promise;
+
+      // After success
+      const lastSuccess = actions.last();
+      expect(lastSuccess!.state.status).toBe("success");
+      expect(lastSuccess!.state.data).toBe("done");
+    });
+
+    it("should reflect error state", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      const actions = async(focus, async () => {
+        throw new Error("test error");
+      });
+
+      try {
+        await actions.dispatch();
+      } catch {
+        // Expected
+      }
+
+      const last = actions.last();
+      expect(last).toBeDefined();
+      expect(last!.state.status).toBe("error");
+      expect(last!.state.error?.message).toBe("test error");
+    });
+
+    it("should work with stale mode and preserve data", async () => {
+      const [focus] = createMockFocus(async.stale<string[]>(["initial"]));
+      let resolvePromise: (value: string[]) => void;
+      const actions = async(focus, async () => {
+        return new Promise<string[]>((resolve) => {
+          resolvePromise = resolve;
+        });
+      });
+
+      // First dispatch
+      const promise = actions.dispatch();
+
+      // During pending, stale mode preserves data
+      const lastPending = actions.last();
+      expect(lastPending!.state.status).toBe("pending");
+      expect(lastPending!.state.data).toEqual(["initial"]);
+
+      resolvePromise!(["updated"]);
+      await promise;
+
+      const lastSuccess = actions.last();
+      expect(lastSuccess!.state.status).toBe("success");
+      expect(lastSuccess!.state.data).toEqual(["updated"]);
+    });
+
+    it("should read state via getState for reactivity", async () => {
+      // This test verifies that last() calls getState() which enables reactivity
+      // Full reactive testing with effect requires a real store setup
+      const [focus, { getState }] = createMockFocus(async.fresh<number>());
+
+      // Track getState calls
+      let getStateCalls = 0;
+      const trackedFocus: Focus<AsyncState<number, "fresh">> = [
+        () => {
+          getStateCalls++;
+          return getState();
+        },
+        focus[1],
+      ];
+
+      const actions = async(trackedFocus, async () => 42);
+
+      // Before dispatch - last() returns undefined without calling getState
+      expect(actions.last()).toBeUndefined();
+      expect(getStateCalls).toBe(0); // No state read when never dispatched
+
+      // After dispatch - last() should call getState for reactivity
+      await actions.dispatch();
+      getStateCalls = 0; // Reset counter
+
+      const last = actions.last();
+      expect(last).toBeDefined();
+      expect(getStateCalls).toBe(1); // getState called once
+      expect(last!.state.status).toBe("success");
+
+      // Multiple last() calls should each read state (for reactivity)
+      actions.last();
+      actions.last();
+      expect(getStateCalls).toBe(3);
+    });
+
+    it("should update state reference on subsequent dispatches", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      const actions = async<string, "fresh", [string]>(
+        focus,
+        async (_ctx, msg) => msg
+      );
+
+      await actions.dispatch("first");
+      const last1 = actions.last();
+      expect(last1!.state.data).toBe("first");
+
+      await actions.dispatch("second");
+      const last2 = actions.last();
+      expect(last2!.state.data).toBe("second");
+
+      // State objects should be different references
+      expect(last1!.state).not.toBe(last2!.state);
+    });
+  });
 });

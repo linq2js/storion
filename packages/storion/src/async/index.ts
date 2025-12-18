@@ -31,6 +31,7 @@ export {
   type AsyncOptions,
   type AsyncRetryOptions,
   type AsyncActions,
+  type AsyncLastInvocation,
   type CancellablePromise,
   type InferAsyncData,
   type InferAsyncMode,
