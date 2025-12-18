@@ -62,6 +62,19 @@ export { store } from "./core/store";
 export { container } from "./core/container";
 export { batch, untrack } from "./core/tracking";
 
+// Resolver (factory-based DI)
+export {
+  createResolver,
+  when,
+  createLoggingMiddleware,
+  createValidationMiddleware,
+  type Factory,
+  type Middleware,
+  type MiddlewareContext,
+  type Resolver,
+  type ResolverOptions,
+} from "./core/createResolver";
+
 // Fine-grained reactivity
 export { pick } from "./core/pick";
 
