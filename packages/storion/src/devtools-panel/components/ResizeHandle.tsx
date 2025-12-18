@@ -8,7 +8,7 @@ import { useState, useRef, useCallback } from "react";
 import type { PanelPosition } from "../DevtoolsPanel";
 
 export interface ResizeHandleProps {
-  position: PanelPosition; // "left" or "bottom"
+  position: PanelPosition; // "left", "bottom", or "right"
   onResize: (delta: number) => void;
 }
 
@@ -34,8 +34,9 @@ export function ResizeHandle({ position, onResize }: ResizeHandleProps) {
           // Panel at bottom: drag up = bigger, drag down = smaller
           const delta = lastPos.y - moveEvent.clientY;
           onResize(delta);
-        } else if (position === "left") {
-          // Panel on left: drag right = bigger, drag left = smaller
+        } else {
+          // Panel on left or right: horizontal resize
+          // Note: delta inversion for right position is handled in DevtoolsPanel
           const delta = moveEvent.clientX - lastPos.x;
           onResize(delta);
         }
@@ -75,7 +76,9 @@ export function ResizeHandle({ position, onResize }: ResizeHandleProps) {
         if (position === "bottom") {
           const delta = lastPos.y - touch.clientY;
           onResize(delta);
-        } else if (position === "left") {
+        } else {
+          // Panel on left or right: horizontal resize
+          // Note: delta inversion for right position is handled in DevtoolsPanel
           const delta = touch.clientX - lastPos.x;
           onResize(delta);
         }
@@ -98,9 +101,14 @@ export function ResizeHandle({ position, onResize }: ResizeHandleProps) {
 
   // Position the handle on the correct edge:
   // - Panel on left: handle on RIGHT edge
+  // - Panel on right: handle on LEFT edge
   // - Panel on bottom: handle on TOP edge
   const isVertical = position === "bottom";
-  const handleClass = isVertical ? "vertical top" : "horizontal right";
+  const handleClass = isVertical
+    ? "vertical top"
+    : position === "right"
+    ? "horizontal left"
+    : "horizontal right";
 
   return (
     <div

@@ -136,6 +136,12 @@ function updateContainerPosition(
     panelContainer.style.width = `${size}px`;
     panelContainer.style.height = "100vh";
     panelContainer.style.borderRight = "1px solid #27272a";
+  } else if (position === "right") {
+    panelContainer.style.top = "0";
+    panelContainer.style.right = "0";
+    panelContainer.style.width = `${size}px`;
+    panelContainer.style.height = "100vh";
+    panelContainer.style.borderLeft = "1px solid #27272a";
   } else {
     // bottom
     panelContainer.style.bottom = "0";
@@ -172,6 +178,7 @@ function updateContainerSize(size: number) {
   if (currentPosition === "bottom") {
     panelContainer.style.height = `${size}px`;
   } else {
+    // left or right - both use width
     panelContainer.style.width = `${size}px`;
   }
 
@@ -267,6 +274,13 @@ export function mountDevtoolsPanel(options: MountOptions = {}): () => void {
         width: `${initialSize}px`,
         height: "100vh",
         borderRight: "1px solid #27272a",
+      },
+      right: {
+        top: "0",
+        right: initialCollapsed ? "-9999px" : "0",
+        width: `${initialSize}px`,
+        height: "100vh",
+        borderLeft: "1px solid #27272a",
       },
       bottom: {
         bottom: initialCollapsed ? "-9999px" : "0",

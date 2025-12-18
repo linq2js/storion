@@ -798,6 +798,10 @@ export const panelStyles = `
     flex-direction: column;
   }
 
+  .storion-devtools.position-right {
+    flex-direction: column;
+  }
+
   /* When bottom position and wide screen, display stores in 2 columns */
   .storion-devtools.position-bottom .sdt-main-content {
     display: grid;

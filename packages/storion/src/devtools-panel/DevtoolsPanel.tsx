@@ -19,6 +19,7 @@ import {
   IconTransparency,
   IconDockLeft,
   IconDockBottom,
+  IconDockRight,
 } from "./components/icons";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { StoresTab } from "./components/StoresTab";
@@ -33,7 +34,7 @@ export { clearDevtoolsSettings };
 // Main Panel
 // ============================================================================
 
-export type PanelPosition = "left" | "bottom";
+export type PanelPosition = "left" | "bottom" | "right";
 
 export interface DevtoolsPanelProps {
   controller: DevtoolsController;
@@ -161,7 +162,13 @@ export function DevtoolsPanel({
   }, [onCollapsedChange]);
 
   const togglePosition = useCallback(() => {
-    const newPosition: PanelPosition = position === "left" ? "bottom" : "left";
+    // Cycle: left → bottom → right → left
+    const nextPosition: Record<PanelPosition, PanelPosition> = {
+      left: "bottom",
+      bottom: "right",
+      right: "left",
+    };
+    const newPosition = nextPosition[position];
     setPosition(newPosition);
     onPositionChange?.(newPosition);
   }, [position, onPositionChange]);
@@ -179,7 +186,9 @@ export function DevtoolsPanel({
       setSize((prev) => {
         const minSize = 200;
         const maxSize = position === "bottom" ? 600 : 800;
-        const newSize = Math.min(maxSize, Math.max(minSize, prev + delta));
+        // For right position, delta is inverted (drag left = bigger)
+        const adjustedDelta = position === "right" ? -delta : delta;
+        const newSize = Math.min(maxSize, Math.max(minSize, prev + adjustedDelta));
         onResize?.(newSize);
         return newSize;
       });
@@ -209,6 +218,8 @@ export function DevtoolsPanel({
   const expandedStyle: React.CSSProperties = collapsed
     ? position === "left"
       ? { left: "-9999px" }
+      : position === "right"
+      ? { right: "-9999px" }
       : { bottom: "-9999px" }
     : {};
 
@@ -243,9 +254,21 @@ export function DevtoolsPanel({
             <button
               className="sdt-btn"
               onClick={togglePosition}
-              title={position === "left" ? "Dock to bottom" : "Dock to left"}
+              title={
+                position === "left"
+                  ? "Dock to bottom"
+                  : position === "bottom"
+                  ? "Dock to right"
+                  : "Dock to left"
+              }
             >
-              {position === "left" ? <IconDockBottom /> : <IconDockLeft />}
+              {position === "left" ? (
+                <IconDockBottom />
+              ) : position === "bottom" ? (
+                <IconDockRight />
+              ) : (
+                <IconDockLeft />
+              )}
             </button>
             <button
               className="sdt-btn"
