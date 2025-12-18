@@ -13,7 +13,6 @@ import {
   type Resolver,
   type StoreContext,
   type StoreUpdate,
-  type StoreTuple,
   type StoreMixin,
   type Focus,
   type FocusOptions,
@@ -21,6 +20,7 @@ import {
 } from "../types";
 
 import { resolveEquality } from "./equality";
+import { isSpec } from "../is";
 
 // =============================================================================
 // Types
@@ -286,9 +286,8 @@ export function createStoreContext<
       return getMutableState();
     },
 
-    get<S extends StateBase, A extends ActionsBase>(
-      depSpec: StoreSpec<S, A>
-    ): StoreTuple<S, A> {
+    // Implementation handles both StoreSpec and Factory overloads
+    get(specOrFactory: any): any {
       // Prevent dynamic store creation outside setup phase
       if (!isSetupPhase()) {
         throw new Error(
@@ -297,6 +296,13 @@ export function createStoreContext<
             `Declare all dependencies at the top of your setup function.`
         );
       }
+
+      // Handle plain factory functions - return instance directly
+      if (!isSpec(specOrFactory)) {
+        return resolver.get(specOrFactory);
+      }
+
+      const depSpec = specOrFactory as StoreSpec<any, any>;
 
       // Check lifetime compatibility:
       // A keepAlive store cannot depend on an autoDispose store
@@ -322,12 +328,11 @@ export function createStoreContext<
       return Object.assign(tuple, {
         state: instance.state,
         actions: instance.actions,
-      }) as StoreTuple<S, A>;
+      });
     },
 
-    create<S extends StateBase, A extends ActionsBase>(
-      childSpec: StoreSpec<S, A>
-    ): StoreInstance<S, A> {
+    // Implementation handles both StoreSpec and Factory overloads
+    create(specOrFactory: any): any {
       // Prevent dynamic store creation outside setup phase
       if (!isSetupPhase()) {
         throw new Error(
@@ -336,6 +341,21 @@ export function createStoreContext<
             `Declare all child stores at the top of your setup function.`
         );
       }
+
+      // Handle plain factory functions
+      if (!isSpec(specOrFactory)) {
+        // Create fresh instance (no caching)
+        const instance = specOrFactory(resolver);
+
+        // If instance has dispose method, register it for cleanup
+        if (instance && typeof instance.dispose === "function") {
+          onDispose?.(instance.dispose);
+        }
+
+        return instance;
+      }
+
+      const childSpec = specOrFactory as StoreSpec<any, any>;
 
       // Check lifetime compatibility:
       // A keepAlive store cannot create an autoDispose child store

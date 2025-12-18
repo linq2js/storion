@@ -18,10 +18,12 @@ import {
   type StoreContainer,
   type ContainerOptions,
   type StoreMiddleware,
+  type Factory,
 } from "../types";
 
 import { emitter } from "../emitter";
 import { untrack } from "./tracking";
+import { isSpec } from "../is";
 
 // ==========================================================================
 // Default Middleware
@@ -85,11 +87,17 @@ export const container: ContainerFn = function (
   // Instance cache: spec → instance
   const cache = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
 
+  // Factory cache: factory → instance (for plain factory functions)
+  const factoryCache = new Map<Factory<unknown>, unknown>();
+
   // Instance cache: id → instance (for ID lookup)
   const instancesById = new Map<string, StoreInstance<any, any>>();
 
   // Overrides: spec → replacement spec
   const overrides = new Map<StoreSpec<any, any>, StoreSpec<any, any>>();
+
+  // Factory overrides: factory → replacement factory
+  const factoryOverrides = new Map<Factory<unknown>, Factory<unknown>>();
 
   // Creation order (for disposal in reverse order)
   const creationOrder: StoreSpec<any, any>[] = [];
@@ -100,6 +108,9 @@ export const container: ContainerFn = function (
 
   // Currently creating (for circular dependency detection)
   const creating = new Set<StoreSpec<any, any>>();
+
+  // Currently creating factories (for circular dependency detection)
+  const creatingFactories = new Set<Factory<unknown>>();
 
   // Parent container (for scoped containers)
   const parent = options._parent;
@@ -178,19 +189,64 @@ export const container: ContainerFn = function (
     // Resolver Methods
     // ========================================================================
 
-    get<S extends StateBase, A extends ActionsBase>(
-      specOrId: StoreSpec<S, A> | string
-    ): any {
+    // Implementation handles multiple overloads
+    get(specOrIdOrFactory: any): any {
       // ID lookup
-      if (typeof specOrId === "string") {
-        return instancesById.get(specOrId);
+      if (typeof specOrIdOrFactory === "string") {
+        return instancesById.get(specOrIdOrFactory);
       }
 
-      const spec = specOrId;
+      // Plain factory function (not a StoreSpec)
+      if (!isSpec(specOrIdOrFactory)) {
+        const factory = specOrIdOrFactory as Factory<unknown>;
+
+        // Check local cache
+        if (factoryCache.has(factory)) {
+          return factoryCache.get(factory);
+        }
+
+        // Check parent
+        if (
+          parent &&
+          factoryOverrides.size === 0 &&
+          "tryGet" in parent &&
+          typeof (parent as any).tryGet === "function"
+        ) {
+          const parentInstance = (parent as any).tryGet(factory);
+          if (parentInstance !== undefined) {
+            return parentInstance;
+          }
+        }
+
+        // Circular dependency check
+        if (creatingFactories.has(factory)) {
+          const name = factory.name || "anonymous";
+          throw new Error(
+            `Circular dependency detected: factory "${name}" is being created while already in creation stack.`
+          );
+        }
+
+        creatingFactories.add(factory);
+
+        try {
+          // Get mapped factory (respecting overrides)
+          const mapped =
+            (factoryOverrides.get(factory) as Factory<unknown>) ?? factory;
+          // Create instance - pass container as resolver
+          const instance = mapped(containerApi as any);
+          // Cache with original factory as key
+          factoryCache.set(factory, instance);
+          return instance;
+        } finally {
+          creatingFactories.delete(factory);
+        }
+      }
+
+      const spec = specOrIdOrFactory;
 
       // Check local cache (use original spec as key)
       if (cache.has(spec)) {
-        return cache.get(spec) as StoreInstance<S, A>;
+        return cache.get(spec);
       }
 
       // Check parent (only if no local overrides)
@@ -221,17 +277,26 @@ export const container: ContainerFn = function (
         // Emit creation event
         createEmitter.emit(instance);
 
-        return instance as StoreInstance<S, A>;
+        return instance;
       } finally {
         creating.delete(spec);
       }
     },
 
-    create<S extends StateBase, A extends ActionsBase>(
-      spec: StoreSpec<S, A>
-    ): StoreInstance<S, A> {
-      // Create fresh instance using mapped spec (no caching)
-      const mapped = resolve(spec);
+    // Implementation handles both StoreSpec and Factory overloads
+    create(specOrFactory: any): any {
+      // Handle plain factory functions
+      if (!isSpec(specOrFactory)) {
+        const factory = specOrFactory as Factory<unknown>;
+        // Get mapped factory (respecting overrides)
+        const mapped =
+          (factoryOverrides.get(factory) as Factory<unknown>) ?? factory;
+        // Create fresh instance (no caching) - pass container as resolver
+        return mapped(containerApi as any);
+      }
+
+      // Create fresh store instance using mapped spec (no caching)
+      const mapped = resolve(specOrFactory);
       return createInstance(mapped);
     },
 

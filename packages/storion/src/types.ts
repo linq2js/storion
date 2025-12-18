@@ -466,14 +466,21 @@ export interface StoreContext<TState extends StateBase = StateBase>
    * // Named properties
    * const tuple = get(counterSpec);
    * tuple.state.count;
-   * tuple.actions.increment();
-   *
-   * Note: Returns limited tuple, not full StoreInstance.
-   * You cannot access id, subscribe(), or dispose().
    */
   get<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): StoreTuple<S, A>;
+
+  /**
+   * Get a service or factory instance.
+   * Creates and caches the instance using the factory function.
+   * Returns the instance directly (not a tuple).
+   *
+   * @example
+   * const db = get(indexedDBService);
+   * await db.users.getAll();
+   */
+  get<T>(factory: (...args: any[]) => T): T;
 
   /**
    * Create a child store instance that is automatically disposed
@@ -499,6 +506,24 @@ export interface StoreContext<TState extends StateBase = StateBase>
   create<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): StoreInstance<S, A>;
+
+  /**
+   * Create a service or factory instance that is automatically disposed
+   * when the parent store is disposed (if the instance has a dispose method).
+   *
+   * Unlike `get()` which caches instances, `create()` always creates fresh instances.
+   *
+   * @example
+   * setup: (ctx) => {
+   *   // Create a fresh service instance - disposed with parent
+   *   const db = ctx.create(indexedDBService);
+   *
+   *   return {
+   *     clearData: () => db.clearAll(),
+   *   };
+   * }
+   */
+  create<T>(factory: (...args: any[]) => T): T;
 
   /**
    * Update state using Immer-style updater function or partial object.
@@ -1022,17 +1047,33 @@ export interface StoreContainer extends StorionObject<"container"> {
   ): StoreInstance<S, A>;
 
   /**
+   * Get a service or factory instance (cached).
+   * Returns the instance directly (not a StoreInstance).
+   *
+   * @example
+   * const db = container.get(indexedDBService);
+   * await db.users.getAll();
+   */
+  get<T>(factory: Factory<T>): T;
+
+  /**
    * Get a store instance by its unique ID.
    */
   get(id: string): StoreInstance<any, any> | undefined;
 
   /**
-   * Create a fresh instance (bypasses cache).
+   * Create a fresh store instance (bypasses cache).
    * Useful for child stores or temporary instances.
    */
   create<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): StoreInstance<S, A>;
+
+  /**
+   * Create a fresh factory instance (bypasses cache).
+   * Returns the instance directly.
+   */
+  create<T>(factory: Factory<T>): T;
 
   /**
    * Override a spec with a custom implementation.
@@ -1121,6 +1162,17 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
   get<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ): StoreTuple<S, A>;
+
+  /**
+   * Get a service or factory instance.
+   * Creates and caches the instance using the factory function.
+   * Returns the instance directly (not a tuple).
+   *
+   * @example
+   * const db = get(indexedDBService);
+   * await db.users.getAll();
+   */
+  get<T>(factory: (...args: any[]) => T): T;
 
   /**
    * Apply a mixin to compose reusable selector logic.

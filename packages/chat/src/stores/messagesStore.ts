@@ -15,8 +15,8 @@ import { store, type ActionsBase } from "storion";
 import type { AsyncState } from "storion/async";
 import type { Message } from "../types";
 import { generateId } from "../types";
-import * as db from "../services/indexedDB";
-import { broadcastEvent, broadcastTypingStop } from "../services/crossTabSync";
+import { indexedDBService } from "../services/indexedDB";
+import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
 import { roomsStore } from "./roomsStore";
 
@@ -98,6 +98,10 @@ export const messagesStore = store<MessagesState, MessagesActions>({
   setup: (ctx) => {
     const { update, get } = ctx;
 
+    // Get service instances via factory (cached by container)
+    const db = get(indexedDBService);
+    const sync = get(crossTabSyncService);
+
     // Get store references during setup phase (MUST be at top level)
     // State is reactive - reads current value when accessed later
     const [authState] = get(authStore);
@@ -109,7 +113,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       loadMessages: async (roomId: string) => {
         // Fetch messages from IndexedDB
-        const messages = await db.getMessagesForRoom(roomId);
+        const messages = await db.messages.getForRoom(roomId);
 
         // Update state for this specific room
         update((s: MessagesState) => {
@@ -143,10 +147,10 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         };
 
         // Persist to IndexedDB
-        await db.saveMessage(message);
+        await db.messages.save(message);
 
         // Broadcast to other tabs
-        broadcastEvent("MESSAGE_SENT", message);
+        sync.broadcast("MESSAGE_SENT", message);
 
         // Optimistically update local state
         update((s: MessagesState) => {
@@ -155,7 +159,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         });
 
         // Stop typing indicator when message is sent
-        broadcastTypingStop(roomsState.activeRoomId, authState.currentUser.id);
+        sync.typing.stop(roomsState.activeRoomId, authState.currentUser.id);
       },
 
       // ========================
@@ -163,7 +167,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       editMessage: async (messageId: string, content: string) => {
         // Fetch the message to edit
-        const message = await db.getMessage(messageId);
+        const message = await db.messages.get(messageId);
 
         // Only the sender can edit their message
         if (!message || message.senderId !== authState.currentUser?.id) return;
@@ -173,10 +177,10 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         message.editedAt = Date.now();
 
         // Persist changes
-        await db.saveMessage(message);
+        await db.messages.save(message);
 
         // Broadcast to other tabs
-        broadcastEvent("MESSAGE_EDITED", message);
+        sync.broadcast("MESSAGE_EDITED", message);
 
         // Update local state
         update((s: MessagesState) => {
@@ -192,16 +196,16 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       deleteMessage: async (messageId: string) => {
         // Fetch the message to delete
-        const message = await db.getMessage(messageId);
+        const message = await db.messages.get(messageId);
 
         // Only the sender can delete their message
         if (!message || message.senderId !== authState.currentUser?.id) return;
 
         // Delete from IndexedDB
-        await db.deleteMessage(messageId);
+        await db.messages.delete(messageId);
 
         // Broadcast to other tabs
-        broadcastEvent("MESSAGE_DELETED", {
+        sync.broadcast("MESSAGE_DELETED", {
           messageId,
           roomId: message.roomId,
         });

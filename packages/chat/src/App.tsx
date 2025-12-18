@@ -10,7 +10,7 @@ import {
   ProfileModal,
   ToastContainer,
 } from "./components";
-import { initDB } from "./services/indexedDB";
+import { indexedDBService } from "./services/indexedDB";
 
 // Hook to handle dynamic viewport height (DevTools resize)
 function useDynamicViewportHeight() {
@@ -86,16 +86,17 @@ const ChatLayout = withStore(
 const AppContent = withStore(
   (ctx) => {
     const [, actions] = ctx.get(authStore);
-    return { restoreSession: actions.restoreSession };
+    const db = ctx.get(indexedDBService);
+    return { restoreSession: actions.restoreSession, db };
   },
-  ({ restoreSession }) => {
+  ({ restoreSession, db }) => {
     const app = useContainer();
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
       async function initialize() {
         // Initialize IndexedDB
-        await initDB();
+        await db.init();
 
         // Try to restore session
         const user = await restoreSession();
@@ -109,7 +110,7 @@ const AppContent = withStore(
       }
 
       initialize();
-    }, [restoreSession, app]);
+    }, [restoreSession, db, app]);
 
     if (!isInitialized) {
       return <LoadingScreen />;

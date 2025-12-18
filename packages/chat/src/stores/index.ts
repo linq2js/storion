@@ -80,7 +80,7 @@ export { toastStore, type Toast, type ToastType, type ToastState, type ToastActi
 
 import type { StoreContainer } from "storion";
 import type { User, Room, Message, RoomInvitation } from "../types";
-import { subscribeToCrossTabSync } from "../services/crossTabSync";
+import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
 import { usersStore } from "./usersStore";
 import { roomsStore } from "./roomsStore";
@@ -128,6 +128,9 @@ export function setupCrossTabSync(
   app: StoreContainer,
   toast?: ToastNotifier
 ): () => void {
+  // Get cross-tab sync service instance
+  const sync = app.get(crossTabSyncService);
+
   // Get actions from all stores we need to update
   const { actions: usersActions } = app.get(usersStore);
   const { actions: roomsActions } = app.get(roomsStore);
@@ -135,7 +138,7 @@ export function setupCrossTabSync(
   const { actions: invitationsActions } = app.get(invitationsStore);
 
   // Subscribe to cross-tab events via localStorage
-  return subscribeToCrossTabSync((event) => {
+  return sync.subscribe((event) => {
     const { type, payload } = event;
 
     // Get current state for making decisions (e.g., should we show toast?)

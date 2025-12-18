@@ -13,13 +13,13 @@ import {
   type StoreSpec,
   type StoreContainer,
   type SelectorContext,
-  type StoreTuple,
   type Selector,
   type StableResult,
 } from "../types";
 import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
 import { useLocalStore, type LocalStoreResult } from "./useLocalStore";
+import { isSpec } from "../is";
 
 /**
  * React hook to consume stores with automatic optimization.
@@ -74,17 +74,20 @@ export function useStoreWithContainer<T extends object>(
 
       id: refs.id,
 
-      get<S extends StateBase, A extends ActionsBase>(
-        spec: StoreSpec<S, A>
-      ): StoreTuple<S, A> {
-        // Get full instance from container
-        const instance = container.get(spec);
+      // Implementation handles both StoreSpec and Factory overloads
+      get(specOrFactory: any): any {
+        // Handle plain factory functions
+        if (!isSpec(specOrFactory)) {
+          return container.get(specOrFactory);
+        }
+        // Get full store instance from container
+        const instance = container.get(specOrFactory);
         // Return tuple with named properties
         const tuple = [instance.state, instance.actions] as const;
         return Object.assign(tuple, {
           state: instance.state,
           actions: instance.actions,
-        }) as StoreTuple<S, A>;
+        });
       },
 
       mixin<TResult, TArgs extends unknown[]>(

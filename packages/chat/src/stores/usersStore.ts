@@ -13,7 +13,7 @@
 import { store, type ActionsBase } from "storion";
 import { async, type AsyncState } from "storion/async";
 import type { User } from "../types";
-import * as db from "../services/indexedDB";
+import { indexedDBService } from "../services/indexedDB";
 
 // ============================================================================
 // Helpers
@@ -88,11 +88,16 @@ export const usersStore = store<UsersState, UsersActions>({
     users: async.stale<User[]>([]),
   },
 
-  setup: ({ focus, update }) => {
+  setup: (ctx) => {
+    const { focus, update, get } = ctx;
+
+    // Get service instance via factory (cached by container)
+    const db = get(indexedDBService);
+
     // Create async action for loading users
     // focus("users") creates a lens to the users field for the async helper
     const usersAsync = async(focus("users"), async () => {
-      return db.getAllUsers();
+      return db.users.getAll();
     });
 
     return {
@@ -116,7 +121,7 @@ export const usersStore = store<UsersState, UsersActions>({
       // Update User Action
       // ========================
       updateUser: (user: User) => {
-        update((s) => {
+        update((s: UsersState) => {
           const users = s.users.data ?? [];
 
           // Find existing user index
@@ -139,7 +144,7 @@ export const usersStore = store<UsersState, UsersActions>({
       // Update User Status Action
       // ========================
       updateUserStatus: (userId: string, status: User["status"]) => {
-        update((s) => {
+        update((s: UsersState) => {
           const users = s.users.data ?? [];
           const user = users.find((u) => u.id === userId);
 
@@ -158,7 +163,7 @@ export const usersStore = store<UsersState, UsersActions>({
       // Set User Offline Action
       // ========================
       setUserOffline: (userId: string) => {
-        update((s) => {
+        update((s: UsersState) => {
           const users = s.users.data ?? [];
           const user = users.find((u) => u.id === userId);
 

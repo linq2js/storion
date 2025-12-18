@@ -13,11 +13,7 @@
 
 import { store, type ActionsBase } from "storion";
 import type { TypingIndicator } from "../types";
-import {
-  broadcastTypingStart,
-  broadcastTypingStop,
-  getTypingUsersForRoom,
-} from "../services/crossTabSync";
+import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
 import { roomsStore } from "./roomsStore";
 
@@ -92,6 +88,9 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
   setup: (ctx) => {
     const { update, get } = ctx;
 
+    // Get service instance via factory (cached by container)
+    const sync = get(crossTabSyncService);
+
     // Get store references during setup phase (MUST be at top level)
     // State is reactive - reads current value when accessed later
     const [authState] = get(authStore);
@@ -130,7 +129,7 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
         if (!authState.currentUser || !roomsState.activeRoomId) return;
 
         // Broadcast typing start to localStorage (for cross-tab sync)
-        broadcastTypingStart(roomsState.activeRoomId, authState.currentUser.id);
+        sync.typing.start(roomsState.activeRoomId, authState.currentUser.id);
 
         // Set up interval to refresh typing users periodically
         // This is needed because typing status expires after a few seconds
@@ -138,7 +137,7 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
           typingInterval = setInterval(() => {
             if (roomsState.activeRoomId) {
               // Get list of users currently typing (excluding self)
-              const typingUserIds = getTypingUsersForRoom(
+              const typingUserIds = sync.typing.getUsersForRoom(
                 roomsState.activeRoomId,
                 authState.currentUser?.id
               );
@@ -163,7 +162,7 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
         if (!authState.currentUser || !roomsState.activeRoomId) return;
 
         // Broadcast typing stop to localStorage
-        broadcastTypingStop(roomsState.activeRoomId, authState.currentUser.id);
+        sync.typing.stop(roomsState.activeRoomId, authState.currentUser.id);
       },
 
       // ========================
@@ -172,7 +171,7 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       updateTypingUsers: () => {
         if (roomsState.activeRoomId) {
           // Get users typing in the active room (excluding self)
-          const typingUserIds = getTypingUsersForRoom(
+          const typingUserIds = sync.typing.getUsersForRoom(
             roomsState.activeRoomId,
             authState.currentUser?.id
           );

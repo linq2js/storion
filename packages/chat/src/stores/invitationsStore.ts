@@ -15,8 +15,8 @@ import { store, type ActionsBase } from "storion";
 import { async, type AsyncState } from "storion/async";
 import type { RoomInvitation } from "../types";
 import { generateId } from "../types";
-import * as db from "../services/indexedDB";
-import { broadcastEvent } from "../services/crossTabSync";
+import { indexedDBService } from "../services/indexedDB";
+import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
 import { roomsStore } from "./roomsStore";
 
@@ -66,6 +66,10 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
   setup: (ctx) => {
     const { focus, get } = ctx;
 
+    // Get service instances via factory (cached by container)
+    const db = get(indexedDBService);
+    const sync = get(crossTabSyncService);
+
     // Get store references during setup phase (MUST be at top level)
     // State is reactive - reads current value when accessed later
     const [authState] = get(authStore);
@@ -77,7 +81,7 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
       if (!authState.currentUser) return [];
 
       // Load pending invitations where user is the invitee
-      return db.getInvitationsForUser(authState.currentUser.id);
+      return db.invitations.getForUser(authState.currentUser.id);
     });
 
     return {
@@ -112,10 +116,10 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
         };
 
         // Persist to IndexedDB
-        await db.saveInvitation(invitation);
+        await db.invitations.save(invitation);
 
         // Broadcast to other tabs (so invitee sees it in real-time)
-        broadcastEvent("INVITE_SENT", invitation);
+        sync.broadcast("INVITE_SENT", invitation);
       },
 
       // ========================
@@ -123,17 +127,17 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
       // ========================
       acceptInvitation: async (invitationId: string) => {
         // Fetch the invitation
-        const invitation = await db.getInvitation(invitationId);
+        const invitation = await db.invitations.get(invitationId);
         if (!invitation || !authState.currentUser) return;
 
         // Update invitation status
-        await db.updateInvitationStatus(invitationId, "accepted");
+        await db.invitations.updateStatus(invitationId, "accepted");
 
         // Add user to room members
-        await db.addMemberToRoom(invitation.roomId, authState.currentUser.id);
+        await db.rooms.addMember(invitation.roomId, authState.currentUser.id);
 
         // Broadcast to other tabs
-        broadcastEvent("INVITE_ACCEPTED", {
+        sync.broadcast("INVITE_ACCEPTED", {
           invitationId,
           roomId: invitation.roomId,
           userId: authState.currentUser.id,
@@ -151,10 +155,10 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
       // ========================
       declineInvitation: async (invitationId: string) => {
         // Update invitation status
-        await db.updateInvitationStatus(invitationId, "declined");
+        await db.invitations.updateStatus(invitationId, "declined");
 
         // Broadcast to other tabs
-        broadcastEvent("INVITE_DECLINED", { invitationId });
+        sync.broadcast("INVITE_DECLINED", { invitationId });
 
         // Refresh invitations list
         await invitationsAsync.dispatch();

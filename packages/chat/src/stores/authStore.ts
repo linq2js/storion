@@ -13,15 +13,8 @@
 import { store, type ActionsBase } from "storion";
 import type { User } from "../types";
 import { generateId, getAvatarUrl } from "../types";
-import * as db from "../services/indexedDB";
-import {
-  broadcastEvent,
-  saveCurrentUserSession,
-  getCurrentUserSession,
-  clearCurrentUserSession,
-  startHeartbeat,
-  stopHeartbeat,
-} from "../services/crossTabSync";
+import { indexedDBService } from "../services/indexedDB";
+import { crossTabSyncService } from "../services/crossTabSync";
 
 // ============================================================================
 // State Interface
@@ -75,7 +68,13 @@ export const authStore = store<AuthState, AuthActions>({
   },
 
   // Setup function returns actions
-  setup: ({ state, update }) => {
+  setup: (ctx) => {
+    const { state, update, get } = ctx;
+
+    // Get service instances via factory (cached by container)
+    const db = get(indexedDBService);
+    const sync = get(crossTabSyncService);
+
     return {
       // ========================
       // Login Action
@@ -96,21 +95,21 @@ export const authStore = store<AuthState, AuthActions>({
         };
 
         // Persist to IndexedDB
-        await db.saveUser(user);
+        await db.users.save(user);
 
         // Save session to sessionStorage (tab-specific)
-        saveCurrentUserSession(id);
+        sync.session.save(id);
 
         // Start heartbeat to update lastActiveAt periodically
-        startHeartbeat(id);
+        sync.activeUsers.startHeartbeat(id);
 
         // Update local state
-        update((s) => {
+        update((s: AuthState) => {
           s.currentUser = user;
         });
 
         // Notify other tabs about new user
-        broadcastEvent("USER_LOGGED_IN", user);
+        sync.broadcast("USER_LOGGED_IN", user);
 
         return user;
       },
@@ -123,20 +122,20 @@ export const authStore = store<AuthState, AuthActions>({
 
         if (userId) {
           // Stop the heartbeat timer
-          stopHeartbeat();
+          sync.activeUsers.stopHeartbeat();
 
           // Update user status in IndexedDB
-          db.updateUserStatus(userId, "offline", Date.now());
+          db.users.updateStatus(userId, "offline", Date.now());
 
           // Notify other tabs
-          broadcastEvent("USER_LOGGED_OUT", { userId });
+          sync.broadcast("USER_LOGGED_OUT", { userId });
         }
 
         // Clear session from sessionStorage
-        clearCurrentUserSession();
+        sync.session.clear();
 
         // Clear local state
-        update((s) => {
+        update((s: AuthState) => {
           s.currentUser = null;
         });
       },
@@ -146,34 +145,34 @@ export const authStore = store<AuthState, AuthActions>({
       // ========================
       restoreSession: async () => {
         // Check if we have a saved session
-        const userId = getCurrentUserSession();
+        const userId = sync.session.get();
         if (!userId) return null;
 
         // Initialize IndexedDB and fetch user
-        await db.initDB();
-        const user = await db.getUser(userId);
+        await db.init();
+        const user = await db.users.get(userId);
 
         // If user doesn't exist in DB, clear invalid session
         if (!user) {
-          clearCurrentUserSession();
+          sync.session.clear();
           return null;
         }
 
         // Update user status to online
         user.status = "online";
         user.lastActiveAt = Date.now();
-        await db.saveUser(user);
+        await db.users.save(user);
 
         // Start heartbeat for this session
-        startHeartbeat(user.id);
+        sync.activeUsers.startHeartbeat(user.id);
 
         // Update local state
-        update((s) => {
+        update((s: AuthState) => {
           s.currentUser = user;
         });
 
         // Notify other tabs about status change
-        broadcastEvent("USER_STATUS_CHANGED", {
+        sync.broadcast("USER_STATUS_CHANGED", {
           userId: user.id,
           status: "online",
         });
@@ -185,7 +184,7 @@ export const authStore = store<AuthState, AuthActions>({
       // Update Current User Action
       // ========================
       // Using update.action for simple synchronous updates
-      updateCurrentUser: update.action((draft, user: User) => {
+      updateCurrentUser: update.action((draft: AuthState, user: User) => {
         // Only update if it's the same user
         if (draft.currentUser?.id === user.id) {
           draft.currentUser = user;
