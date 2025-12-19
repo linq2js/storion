@@ -743,17 +743,14 @@ function Dashboard() {
 
 // 3c. With custom deps - refetch when deps change
 function UserById({ userId }: { userId: string }) {
-  const { user } = useStore(
-    ({ get, trigger }) => {
-      const [state, actions] = get(userStore);
+  const { user } = useStore(({ get, trigger }) => {
+    const [state, actions] = get(userStore);
 
-      // Refetch when userId prop changes
-      trigger(() => actions.currentUser.dispatch(), [userId]);
+    // Refetch when userId prop changes
+    trigger(actions.currentUser.dispatch, [userId]);
 
-      return { user: state.currentUser };
-    },
-    [userId] // selector deps for proper tracking
-  );
+    return { user: state.currentUser };
+  });
 
   return <div>{user.data?.name}</div>;
 }
@@ -822,7 +819,7 @@ function SearchBox() {
 │       │                                                                 │
 │       ├── Once ever? ────►  trigger(fn, [])                             │
 │       │                                                                 │
-│       ├── Every visit? ──►  trigger(fn, [id])                           │
+│       ├── Every visit? ──►  trigger(fn, [context.id])                   │
 │       │                                                                 │
 │       └── When deps change? ► trigger(fn, [dep1, dep2])                 │
 │                                                                         │
@@ -886,9 +883,9 @@ function Dashboard() {
     const [postState, postActions] = get(postStore);
     const [commentState, commentActions] = get(commentStore);
 
-    trigger(userActions.fetch, []);
-    trigger(postActions.fetch, []);
-    trigger(commentActions.fetch, []);
+    trigger(userActions.fetch);
+    trigger(postActions.fetch);
+    trigger(commentActions.fetch);
 
     // Wait for ALL async states - suspends until all are ready
     const [user, posts, comments] = async.all(
@@ -917,10 +914,8 @@ function FastestResult() {
   const { result } = useStore(({ get, trigger }) => {
     const [state, actions] = get(searchStore);
 
-    trigger(() => {
-      actions.searchAPI1(query);
-      actions.searchAPI2(query);
-    }, [query]);
+    trigger(actions.searchAPI1, [], query);
+    trigger(actions.searchAPI2, [], query);
 
     // Returns whichever finishes first
     return {
