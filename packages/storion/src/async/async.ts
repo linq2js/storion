@@ -20,6 +20,7 @@ import type {
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
+import { untrack } from "../core/tracking";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -932,9 +933,15 @@ export namespace async {
    *   const [a, b, c] = async.all(state.a, state.b, state.c);
    *   return { a, b, c };
    * });
+   *
+   * @example
+   * // With stale mode - preserves data during loading/error
+   * async.derive(focus('result'), () => {
+   *   return async.wait(state.userData);
+   * });
    */
-  export function derive<T>(
-    focus: Focus<AsyncState<T, "fresh">>,
+  export function derive<T, M extends AsyncMode = "fresh">(
+    focus: Focus<AsyncState<T, M>>,
     computeFn: () => T
   ): VoidFunction {
     const [getState, setState] = focus;
@@ -943,6 +950,17 @@ export namespace async {
     let hasSetPending = false;
 
     return effect((ctx) => {
+      // Read current state WITHOUT tracking to get mode and stale data
+      // This prevents the derived state from depending on itself
+      const currentState = untrack(getState);
+      const mode = currentState.mode;
+      const staleData =
+        mode === "stale"
+          ? currentState.data
+          : currentState.status === "success"
+          ? currentState.data
+          : undefined;
+
       try {
         const result = computeFn();
 
@@ -960,7 +978,11 @@ export namespace async {
 
         // Success - reset pending flag and set success state
         hasSetPending = false;
-        setState(asyncState("fresh", "success", result));
+        if (mode === "stale") {
+          setState(asyncState("stale", "success", result) as AsyncState<T, M>);
+        } else {
+          setState(asyncState("fresh", "success", result) as AsyncState<T, M>);
+        }
       } catch (ex) {
         // Check if it's a thrown promise (from async.wait on pending state)
         if (
@@ -971,7 +993,16 @@ export namespace async {
           // Only set pending state once per derivation cycle
           if (!hasSetPending) {
             hasSetPending = true;
-            setState(asyncState("fresh", "pending"));
+            if (mode === "stale") {
+              setState(
+                asyncState("stale", "pending", staleData as T) as AsyncState<
+                  T,
+                  M
+                >
+              );
+            } else {
+              setState(asyncState("fresh", "pending") as AsyncState<T, M>);
+            }
           }
 
           // When promise settles, refresh the effect to re-run computation
@@ -980,7 +1011,16 @@ export namespace async {
           // Real error - reset pending flag and set error state
           hasSetPending = false;
           const error = ex instanceof Error ? ex : new Error(String(ex));
-          setState(asyncState("fresh", "error", error));
+          if (mode === "stale") {
+            setState(
+              asyncState("stale", "error", staleData as T, error) as AsyncState<
+                T,
+                M
+              >
+            );
+          } else {
+            setState(asyncState("fresh", "error", error) as AsyncState<T, M>);
+          }
         }
       }
     });
