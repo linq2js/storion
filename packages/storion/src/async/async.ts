@@ -432,36 +432,210 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
 
 // ===== Namespace helpers for creating async state and utilities =====
 
+// ===== asyncState() Factory Function =====
+
+/**
+ * Extra properties that can be added to async state.
+ * @internal
+ */
+interface AsyncStateExtra<T> {
+  __key?: AsyncKey<T>;
+  __requestId?: AsyncRequestId;
+}
+
+/**
+ * Create a frozen AsyncState with the specified status.
+ * Users cannot modify properties directly - must use async actions.
+ *
+ * Overloads:
+ * - asyncState("fresh", "idle") - Fresh idle state
+ * - asyncState("fresh", "pending", extra?) - Fresh pending state
+ * - asyncState("fresh", "success", data) - Fresh success state
+ * - asyncState("fresh", "error", error, extra?) - Fresh error state
+ * - asyncState("stale", "idle", data) - Stale idle state
+ * - asyncState("stale", "pending", data, extra?) - Stale pending state
+ * - asyncState("stale", "success", data) - Stale success state
+ * - asyncState("stale", "error", data, error, extra?) - Stale error state
+ */
+
+// Fresh mode overloads
+export function asyncState<T = unknown>(
+  mode: "fresh",
+  status: "idle"
+): AsyncState<T, "fresh">;
+
+export function asyncState<T = unknown>(
+  mode: "fresh",
+  status: "pending",
+  extra?: AsyncStateExtra<T>
+): AsyncState<T, "fresh">;
+
+export function asyncState<T>(
+  mode: "fresh",
+  status: "success",
+  data: T
+): AsyncState<T, "fresh">;
+
+export function asyncState<T = unknown>(
+  mode: "fresh",
+  status: "error",
+  error: Error,
+  extra?: AsyncStateExtra<T>
+): AsyncState<T, "fresh">;
+
+// Stale mode overloads
+export function asyncState<T>(
+  mode: "stale",
+  status: "idle",
+  data: T
+): AsyncState<T, "stale">;
+
+export function asyncState<T>(
+  mode: "stale",
+  status: "pending",
+  data: T,
+  extra?: AsyncStateExtra<T>
+): AsyncState<T, "stale">;
+
+export function asyncState<T>(
+  mode: "stale",
+  status: "success",
+  data: T
+): AsyncState<T, "stale">;
+
+export function asyncState<T>(
+  mode: "stale",
+  status: "error",
+  data: T,
+  error: Error,
+  extra?: AsyncStateExtra<T>
+): AsyncState<T, "stale">;
+
+// Implementation
+export function asyncState<T>(
+  mode: AsyncMode,
+  status: "idle" | "pending" | "success" | "error",
+  dataOrError?: T | Error,
+  errorOrExtra?: Error | AsyncStateExtra<T>,
+  extra?: AsyncStateExtra<T>
+): AsyncState<T, AsyncMode> {
+  let state: AsyncState<T, AsyncMode>;
+
+  if (mode === "fresh") {
+    switch (status) {
+      case "idle":
+        state = {
+          status: "idle",
+          mode: "fresh",
+          data: undefined,
+          error: undefined,
+          timestamp: undefined,
+          toJSON: stateToJSON,
+        };
+        break;
+      case "pending":
+        state = {
+          status: "pending",
+          mode: "fresh",
+          data: undefined,
+          error: undefined,
+          timestamp: undefined,
+          ...(dataOrError as AsyncStateExtra<T>),
+          toJSON: stateToJSON,
+        };
+        break;
+      case "success":
+        state = {
+          status: "success",
+          mode: "fresh",
+          data: dataOrError as T,
+          error: undefined,
+          timestamp: Date.now(),
+          toJSON: stateToJSON,
+        };
+        break;
+      case "error":
+        state = {
+          status: "error",
+          mode: "fresh",
+          data: undefined,
+          error: dataOrError as Error,
+          timestamp: undefined,
+          ...(errorOrExtra as AsyncStateExtra<T>),
+          toJSON: stateToJSON,
+        };
+        break;
+    }
+  } else {
+    // Stale mode
+    switch (status) {
+      case "idle":
+        state = {
+          status: "idle",
+          mode: "stale",
+          data: dataOrError as T,
+          error: undefined,
+          timestamp: undefined,
+          toJSON: stateToJSON,
+        };
+        break;
+      case "pending":
+        state = {
+          status: "pending",
+          mode: "stale",
+          data: dataOrError as T,
+          error: undefined,
+          timestamp: undefined,
+          ...(errorOrExtra as AsyncStateExtra<T>),
+          toJSON: stateToJSON,
+        };
+        break;
+      case "success":
+        state = {
+          status: "success",
+          mode: "stale",
+          data: dataOrError as T,
+          error: undefined,
+          timestamp: Date.now(),
+          toJSON: stateToJSON,
+        };
+        break;
+      case "error":
+        state = {
+          status: "error",
+          mode: "stale",
+          data: dataOrError as T,
+          error: errorOrExtra as Error,
+          timestamp: undefined,
+          ...extra,
+          toJSON: stateToJSON,
+        };
+        break;
+    }
+  }
+
+  // Freeze the state to prevent direct mutations
+  return Object.freeze(state);
+}
+
 export namespace async {
   // ===== State Creators =====
 
   /**
    * Create a fresh mode async state (data undefined during loading/error).
+   * @deprecated Use `asyncState("fresh", "idle")` for explicit state creation
    */
   export function fresh<T = unknown>(): AsyncState<T, "fresh"> {
-    return {
-      status: "idle",
-      mode: "fresh",
-      data: undefined,
-      error: undefined,
-      timestamp: undefined,
-      toJSON: stateToJSON,
-    };
+    return asyncState("fresh", "idle");
   }
 
   /**
    * Create a stale mode async state with initial data.
    * Data is preserved during loading and error states.
+   * @deprecated Use `asyncState("stale", "idle", initialData)` for explicit state creation
    */
   export function stale<T>(initialData: T): AsyncState<T, "stale"> {
-    return {
-      status: "idle",
-      mode: "stale",
-      data: initialData,
-      error: undefined,
-      timestamp: undefined,
-      toJSON: stateToJSON,
-    };
+    return asyncState("stale", "idle", initialData);
   }
 
   // ===== Utility Methods =====

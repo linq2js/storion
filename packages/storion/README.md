@@ -422,22 +422,140 @@ effect((ctx) => {
 ```tsx
 import { pick } from "storion";
 
-function UserName() {
+function UserProfile() {
   // Without pick: re-renders when ANY profile property changes
   const { name } = useStore(({ get }) => {
     const [state] = get(userStore);
     return { name: state.profile.name };
   });
 
-  // With pick: re-renders ONLY when profile.name changes
-  const { name } = useStore(({ get }) => {
+  // With pick: re-renders ONLY when the picked value changes
+  // Multiple picks can be used in one selector
+  const { name, fullName, coords, settings, nested } = useStore(({ get }) => {
     const [state] = get(userStore);
-    return { name: pick(() => state.profile.name) };
+    return {
+      // Simple pick - uses default equality (===)
+      name: pick(() => state.profile.name),
+
+      // Computed value - only re-renders when result changes
+      fullName: pick(() => `${state.profile.first} ${state.profile.last}`),
+
+      // 'shallow' - compares object properties one level deep
+      coords: pick(
+        () => ({ x: state.position.x, y: state.position.y }),
+        "shallow"
+      ),
+
+      // 'deep' - recursively compares nested objects/arrays
+      settings: pick(() => state.userSettings, "deep"),
+
+      // Custom equality function - full control
+      nested: pick(
+        () => state.data.items.map((i) => i.id),
+        (a, b) => a.length === b.length && a.every((id, i) => id === b[i])
+      ),
+    };
   });
 
   return <h1>{name}</h1>;
 }
 ```
+
+### Understanding Equality: Store vs Component Level
+
+Storion provides two layers of equality control, each solving different problems:
+
+| Layer                | API               | When it runs          | Purpose                                          |
+| -------------------- | ----------------- | --------------------- | ------------------------------------------------ |
+| **Store (write)**    | `equality` option | When state is mutated | Prevent unnecessary notifications to subscribers |
+| **Component (read)** | `pick(fn, eq)`    | When selector runs    | Prevent unnecessary re-renders                   |
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Store                                                              │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  state.coords = { x: 1, y: 2 }                               │   │
+│  │         │                                                    │   │
+│  │         ▼                                                    │   │
+│  │  equality: { coords: "shallow" }  ──► Same x,y? Skip notify  │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│                    notify if changed                                │
+│                              ▼                                      │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  Component A              │            Component B           │   │
+│  │  pick(() => coords.x)     │     pick(() => coords, "shallow")│   │
+│  │         │                 │                   │              │   │
+│  │         ▼                 │                   ▼              │   │
+│  │  Re-render if x changed   │    Re-render if x OR y changed   │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Example: Coordinates update**
+
+```ts
+// Store level - controls when subscribers get notified
+const mapStore = store({
+  state: { coords: { x: 0, y: 0 }, zoom: 1 },
+  equality: {
+    coords: "shallow", // Don't notify if same { x, y } values
+  },
+  setup({ state }) {
+    return {
+      setCoords: (x: number, y: number) => {
+        state.coords = { x, y }; // New object, but shallow-equal = no notify
+      },
+    };
+  },
+});
+
+// Component level - controls when THIS component re-renders
+function XCoordinate() {
+  const { x } = useStore(({ get }) => {
+    const [state] = get(mapStore);
+    return {
+      // Even if coords changed, only re-render if x specifically changed
+      x: pick(() => state.coords.x),
+    };
+  });
+  return <span>X: {x}</span>;
+}
+```
+
+### Comparison with Other Libraries
+
+| Feature            | Storion               | Redux                    | Zustand          | Jotai             | MobX            |
+| ------------------ | --------------------- | ------------------------ | ---------------- | ----------------- | --------------- |
+| **Tracking**       | Automatic             | Manual selectors         | Manual selectors | Automatic (atoms) | Automatic       |
+| **Write equality** | Per-property config   | Reducer-based            | Built-in shallow | Per-atom          | Deep by default |
+| **Read equality**  | `pick()` with options | `useSelector` + equality | `shallow` helper | Atom-level        | Computed        |
+| **Granularity**    | Property + component  | Selector-based           | Selector-based   | Atom-based        | Property-based  |
+| **Bundle size**    | ~4KB                  | ~2KB + toolkit           | ~1KB             | ~2KB              | ~15KB           |
+| **DI / Lifecycle** | Built-in container    | External (thunk/saga)    | External         | Provider-based    | External        |
+
+**Key differences:**
+
+- **Redux/Zustand**: You write selectors manually and pass equality functions to `useSelector`. Easy to forget and over-subscribe.
+
+  ```ts
+  // Zustand - must remember to add shallow
+  const coords = useStore((s) => s.coords, shallow);
+  ```
+
+- **Jotai**: Fine-grained via atoms, but requires splitting state into many atoms upfront.
+
+  ```ts
+  // Jotai - must create separate atoms
+  const xAtom = atom((get) => get(coordsAtom).x);
+  ```
+
+- **Storion**: Auto-tracking by default, `pick()` for opt-in fine-grained control, store-level equality for write optimization.
+
+  ```ts
+  // Storion - automatic tracking, pick() when you need precision
+  const x = pick(() => state.coords.x);
+  ```
 
 ### Async State Management
 
@@ -524,6 +642,309 @@ function ProductList() {
   );
 }
 ```
+
+### When to Fetch Data
+
+Storion provides multiple patterns for data fetching. Choose based on your use case:
+
+| Pattern                 | When to use                                    | Example                            |
+| ----------------------- | ---------------------------------------------- | ---------------------------------- |
+| **Setup time**          | Data needed immediately when store initializes | App config, user session           |
+| **Trigger (no deps)**   | One-time fetch when component mounts           | Initial page data                  |
+| **Trigger (with deps)** | Refetch when component visits or deps change   | Dashboard refresh                  |
+| **useEffect**           | Standard React pattern, explicit control       | Compatibility with existing code   |
+| **User interaction**    | On-demand fetching                             | Search, pagination, refresh button |
+
+```tsx
+import { store } from "storion";
+import { async, type AsyncState } from "storion/async";
+import { useStore } from "storion/react";
+import { useEffect } from "react";
+
+interface User {
+  id: string;
+  name: string;
+}
+
+export const userStore = store({
+  name: "users",
+  state: {
+    currentUser: async.fresh<User>(),
+    searchResults: async.stale<User[]>([]),
+  },
+  setup({ focus, effect }) {
+    // ═══════════════════════════════════════════════════════════════════
+    // Pattern 1: Fetch at SETUP TIME
+    // Data is fetched immediately when store is created
+    // Good for: App config, auth state, critical data
+    // ═══════════════════════════════════════════════════════════════════
+    const currentUserAsync = async(focus("currentUser"), async (ctx) => {
+      const res = await fetch("/api/me", { signal: ctx.signal });
+      return res.json();
+    });
+
+    // Fetch immediately during setup
+    currentUserAsync.dispatch();
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Pattern 2: Expose DISPATCH for UI control
+    // Store provides action, UI decides when to call
+    // Good for: Search, pagination, user-triggered refresh
+    // ═══════════════════════════════════════════════════════════════════
+    const searchAsync = async(
+      focus("searchResults"),
+      async (ctx, query: string) => {
+        const res = await fetch(`/api/users/search?q=${query}`, {
+          signal: ctx.signal,
+        });
+        return res.json();
+      }
+    );
+
+    return {
+      currentUser: currentUserAsync,
+      search: searchAsync.dispatch,
+      cancelSearch: searchAsync.cancel,
+    };
+  },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Pattern 3: TRIGGER with dependencies
+// Uses useStore's `trigger` for declarative data fetching
+// ═══════════════════════════════════════════════════════════════════════════
+
+// 3a. No deps - fetch ONCE when component mounts
+function UserProfile() {
+  const { user } = useStore(({ get, trigger }) => {
+    const [state, actions] = get(userStore);
+
+    // No deps array = fetch once, never refetch
+    trigger(actions.currentUser.dispatch, []);
+
+    return { user: state.currentUser };
+  });
+
+  if (user.status === "pending") return <Spinner />;
+  return <div>{user.data?.name}</div>;
+}
+
+// 3b. With context.id - refetch EVERY TIME component visits
+function Dashboard() {
+  const { user } = useStore(({ get, trigger, id }) => {
+    const [state, actions] = get(userStore);
+
+    // `id` changes each time component mounts = refetch on every visit
+    trigger(actions.currentUser.dispatch, [id]);
+
+    return { user: state.currentUser };
+  });
+
+  return <div>Welcome back, {user.data?.name}</div>;
+}
+
+// 3c. With custom deps - refetch when deps change
+function UserById({ userId }: { userId: string }) {
+  const { user } = useStore(
+    ({ get, trigger }) => {
+      const [state, actions] = get(userStore);
+
+      // Refetch when userId prop changes
+      trigger(() => actions.currentUser.dispatch(), [userId]);
+
+      return { user: state.currentUser };
+    },
+    [userId] // selector deps for proper tracking
+  );
+
+  return <div>{user.data?.name}</div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Pattern 4: useEffect - standard React pattern
+// For compatibility or when you need more control
+// ═══════════════════════════════════════════════════════════════════════════
+function UserListWithEffect() {
+  const { search } = useStore(({ get }) => {
+    const [, actions] = get(userStore);
+    return { search: actions.search };
+  });
+
+  useEffect(() => {
+    search("initial");
+  }, []);
+
+  return <div>...</div>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Pattern 5: USER INTERACTION - on-demand fetching
+// ═══════════════════════════════════════════════════════════════════════════
+function SearchBox() {
+  const [query, setQuery] = useState("");
+  const { results, search, cancel } = useStore(({ get }) => {
+    const [state, actions] = get(userStore);
+    return {
+      results: state.searchResults,
+      search: actions.search,
+      cancel: actions.cancelSearch,
+    };
+  });
+
+  const handleSearch = () => {
+    cancel(); // Cancel previous search
+    search(query);
+  };
+
+  return (
+    <div>
+      <input value={query} onChange={(e) => setQuery(e.target.value)} />
+      <button onClick={handleSearch}>Search</button>
+      <button onClick={cancel}>Cancel</button>
+
+      {results.status === "pending" && <Spinner />}
+      {results.data?.map((user) => (
+        <div key={user.id}>{user.name}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+**Summary: Choosing the right pattern**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  When should data be fetched?                                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  App starts?  ──────────►  Setup time (dispatch in setup)               │
+│                                                                         │
+│  Component mounts?                                                      │
+│       │                                                                 │
+│       ├── Once ever? ────►  trigger(fn, [])                             │
+│       │                                                                 │
+│       ├── Every visit? ──►  trigger(fn, [id])                           │
+│       │                                                                 │
+│       └── When deps change? ► trigger(fn, [dep1, dep2])                 │
+│                                                                         │
+│  User clicks? ──────────►  onClick handler calls action                 │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Suspense Pattern with `async.wait()`
+
+**The problem:** You want to use React Suspense for loading states, but managing the "throw promise" pattern manually is complex and error-prone.
+
+**With Storion:** Use `async.wait()` to extract data from async state — it throws a promise if pending (triggering Suspense) or throws the error if failed.
+
+```tsx
+import { Suspense } from "react";
+import { async } from "storion/async";
+import { useStore } from "storion/react";
+
+// Component that uses Suspense - no loading/error handling needed!
+function UserProfile() {
+  const { user } = useStore(({ get, trigger }) => {
+    const [state, actions] = get(userStore);
+
+    // Trigger fetch on mount
+    trigger(actions.fetchUser, []);
+
+    return {
+      // async.wait() throws if pending/error, returns data if success
+      user: async.wait(state.currentUser),
+    };
+  });
+
+  // This only renders when data is ready
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <p>{user.email}</p>
+    </div>
+  );
+}
+
+// Parent wraps with Suspense and ErrorBoundary
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+      <Suspense fallback={<Spinner />}>
+        <UserProfile />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+```
+
+**Multiple async states with `async.all()`:**
+
+```tsx
+function Dashboard() {
+  const { user, posts, comments } = useStore(({ get, trigger }) => {
+    const [userState, userActions] = get(userStore);
+    const [postState, postActions] = get(postStore);
+    const [commentState, commentActions] = get(commentStore);
+
+    trigger(userActions.fetch, []);
+    trigger(postActions.fetch, []);
+    trigger(commentActions.fetch, []);
+
+    // Wait for ALL async states - suspends until all are ready
+    const [user, posts, comments] = async.all(
+      userState.current,
+      postState.list,
+      commentState.recent
+    );
+
+    return { user, posts, comments };
+  });
+
+  return (
+    <div>
+      <h1>Welcome, {user.name}</h1>
+      <PostList posts={posts} />
+      <CommentList comments={comments} />
+    </div>
+  );
+}
+```
+
+**Race pattern with `async.race()`:**
+
+```tsx
+function FastestResult() {
+  const { result } = useStore(({ get, trigger }) => {
+    const [state, actions] = get(searchStore);
+
+    trigger(() => {
+      actions.searchAPI1(query);
+      actions.searchAPI2(query);
+    }, [query]);
+
+    // Returns whichever finishes first
+    return {
+      result: async.race(state.api1Results, state.api2Results),
+    };
+  });
+
+  return <ResultList items={result} />;
+}
+```
+
+**Async helpers summary:**
+
+| Helper                   | Behavior                              | Use case                  |
+| ------------------------ | ------------------------------------- | ------------------------- |
+| `async.wait(state)`      | Throws if pending/error, returns data | Single Suspense resource  |
+| `async.all(...states)`   | Waits for all, returns tuple          | Multiple parallel fetches |
+| `async.any(...states)`   | Returns first successful              | Fallback sources          |
+| `async.race(states)`     | Returns fastest                       | Competitive fetching      |
+| `async.hasData(state)`   | `boolean`                             | Check without suspending  |
+| `async.isLoading(state)` | `boolean`                             | Loading indicator         |
+| `async.isError(state)`   | `boolean`                             | Error check               |
 
 ### Dependency Injection
 
@@ -682,6 +1103,42 @@ interface StoreOptions<TState, TActions> {
   onError?: (error: unknown) => void; // Error callback
 }
 ```
+
+**Per-property equality** — Configure different equality checks for each state property:
+
+```ts
+const myStore = store({
+  name: "settings",
+  state: {
+    theme: "light",
+    coords: { x: 0, y: 0 },
+    items: [] as string[],
+    config: { nested: { deep: true } },
+  },
+  // Per-property equality configuration
+  equality: {
+    theme: "strict", // Default (===)
+    coords: "shallow", // Compare { x, y } properties
+    items: "shallow", // Compare array elements
+    config: "deep", // Deep recursive comparison
+  },
+  setup({ state }) {
+    return {
+      setCoords: (x: number, y: number) => {
+        // Only triggers subscribers if x or y actually changed (shallow compare)
+        state.coords = { x, y };
+      },
+    };
+  },
+});
+```
+
+| Equality            | Description                                     |
+| ------------------- | ----------------------------------------------- |
+| `"strict"`          | Default `===` comparison                        |
+| `"shallow"`         | Compares object/array properties one level deep |
+| `"deep"`            | Recursively compares nested structures          |
+| `(a, b) => boolean` | Custom comparison function                      |
 
 #### StoreContext (in setup)
 

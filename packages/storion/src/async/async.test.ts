@@ -1,74 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { async } from "./async";
+import { async, asyncState } from "./async";
 import type { AsyncState, AsyncMode } from "./types";
 import type { Focus } from "../types";
-
-// ===== Internal Test Helpers (not part of public API) =====
-
-/**
- * toJSON helper for test state creators
- */
-function stateToJSON<T, M extends AsyncMode>(this: AsyncState<T, M>) {
-  if (this.mode === "stale") {
-    return { status: "success", mode: "stale", data: this.data as T };
-  }
-  if (this.status === "success") {
-    return { status: "success", mode: "fresh", data: this.data };
-  }
-  return null;
-}
-
-/**
- * Create a success state (for testing only)
- */
-function createSuccessState<T, M extends AsyncMode = "fresh">(
-  data: T,
-  mode: M = "fresh" as M
-): AsyncState<T, M> {
-  return {
-    status: "success",
-    mode,
-    data,
-    error: undefined,
-    timestamp: Date.now(),
-    toJSON: stateToJSON,
-  } as AsyncState<T, M>;
-}
-
-/**
- * Create a pending state (for testing only)
- */
-function createPendingState<T = unknown, M extends AsyncMode = "fresh">(
-  mode: M = "fresh" as M,
-  data?: T
-): AsyncState<T, M> {
-  return {
-    status: "pending",
-    mode,
-    data: mode === "stale" ? data : undefined,
-    error: undefined,
-    timestamp: undefined,
-    toJSON: stateToJSON,
-  } as AsyncState<T, M>;
-}
-
-/**
- * Create an error state (for testing only)
- */
-function createErrorState<T = unknown, M extends AsyncMode = "fresh">(
-  err: Error,
-  mode: M = "fresh" as M,
-  staleData?: T
-): AsyncState<T, M> {
-  return {
-    status: "error",
-    mode,
-    data: mode === "stale" ? staleData : undefined,
-    error: err,
-    timestamp: undefined,
-    toJSON: stateToJSON,
-  } as AsyncState<T, M>;
-}
 
 // Helper to create a mock focus
 function createMockFocus<T, M extends AsyncMode>(
@@ -223,7 +156,7 @@ describe("async", () => {
     it("should preserve data on error", async () => {
       // First set up with success
       const [focus, { getState }] = createMockFocus(
-        createSuccessState("initial", "stale")
+        asyncState("stale", "success", "initial")
       );
 
       const { dispatch } = async(focus, async () => {
@@ -618,7 +551,7 @@ describe("async", () => {
 
   describe("async.wait", () => {
     it("should return data for success state", () => {
-      const state = createSuccessState("hello");
+      const state = asyncState("fresh", "success", "hello");
       expect(async.wait(state)).toBe("hello");
     });
 
@@ -628,15 +561,16 @@ describe("async", () => {
     });
 
     it("should throw error for error state in fresh mode", () => {
-      const state = createErrorState(new Error("failed"));
+      const state = asyncState("fresh", "error", new Error("failed"));
       expect(() => async.wait(state)).toThrow("failed");
     });
 
     it("should return stale data for error state in stale mode", () => {
-      const state = createErrorState(
-        new Error("failed"),
+      const state = asyncState(
         "stale",
-        "stale-data"
+        "error",
+        "stale-data",
+        new Error("failed")
       );
       expect(async.wait(state)).toBe("stale-data");
     });
@@ -677,8 +611,8 @@ describe("async", () => {
   describe("async.race", () => {
     it("should return first success entry", () => {
       const states = {
-        a: createPendingState("fresh"),
-        b: createSuccessState("winner"),
+        a: asyncState("fresh", "pending") as AsyncState<string, "fresh">,
+        b: asyncState("fresh", "success", "winner"),
         c: async.fresh<string>(),
       };
       const [key, value] = async.race(states);
@@ -688,7 +622,7 @@ describe("async", () => {
 
     it("should return stale data as winner", () => {
       const states = {
-        a: createPendingState("fresh"),
+        a: asyncState("fresh", "pending") as AsyncState<string, "fresh">,
         b: async.stale("stale-winner"),
       };
       const [key, value] = async.race(states);
@@ -699,8 +633,8 @@ describe("async", () => {
     it("should throw error if one has error and none success/stale", () => {
       const err = new Error("failed");
       const states = {
-        a: createPendingState("fresh"),
-        b: createErrorState<string>(err),
+        a: asyncState("fresh", "pending") as AsyncState<string, "fresh">,
+        b: asyncState("fresh", "error", err) as AsyncState<string, "fresh">,
       };
       expect(() => async.race(states)).toThrow("failed");
     });
@@ -708,16 +642,16 @@ describe("async", () => {
 
   describe("async.all", () => {
     it("should return all data when all success", () => {
-      const s1 = createSuccessState("a");
-      const s2 = createSuccessState(42);
-      const s3 = createSuccessState(true);
+      const s1 = asyncState("fresh", "success", "a");
+      const s2 = asyncState("fresh", "success", 42);
+      const s3 = asyncState("fresh", "success", true);
 
       const result = async.all(s1, s2, s3);
       expect(result).toEqual(["a", 42, true]);
     });
 
     it("should include stale data in results", () => {
-      const s1 = createSuccessState("fresh");
+      const s1 = asyncState("fresh", "success", "fresh");
       const s2 = async.stale("stale-data");
 
       const result = async.all(s1, s2);
@@ -725,8 +659,8 @@ describe("async", () => {
     });
 
     it("should throw if any has error and no stale data", () => {
-      const s1 = createSuccessState("a");
-      const s2 = createErrorState(new Error("boom"));
+      const s1 = asyncState("fresh", "success", "a");
+      const s2 = asyncState("fresh", "error", new Error("boom"));
 
       expect(() => async.all(s1, s2)).toThrow("boom");
     });
@@ -734,23 +668,29 @@ describe("async", () => {
 
   describe("async.any", () => {
     it("should return first success value", () => {
-      const s1 = createErrorState<string>(new Error("err1"));
-      const s2 = createSuccessState("winner");
-      const s3 = createPendingState("fresh");
+      const s1 = asyncState("fresh", "error", new Error("err1")) as AsyncState<
+        string,
+        "fresh"
+      >;
+      const s2 = asyncState("fresh", "success", "winner");
+      const s3 = asyncState("fresh", "pending") as AsyncState<string, "fresh">;
 
       expect(async.any(s1, s2, s3)).toBe("winner");
     });
 
     it("should return stale data if no success", () => {
-      const s1 = createErrorState<string>(new Error("err1"));
+      const s1 = asyncState("fresh", "error", new Error("err1")) as AsyncState<
+        string,
+        "fresh"
+      >;
       const s2 = async.stale("stale-winner");
 
       expect(async.any(s1, s2)).toBe("stale-winner");
     });
 
     it("should throw AggregateError if all errors (no stale)", () => {
-      const s1 = createErrorState(new Error("err1"));
-      const s2 = createErrorState(new Error("err2"));
+      const s1 = asyncState("fresh", "error", new Error("err1"));
+      const s2 = asyncState("fresh", "error", new Error("err2"));
 
       expect(() => async.any(s1, s2)).toThrow("All async states have errors");
     });
@@ -759,9 +699,9 @@ describe("async", () => {
   describe("async.settled", () => {
     it("should return settled results with mode-aware data", () => {
       const err = new Error("oops");
-      const s1 = createSuccessState("data");
-      const s2 = createErrorState(err, "stale", "stale-err");
-      const s3 = createPendingState("stale", "stale-pending");
+      const s1 = asyncState("fresh", "success", "data");
+      const s2 = asyncState("stale", "error", "stale-err", err);
+      const s3 = asyncState("stale", "pending", "stale-pending");
       const s4 = async.stale("stale-idle");
 
       const results = async.settled(s1, s2, s3, s4);
@@ -777,7 +717,7 @@ describe("async", () => {
 
   describe("async.hasData", () => {
     it("should return true for success state", () => {
-      expect(async.hasData(createSuccessState("data"))).toBe(true);
+      expect(async.hasData(asyncState("fresh", "success", "data"))).toBe(true);
     });
 
     it("should return true for stale state with data", () => {
@@ -791,23 +731,25 @@ describe("async", () => {
 
   describe("async.isLoading", () => {
     it("should return true for pending state", () => {
-      expect(async.isLoading(createPendingState())).toBe(true);
+      expect(async.isLoading(asyncState("fresh", "pending"))).toBe(true);
     });
 
     it("should return false for other states", () => {
       expect(async.isLoading(async.fresh())).toBe(false);
-      expect(async.isLoading(createSuccessState("x"))).toBe(false);
+      expect(async.isLoading(asyncState("fresh", "success", "x"))).toBe(false);
     });
   });
 
   describe("async.isError", () => {
     it("should return true for error state", () => {
-      expect(async.isError(createErrorState(new Error("x")))).toBe(true);
+      expect(async.isError(asyncState("fresh", "error", new Error("x")))).toBe(
+        true
+      );
     });
 
     it("should return false for other states", () => {
       expect(async.isError(async.fresh())).toBe(false);
-      expect(async.isError(createSuccessState("x"))).toBe(false);
+      expect(async.isError(asyncState("fresh", "success", "x"))).toBe(false);
     });
   });
 
@@ -826,23 +768,23 @@ describe("async", () => {
       expect(state.data).toBe("initial");
     });
 
-    it("createSuccessState() creates success state", () => {
-      const state = createSuccessState("data");
+    it("asyncState() creates success state", () => {
+      const state = asyncState("fresh", "success", "data");
       expect(state.status).toBe("success");
       expect(state.data).toBe("data");
       expect(state.timestamp).toBeGreaterThan(0);
     });
 
-    it("createPendingState() creates pending state", () => {
-      const state = createPendingState("stale", "stale-data");
+    it("asyncState() creates pending state", () => {
+      const state = asyncState("stale", "pending", "stale-data");
       expect(state.status).toBe("pending");
       expect(state.mode).toBe("stale");
       expect(state.data).toBe("stale-data");
     });
 
-    it("createErrorState() creates error state", () => {
+    it("asyncState() creates error state", () => {
       const err = new Error("test");
-      const state = createErrorState(err, "stale", "stale-data");
+      const state = asyncState("stale", "error", "stale-data", err);
       expect(state.status).toBe("error");
       expect(state.mode).toBe("stale");
       expect(state.error).toBe(err);
@@ -858,17 +800,17 @@ describe("async", () => {
       });
 
       it("should return null for fresh pending state", () => {
-        const state = createPendingState("fresh");
+        const state = asyncState("fresh", "pending");
         expect(JSON.stringify(state)).toBe("null");
       });
 
       it("should return null for fresh error state", () => {
-        const state = createErrorState(new Error("test"), "fresh");
+        const state = asyncState("fresh", "error", new Error("test"));
         expect(JSON.stringify(state)).toBe("null");
       });
 
       it("should serialize fresh success state", () => {
-        const state = createSuccessState("data", "fresh");
+        const state = asyncState("fresh", "success", "data");
         const serialized = JSON.parse(JSON.stringify(state));
         expect(serialized).toEqual({
           status: "success",
@@ -890,7 +832,7 @@ describe("async", () => {
       });
 
       it("should serialize stale pending state as success with data", () => {
-        const state = createPendingState("stale", "cached");
+        const state = asyncState("stale", "pending", "cached");
         const serialized = JSON.parse(JSON.stringify(state));
         expect(serialized).toEqual({
           status: "success",
@@ -900,7 +842,7 @@ describe("async", () => {
       });
 
       it("should serialize stale error state as success with data", () => {
-        const state = createErrorState(new Error("test"), "stale", "cached");
+        const state = asyncState("stale", "error", "cached", new Error("test"));
         const serialized = JSON.parse(JSON.stringify(state));
         expect(serialized).toEqual({
           status: "success",
@@ -910,7 +852,7 @@ describe("async", () => {
       });
 
       it("should serialize stale success state", () => {
-        const state = createSuccessState("data", "stale");
+        const state = asyncState("stale", "success", "data");
         const serialized = JSON.parse(JSON.stringify(state));
         expect(serialized).toEqual({
           status: "success",
@@ -922,15 +864,14 @@ describe("async", () => {
 
     describe("excludes internal fields", () => {
       it("should not include __key in serialized output", () => {
-        // Create a pending state with __key
-        const state = createPendingState("stale", "data");
-        (state as any).__key = {}; // Simulate adding __key
+        // Create a pending state with __key using asyncState's extra props
+        const state = asyncState("stale", "pending", "data", { __key: {} });
         const serialized = JSON.parse(JSON.stringify(state));
         expect(serialized.__key).toBeUndefined();
       });
 
       it("should not include error in serialized output", () => {
-        const state = createErrorState(new Error("test"), "stale", "data");
+        const state = asyncState("stale", "error", "data", new Error("test"));
         const serialized = JSON.parse(JSON.stringify(state));
         expect(serialized.error).toBeUndefined();
       });
@@ -1282,13 +1223,13 @@ describe("async", () => {
 
       // Track getState calls
       let getStateCalls = 0;
-      const trackedFocus: Focus<AsyncState<number, "fresh">> = [
+      const trackedFocus = [
         () => {
           getStateCalls++;
           return getState();
         },
         focus[1],
-      ];
+      ] as Focus<AsyncState<number, "fresh">>;
 
       const actions = async(trackedFocus, async () => 42);
 
@@ -1328,6 +1269,141 @@ describe("async", () => {
 
       // State objects should be different references
       expect(last1!.state).not.toBe(last2!.state);
+    });
+  });
+});
+
+// ===== asyncState() Factory Tests =====
+
+describe("asyncState()", () => {
+  describe("fresh mode", () => {
+    it("should create idle state", () => {
+      const state = asyncState("fresh", "idle");
+      expect(state.status).toBe("idle");
+      expect(state.mode).toBe("fresh");
+      expect(state.data).toBeUndefined();
+      expect(state.error).toBeUndefined();
+    });
+
+    it("should create pending state", () => {
+      const state = asyncState("fresh", "pending");
+      expect(state.status).toBe("pending");
+      expect(state.mode).toBe("fresh");
+      expect(state.data).toBeUndefined();
+    });
+
+    it("should create success state with data", () => {
+      const state = asyncState("fresh", "success", { id: 1, name: "test" });
+      expect(state.status).toBe("success");
+      expect(state.mode).toBe("fresh");
+      expect(state.data).toEqual({ id: 1, name: "test" });
+      expect(state.timestamp).toBeDefined();
+    });
+
+    it("should create error state", () => {
+      const error = new Error("Test error");
+      const state = asyncState("fresh", "error", error);
+      expect(state.status).toBe("error");
+      expect(state.mode).toBe("fresh");
+      expect(state.data).toBeUndefined();
+      expect(state.error).toBe(error);
+    });
+  });
+
+  describe("stale mode", () => {
+    it("should create idle state with initial data", () => {
+      const state = asyncState("stale", "idle", [1, 2, 3]);
+      expect(state.status).toBe("idle");
+      expect(state.mode).toBe("stale");
+      expect(state.data).toEqual([1, 2, 3]);
+    });
+
+    it("should create pending state preserving data", () => {
+      const state = asyncState("stale", "pending", ["a", "b"]);
+      expect(state.status).toBe("pending");
+      expect(state.mode).toBe("stale");
+      expect(state.data).toEqual(["a", "b"]);
+    });
+
+    it("should create success state with data", () => {
+      const state = asyncState("stale", "success", { value: 42 });
+      expect(state.status).toBe("success");
+      expect(state.mode).toBe("stale");
+      expect(state.data).toEqual({ value: 42 });
+      expect(state.timestamp).toBeDefined();
+    });
+
+    it("should create error state preserving data", () => {
+      const error = new Error("Failed");
+      const state = asyncState("stale", "error", "cached data", error);
+      expect(state.status).toBe("error");
+      expect(state.mode).toBe("stale");
+      expect(state.data).toBe("cached data");
+      expect(state.error).toBe(error);
+    });
+  });
+
+  describe("immutability", () => {
+    it("should freeze the returned state", () => {
+      const state = asyncState("fresh", "idle");
+      expect(Object.isFrozen(state)).toBe(true);
+    });
+
+    it("should throw when trying to modify frozen state in strict mode", () => {
+      const state = asyncState("fresh", "success", { name: "test" });
+      expect(() => {
+        state.status = "pending";
+      }).toThrow();
+    });
+  });
+
+  describe("toJSON", () => {
+    it("should serialize fresh success state", () => {
+      const state = asyncState("fresh", "success", { id: 1 });
+      expect(state.toJSON?.()).toEqual({
+        status: "success",
+        mode: "fresh",
+        data: { id: 1 },
+      });
+    });
+
+    it("should serialize stale state as success", () => {
+      const state = asyncState("stale", "pending", "cached");
+      expect(state.toJSON?.()).toEqual({
+        status: "success",
+        mode: "stale",
+        data: "cached",
+      });
+    });
+
+    it("should return null for fresh non-success states", () => {
+      const idle = asyncState("fresh", "idle");
+      const pending = asyncState("fresh", "pending");
+      const error = asyncState("fresh", "error", new Error("fail"));
+
+      expect(idle.toJSON?.()).toBeNull();
+      expect(pending.toJSON?.()).toBeNull();
+      expect(error.toJSON?.()).toBeNull();
+    });
+  });
+
+  describe("compatibility with async.fresh/stale", () => {
+    it("asyncState should produce same result as async.fresh()", () => {
+      const fromAsyncState = asyncState("fresh", "idle");
+      const fromAsyncFresh = async.fresh();
+
+      expect(fromAsyncState.status).toBe(fromAsyncFresh.status);
+      expect(fromAsyncState.mode).toBe(fromAsyncFresh.mode);
+      expect(fromAsyncState.data).toBe(fromAsyncFresh.data);
+    });
+
+    it("asyncState should produce same result as async.stale()", () => {
+      const fromAsyncState = asyncState("stale", "idle", [1, 2, 3]);
+      const fromAsyncStale = async.stale([1, 2, 3]);
+
+      expect(fromAsyncState.status).toBe(fromAsyncStale.status);
+      expect(fromAsyncState.mode).toBe(fromAsyncStale.mode);
+      expect(fromAsyncState.data).toEqual(fromAsyncStale.data);
     });
   });
 });
