@@ -14,6 +14,7 @@ import {
   scheduleNotification,
   type Hooks,
 } from "./tracking";
+import { EffectRefreshError, AsyncFunctionError } from "../errors";
 
 // =============================================================================
 // Effect Error Handling Types
@@ -272,12 +273,6 @@ function createEffectContext(
   };
 
   return Object.assign(context, { _runCleanups: runCleanups });
-}
-
-class CannotRefreshError extends Error {
-  constructor() {
-    super("Effect is already running, cannot refresh");
-  }
 }
 
 // =============================================================================
@@ -544,7 +539,7 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       if (fn.length) {
         lazyContext = createEffectContext(currentGeneration, () => {
           if (isRunning) {
-            throw new CannotRefreshError();
+            throw new EffectRefreshError();
           }
           // refreshing the effect will re-run the effect, no need to re-schedule effect
           // typically calling refresh must be async, so it will be scheduled after the current run completes
@@ -561,9 +556,9 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
           result !== undefined &&
           typeof (result as PromiseLike<unknown>).then === "function"
         ) {
-          throw new Error(
-            "Effect function must be synchronous. " +
-              "Use ctx.safe(promise) for async operations instead of returning a Promise."
+          throw new AsyncFunctionError(
+            "Effect function",
+            "Use ctx.safe(promise) for async operations instead of returning a Promise."
           );
         }
 
@@ -596,7 +591,7 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       prevSubscriptionEmitter = null;
     } catch (error) {
       // Programming errors should always be thrown, not handled
-      if (error instanceof Error && error instanceof CannotRefreshError) {
+      if (error instanceof EffectRefreshError) {
         throw error;
       }
       handleError(error);

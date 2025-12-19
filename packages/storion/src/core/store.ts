@@ -21,6 +21,7 @@ import {
 
 import { produce } from "immer";
 import { createStoreContext } from "./storeContext";
+import { InvalidActionError, StoreDisposedError } from "../errors";
 
 import {
   withHooks,
@@ -714,18 +715,14 @@ export function createStoreInstance<
   for (const [name, action] of Object.entries(actions)) {
     // Actions must be functions
     if (typeof action !== "function") {
-      throw new Error(
-        `Action "${name}" must be a function, got ${typeof action}. ` +
-          `If using focus(), destructure it and return the getter/setter separately: ` +
-          `const [get, set] = focus("path"); return { get, set };`
-      );
+      throw new InvalidActionError(name, typeof action);
     }
 
     // Create the wrapped action function with original marked
     const wrappedAction = wrapFn(action, (originalAction) => {
       const wrapper = (...args: any[]) => {
         if (disposed) {
-          throw new Error(`Cannot call action on disposed store: ${storeId}`);
+          throw new StoreDisposedError(storeId);
         }
 
         // Record dispatch info BEFORE action execution (for error cases)

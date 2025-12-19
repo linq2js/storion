@@ -25,6 +25,7 @@ import {
   StoreSpec,
 } from "../types";
 import { dev } from "../dev";
+import { LocalStoreDependencyError } from "../errors";
 
 /**
  * Result type for useLocalStore.
@@ -215,9 +216,9 @@ class LocalStoreController<
     const depsCount = this._store?.deps?.length ?? 0;
     if (depsCount > 0) {
       this.dispose();
-      throw new Error(
-        `Local store must not have dependencies, but "${this.spec.displayName}" has ${depsCount} dependencies. ` +
-          `Use useStore() with a global container for stores with dependencies.`
+      throw new LocalStoreDependencyError(
+        this.spec.displayName,
+        depsCount
       );
     }
 

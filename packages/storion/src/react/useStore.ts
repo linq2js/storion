@@ -18,6 +18,7 @@ import {
 } from "../types";
 import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
+import { AsyncFunctionError } from "../errors";
 import { useLocalStore, type LocalStoreResult } from "./useLocalStore";
 import { isSpec } from "../is";
 
@@ -133,9 +134,9 @@ export function useStoreWithContainer<T extends object>(
     result &&
     typeof (result as unknown as PromiseLike<unknown>).then === "function"
   ) {
-    throw new Error(
-      "useStore selector must be synchronous. " +
-        "Do not return a Promise from the selector function."
+    throw new AsyncFunctionError(
+      "useStore selector",
+      "Do not return a Promise from the selector function."
     );
   }
   refs.fresh = result;

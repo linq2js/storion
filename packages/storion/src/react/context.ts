@@ -14,6 +14,7 @@ import {
 
 import type { StoreContainer } from "../types";
 import { container } from "../core/container";
+import { ProviderMissingError } from "../errors";
 
 // =============================================================================
 // Context
@@ -47,7 +48,7 @@ export function useContainer(): StoreContainer {
   const ctx = useContext(StoreContext);
 
   if (!ctx) {
-    throw new Error("useContainer must be used within a StoreProvider");
+    throw new ProviderMissingError("useContainer", "StoreProvider");
   }
   return ctx;
 }

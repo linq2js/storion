@@ -9,6 +9,7 @@ import { emitter } from "../emitter";
 import type { PickEquality } from "../types";
 import { resolveEquality } from "./equality";
 import { getHooks, withHooks, type ReadEvent } from "./tracking";
+import { HooksContextError } from "../errors";
 
 /** Auto-increment counter for unique pick keys */
 let pickIdCounter = 0;
@@ -56,10 +57,7 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
 
   // Must be inside an onRead context (effect or useStore)
   if (!parentHooks.onRead) {
-    throw new Error(
-      "pick() must be called inside an effect or useStore selector. " +
-        "It requires an active hooks.onRead context."
-    );
+    throw new HooksContextError("pick", "an effect or useStore selector");
   }
 
   const equalityFn = resolveEquality<T>(equality);

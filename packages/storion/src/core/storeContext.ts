@@ -22,6 +22,7 @@ import {
 import { resolveEquality } from "./equality";
 import { isSpec } from "../is";
 import { willDispose } from "./disposable";
+import { SetupPhaseError, LifetimeMismatchError } from "../errors";
 
 // =============================================================================
 // Types
@@ -302,10 +303,9 @@ export function createStoreContext<
     get(specOrFactory: any): any {
       // Prevent dynamic store creation outside setup phase
       if (!isSetupPhase()) {
-        throw new Error(
-          `get() can only be called during setup phase. ` +
-            `Do not call get() inside actions or async callbacks. ` +
-            `Declare all dependencies at the top of your setup function.`
+        throw new SetupPhaseError(
+          "get",
+          "Declare all dependencies at the top of your setup function."
         );
       }
 
@@ -323,12 +323,7 @@ export function createStoreContext<
       if (currentLifetime === "keepAlive" && depLifetime === "autoDispose") {
         const currentName = spec.options.name ?? "unknown";
         const depName = depSpec.name ?? "unknown";
-        throw new Error(
-          `Lifetime mismatch: Store "${currentName}" (keepAlive) cannot depend on ` +
-            `store "${depName}" (autoDispose). A long-lived store cannot depend on ` +
-            `a store that may be disposed. Either change "${currentName}" to autoDispose, ` +
-            `or change "${depName}" to keepAlive.`
-        );
+        throw new LifetimeMismatchError(currentName, depName, "depend on");
       }
 
       // Get full instance from resolver
@@ -347,10 +342,9 @@ export function createStoreContext<
     create(specOrFactory: any, ...args: any[]): any {
       // Prevent dynamic store creation outside setup phase
       if (!isSetupPhase()) {
-        throw new Error(
-          `create() can only be called during setup phase. ` +
-            `Do not call create() inside actions or async callbacks. ` +
-            `Declare all child stores at the top of your setup function.`
+        throw new SetupPhaseError(
+          "create",
+          "Declare all child stores at the top of your setup function."
         );
       }
 
@@ -375,12 +369,7 @@ export function createStoreContext<
       if (currentLifetime === "keepAlive" && childLifetime === "autoDispose") {
         const currentName = spec.options.name ?? "unknown";
         const childName = childSpec.name ?? "unknown";
-        throw new Error(
-          `Lifetime mismatch: Store "${currentName}" (keepAlive) cannot create ` +
-            `child store "${childName}" (autoDispose). A long-lived store cannot create ` +
-            `a store that may be disposed before it. Either change "${currentName}" to autoDispose, ` +
-            `or change "${childName}" to keepAlive.`
-        );
+        throw new LifetimeMismatchError(currentName, childName, "create");
       }
 
       // Get full instance from resolver
@@ -411,20 +400,16 @@ export function createStoreContext<
       ...args: TArgs
     ): TResult {
       if (!isSetupPhase()) {
-        throw new Error(
-          `mixin() can only be called during setup phase. ` +
-            `Do not call mixin() inside actions or async callbacks.`
-        );
+        throw new SetupPhaseError("mixin");
       }
       return mixin(ctx, ...args);
     },
 
     focus(path: string, options?: FocusOptions<any>): any {
       if (!isSetupPhase()) {
-        throw new Error(
-          `focus() can only be called during setup phase. ` +
-            `Do not call focus() inside actions or async callbacks. ` +
-            `Use the .to() method on an existing focus for dynamic sub-paths.`
+        throw new SetupPhaseError(
+          "focus",
+          "Use the .to() method on an existing focus for dynamic sub-paths."
         );
       }
 

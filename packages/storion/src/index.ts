@@ -110,3 +110,17 @@ export { trigger, type TriggerOptions } from "./trigger";
 
 // Function wrapper utility
 export { wrapFn as wrapFn, unwrapFn, isWrappedFn } from "./core/fnWrapper";
+
+// Error classes
+export {
+  StorionError,
+  SetupPhaseError,
+  LifetimeMismatchError,
+  AsyncFunctionError,
+  StoreDisposedError,
+  InvalidActionError,
+  HooksContextError,
+  ProviderMissingError,
+  LocalStoreDependencyError,
+  EffectRefreshError,
+} from "./errors";

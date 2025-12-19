@@ -21,6 +21,7 @@ import type {
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
 import { untrack } from "../core/tracking";
+import { AsyncFunctionError } from "../errors";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -1054,9 +1055,9 @@ export namespace async {
           result !== undefined &&
           typeof (result as any).then === "function"
         ) {
-          throw new Error(
-            "async.derive: computeFn must be synchronous. " +
-              "Use async.wait() for async values, not async/await or returning promises."
+          throw new AsyncFunctionError(
+            "async.derive computeFn",
+            "Use async.wait() for async values, not async/await or returning promises."
           );
         }
 
