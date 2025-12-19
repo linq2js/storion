@@ -1027,7 +1027,7 @@ describe("effect", () => {
 
       it("should not run callback if effect has re-run", () => {
         let firstCallback = fake<(value: string) => string | undefined>();
-
+        let secondCallback = fake<(value: string) => string | undefined>();
         let runCount = 0;
 
         withHooks(

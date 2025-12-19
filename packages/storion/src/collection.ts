@@ -1,3 +1,16 @@
+export interface Collection<TKey, TValue> {
+  with(key: TKey, callback: (item: TValue) => void): this;
+  has(key: TKey): boolean;
+  get(key: TKey): TValue;
+  set(key: TKey, value: TValue): this;
+  size: number;
+  clear(): this;
+  delete(key: TKey): this;
+  keys(): IterableIterator<TKey>;
+  values(): IterableIterator<TValue>;
+  entries(): IterableIterator<[TKey, TValue]>;
+}
+
 /**
  * Lazy-instantiation Map wrapper.
  *
@@ -21,7 +34,7 @@
 export function collection<TKey, TValue>(
   createItem: (key: TKey) => TValue,
   initialItems?: readonly [TKey, TValue][]
-) {
+): Collection<TKey, TValue> {
   const map = new Map<TKey, TValue>(initialItems ?? []);
 
   return {
