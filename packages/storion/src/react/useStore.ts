@@ -90,6 +90,11 @@ export function useStoreWithContainer<T extends object>(
         });
       },
 
+      // Create a fresh instance from a parameterized factory (bypasses cache)
+      create(factory: any, ...args: any[]): any {
+        return (container.create as any)(factory, ...args);
+      },
+
       mixin<TResult, TArgs extends unknown[]>(
         mixin: (context: SelectorContext, ...args: TArgs) => TResult,
         ...args: TArgs

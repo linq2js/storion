@@ -21,6 +21,7 @@ import {
 
 import { resolveEquality } from "./equality";
 import { isSpec } from "../is";
+import { willDispose } from "./disposable";
 
 // =============================================================================
 // Types
@@ -342,8 +343,8 @@ export function createStoreContext<
       });
     },
 
-    // Implementation handles both StoreSpec and Factory overloads
-    create(specOrFactory: any): any {
+    // Implementation handles StoreSpec, Factory, and parameterized Factory overloads
+    create(specOrFactory: any, ...args: any[]): any {
       // Prevent dynamic store creation outside setup phase
       if (!isSetupPhase()) {
         throw new Error(
@@ -353,15 +354,14 @@ export function createStoreContext<
         );
       }
 
-      // Handle plain factory functions
+      // Handle plain factory functions (including parameterized factories)
       if (!isSpec(specOrFactory)) {
         // Create fresh instance (no caching)
-        const instance = specOrFactory(resolver);
+        // Pass resolver as first arg, then any additional args
+        const instance = specOrFactory(resolver, ...args);
 
         // If instance has dispose method, register it for cleanup
-        if (instance && typeof instance.dispose === "function") {
-          onDispose?.(instance.dispose);
-        }
+        onDispose?.(willDispose(instance));
 
         return instance;
       }
@@ -387,7 +387,7 @@ export function createStoreContext<
       const instance = resolver.create(childSpec);
 
       // Register child's dispose to run when parent disposes
-      onDispose?.(instance.dispose);
+      onDispose?.(willDispose(instance));
 
       return instance;
     },

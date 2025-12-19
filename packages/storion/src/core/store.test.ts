@@ -700,6 +700,88 @@ describe("create() - child stores", () => {
     // Disposal listener called
     expect(disposeFn).toHaveBeenCalled();
   });
+
+  it("should support parameterized factories with additional arguments", () => {
+    const createLogger = (
+      _resolver: any,
+      namespace: string,
+      level: number
+    ) => ({
+      namespace,
+      level,
+      log: (msg: string) => `[${namespace}:${level}] ${msg}`,
+    });
+
+    let logger: any;
+    const myStore = store({
+      name: "test",
+      state: { count: 0 },
+      setup: ({ create }) => {
+        logger = create(createLogger, "my-store", 2);
+        return {};
+      },
+    });
+
+    const stores = container();
+    stores.get(myStore);
+
+    expect(logger.namespace).toBe("my-store");
+    expect(logger.level).toBe(2);
+    expect(logger.log("hello")).toBe("[my-store:2] hello");
+  });
+
+  it("should pass resolver to parameterized factory", () => {
+    const configFactory = () => ({ apiUrl: "http://localhost" });
+
+    const createApiClient = (resolver: any, timeout: number) => {
+      const config = resolver.get(configFactory);
+      return { url: config.apiUrl, timeout };
+    };
+
+    let client: any;
+    const myStore = store({
+      name: "test",
+      state: { data: null },
+      setup: ({ create }) => {
+        client = create(createApiClient, 5000);
+        return {};
+      },
+    });
+
+    const stores = container();
+    stores.get(myStore);
+
+    expect(client.url).toBe("http://localhost");
+    expect(client.timeout).toBe(5000);
+  });
+
+  it("should dispose parameterized factory instance with store", () => {
+    const disposeFn = vi.fn();
+
+    const createService = (_resolver: any, name: string) => ({
+      name,
+      dispose: disposeFn,
+    });
+
+    const myStore = store({
+      name: "test",
+      state: { count: 0 },
+      lifetime: "autoDispose",
+      setup: ({ create }) => {
+        create(createService, "my-service");
+        return {};
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(myStore);
+
+    expect(disposeFn).not.toHaveBeenCalled();
+
+    instance.dispose();
+
+    expect(disposeFn).toHaveBeenCalled();
+  });
 });
 
 describe("untrack()", () => {

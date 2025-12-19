@@ -2,14 +2,18 @@
  * Tests for the effect module.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  effect,
-  type EffectOptions,
-  type EffectErrorContext,
-  type EffectContext,
-} from "./effect";
-import { withHooks, getHooks, type Hooks } from "./tracking";
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  MockInstance,
+} from "vitest";
+import { fake } from "../test/util";
+import { effect, type EffectErrorContext, type EffectContext } from "./effect";
+import { withHooks, type Hooks } from "./tracking";
 
 // Mock store resolver and instance for testing
 function createMockResolver() {
@@ -74,7 +78,9 @@ function createMockResolver() {
 }
 
 // Setup hooks that simulate store behavior
-function setupTestHooks(resolver: ReturnType<typeof createMockResolver>["resolver"]) {
+function setupTestHooks(
+  resolver: ReturnType<typeof createMockResolver>["resolver"]
+) {
   const effectDisposers: VoidFunction[] = [];
 
   const hooks: Partial<Hooks> = {
@@ -97,14 +103,14 @@ function setupTestHooks(resolver: ReturnType<typeof createMockResolver>["resolve
 }
 
 describe("effect", () => {
-  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let consoleErrorSpy = fake<MockInstance>();
 
   beforeEach(() => {
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
+    consoleErrorSpy?.mockRestore();
   });
 
   describe("basic functionality", () => {
@@ -117,7 +123,7 @@ describe("effect", () => {
     });
 
     it("should provide EffectContext to effect function", () => {
-      let capturedCtx: EffectContext | null = null;
+      let capturedCtx = fake<EffectContext>();
 
       effect((ctx) => {
         capturedCtx = ctx;
@@ -505,7 +511,6 @@ describe("effect", () => {
     it("should throw if effect returns a Promise", () => {
       expect(() => {
         effect(
-          // @ts-expect-error - intentionally returning Promise to test error
           async () => {
             await Promise.resolve();
           },
@@ -517,7 +522,6 @@ describe("effect", () => {
     it("should throw if effect returns a PromiseLike", () => {
       expect(() => {
         effect(
-          // @ts-expect-error - intentionally returning PromiseLike to test error
           () => {
             return { then: () => {} };
           },
@@ -539,7 +543,7 @@ describe("effect", () => {
     it("should stop effect after dispose", async () => {
       vi.useFakeTimers();
       let runCount = 0;
-      let dispose: VoidFunction | null = null;
+      let dispose = fake<VoidFunction>();
 
       withHooks(
         {
@@ -573,7 +577,7 @@ describe("effect", () => {
     it("should clear pending retry timeout on dispose", async () => {
       vi.useFakeTimers();
       const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
-      let dispose: VoidFunction | null = null;
+      let dispose = fake<VoidFunction>();
 
       withHooks(
         {
@@ -700,13 +704,16 @@ describe("effect", () => {
         const nths: number[] = [];
         let runCount = 0;
 
-        effect((ctx) => {
-          runCount++;
-          nths.push(ctx.nth);
-          if (runCount < 3) {
-            throw new Error("Force re-run");
-          }
-        }, { onError: { maxRetries: 3, delay: 0 } });
+        effect(
+          (ctx) => {
+            runCount++;
+            nths.push(ctx.nth);
+            if (runCount < 3) {
+              throw new Error("Force re-run");
+            }
+          },
+          { onError: { maxRetries: 3, delay: 0 } }
+        );
 
         // Wait for retries
         return new Promise<void>((resolve) => {
@@ -788,7 +795,7 @@ describe("effect", () => {
 
       it("should run cleanups in LIFO order", () => {
         const order: number[] = [];
-        let dispose: VoidFunction | null = null;
+        let dispose = fake<VoidFunction>();
 
         withHooks(
           {
@@ -812,8 +819,8 @@ describe("effect", () => {
 
       it("should allow unregistering cleanup", () => {
         const cleanup = vi.fn();
-        let unregister: VoidFunction | null = null;
-        let dispose: VoidFunction | null = null;
+        let unregister = fake<VoidFunction>();
+        let dispose = fake<VoidFunction>();
 
         withHooks(
           {
@@ -837,7 +844,7 @@ describe("effect", () => {
 
     describe("signal", () => {
       it("should provide AbortSignal", () => {
-        let capturedSignal: AbortSignal | null = null;
+        let capturedSignal = fake<AbortSignal>();
 
         effect((ctx) => {
           capturedSignal = ctx.signal;
@@ -848,8 +855,8 @@ describe("effect", () => {
       });
 
       it("should abort signal on dispose", () => {
-        let capturedSignal: AbortSignal | null = null;
-        let dispose: VoidFunction | null = null;
+        let capturedSignal = fake<AbortSignal>();
+        let dispose = fake<VoidFunction>();
 
         withHooks(
           {
@@ -873,7 +880,7 @@ describe("effect", () => {
 
       it("should create signal lazily", () => {
         let signalAccessed = false;
-        let dispose: VoidFunction | null = null;
+        let dispose = fake<VoidFunction>();
 
         withHooks(
           {
@@ -908,7 +915,7 @@ describe("effect", () => {
 
       it("should never resolve if effect is disposed", async () => {
         let safePromise: Promise<string> | null = null;
-        let dispose: VoidFunction | null = null;
+        let dispose = fake<VoidFunction>();
         let resolved = false;
 
         withHooks(
@@ -949,8 +956,8 @@ describe("effect", () => {
       });
 
       it("should never reject if effect is disposed", async () => {
-        let safePromise: Promise<string> | null = null;
-        let dispose: VoidFunction | null = null;
+        let safePromise: Promise<string> | null = null as any;
+        let dispose: VoidFunction | null = null as any;
         let rejected = false;
 
         withHooks(
@@ -985,7 +992,7 @@ describe("effect", () => {
 
     describe("safe(callback)", () => {
       it("should run callback if effect is still active", () => {
-        let safeCallback: ((value: string) => string) | null = null;
+        let safeCallback = fake<(value: string) => string | undefined>();
 
         effect((ctx) => {
           safeCallback = ctx.safe((value: string) => value.toUpperCase());
@@ -996,8 +1003,8 @@ describe("effect", () => {
       });
 
       it("should not run callback if effect is disposed", () => {
-        let safeCallback: ((value: string) => string) | null = null;
-        let dispose: VoidFunction | null = null;
+        let safeCallback = fake<(value: string) => string | undefined>();
+        let dispose = fake<VoidFunction>();
 
         withHooks(
           {
@@ -1019,10 +1026,9 @@ describe("effect", () => {
       });
 
       it("should not run callback if effect has re-run", () => {
-        let firstCallback: ((value: string) => string) | null = null;
-        let secondCallback: ((value: string) => string) | null = null;
+        let firstCallback = fake<(value: string) => string | undefined>();
+
         let runCount = 0;
-        let triggerRerun: VoidFunction | null = null;
 
         withHooks(
           {
@@ -1036,8 +1042,6 @@ describe("effect", () => {
               const cb = ctx.safe((value: string) => `run${runCount}:${value}`);
               if (runCount === 1) {
                 firstCallback = cb;
-              } else {
-                secondCallback = cb;
               }
             });
           }
@@ -1049,4 +1053,3 @@ describe("effect", () => {
     });
   });
 });
-

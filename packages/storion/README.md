@@ -282,9 +282,7 @@ export const settingsStore = store({
 
     return {
       // Direct value
-      setTheme: (theme: "light" | "dark") => {
-        setTheme(theme);
-      },
+      setTheme,
 
       // Reducer - returns new value
       toggleTheme: () => {
@@ -1026,6 +1024,72 @@ testApp.clear(); // Clear all cached instances
 testApp.dispose(); // Dispose container and all instances
 ```
 
+### Parameterized Factories with `create()`
+
+**The problem:** Some services need configuration at creation time (database connections, loggers with namespaces, API clients with different endpoints). But `get()` only works with parameterless factories since it caches instances.
+
+**With Storion:** Use `create()` for parameterized factories. Unlike `get()`, `create()` always returns fresh instances and supports additional arguments.
+
+```ts
+import { store, container, type Resolver } from "storion";
+
+// Parameterized factory - receives resolver + custom args
+function createLogger(resolver: Resolver, namespace: string) {
+  return {
+    info: (msg: string) => console.log(`[${namespace}] INFO: ${msg}`),
+    error: (msg: string) => console.error(`[${namespace}] ERROR: ${msg}`),
+  };
+}
+
+function createDatabase(
+  resolver: Resolver,
+  config: { host: string; port: number }
+) {
+  return {
+    query: (sql: string) =>
+      fetch(`http://${config.host}:${config.port}/query`, {
+        method: "POST",
+        body: sql,
+      }),
+    close: () => {
+      /* cleanup */
+    },
+  };
+}
+
+// Use in store setup
+const userStore = store({
+  name: "user",
+  state: { users: [] as User[] },
+  setup({ create }) {
+    // Each call creates a fresh instance with specific config
+    const logger = create(createLogger, "user-store");
+    const db = create(createDatabase, { host: "localhost", port: 5432 });
+
+    return {
+      fetchUsers: async () => {
+        logger.info("Fetching users...");
+        await db.query("SELECT * FROM users");
+      },
+    };
+  },
+});
+
+// Also works with container directly
+const app = container();
+const authLogger = app.create(createLogger, "auth");
+const adminDb = app.create(createDatabase, { host: "admin.db", port: 5433 });
+```
+
+**Key differences between `get()` and `create()`:**
+
+| Feature    | `get()`                     | `create()`                                    |
+| ---------- | --------------------------- | --------------------------------------------- |
+| Caching    | Yes (singleton per factory) | No (always fresh)                             |
+| Arguments  | None (parameterless only)   | Supports additional arguments                 |
+| Use case   | Shared services             | Configured instances, child stores            |
+| Middleware | Applied                     | Applied (without args) / Bypassed (with args) |
+
 ### Middleware
 
 **The problem:** You need cross-cutting behavior (logging, persistence, devtools) applied to some or all stores, without modifying each store individually.
@@ -1145,8 +1209,11 @@ const myStore = store({
 ```ts
 interface StoreContext<TState, TActions> {
   state: TState; // First-level props only (state.x = y)
-  get<T>(spec: StoreSpec<T>): StoreTuple; // Get dependency store
-  get<T>(factory: Factory<T>): T; // Get DI service
+  get<T>(spec: StoreSpec<T>): StoreTuple; // Get dependency store (cached)
+  get<T>(factory: Factory<T>): T; // Get DI service (cached)
+  create<T>(spec: StoreSpec<T>): StoreInstance<T>; // Create child store (fresh)
+  create<T>(factory: Factory<T>): T; // Create service (fresh)
+  create<R, A>(factory: (r, ...a: A) => R, ...a: A): R; // Parameterized factory
   focus<P extends Path>(path: P): Focus; // Lens-like accessor
   update(fn: (draft: TState) => void): void; // For nested/array mutations
   dirty(prop?: keyof TState): boolean; // Check if state changed
@@ -1156,6 +1223,29 @@ interface StoreContext<TState, TActions> {
 ```
 
 > **Note:** `state` allows direct assignment only for first-level properties. Use `update()` for nested objects, arrays, or batch updates.
+
+**`get()` vs `create()` — When to use each:**
+
+| Method     | Caching  | Use case                                               |
+| ---------- | -------- | ------------------------------------------------------ |
+| `get()`    | Cached   | Shared dependencies, singleton services                |
+| `create()` | No cache | Child stores, parameterized factories, fresh instances |
+
+```ts
+setup({ get, create }) {
+  // get() - cached, same instance every time
+  const api = get(apiService); // Singleton
+
+  // create() - fresh instance each call
+  const childStore = create(childSpec); // New store instance
+
+  // create() with arguments - parameterized factory
+  const db = create(createDatabase, { host: 'localhost', port: 5432 });
+  const logger = create(createLogger, 'auth-store');
+
+  return { /* ... */ };
+}
+```
 
 ### React (`storion/react`)
 
@@ -1171,10 +1261,13 @@ interface StoreContext<TState, TActions> {
 #### useStore Selector
 
 ```ts
-// Selector receives context with get() for accessing stores
-const result = useStore(({ get, mixin, once }) => {
+// Selector receives context with get(), create(), mixin(), once()
+const result = useStore(({ get, create, mixin, once }) => {
   const [state, actions] = get(myStore);
-  const service = get(myFactory);
+  const service = get(myFactory); // Cached
+
+  // create() for parameterized factories (fresh instance each render)
+  const logger = create(createLogger, "my-component");
 
   // Run once on mount
   once(() => actions.init());

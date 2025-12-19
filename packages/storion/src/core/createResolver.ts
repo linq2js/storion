@@ -38,6 +38,7 @@ import type {
   StoreSpec,
 } from "../types";
 import { isSpec } from "../is";
+import { tryDispose } from "./disposable";
 
 // Re-export types for convenience
 export type {
@@ -170,10 +171,19 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
       return instance;
     },
 
-    create<T>(factory: Factory<T>): T {
+    create<T>(factory: Factory<T>, ...args: any[]): T {
       // Use mapped factory for creation (no caching)
       // Pass invokeResolver if provided (for container to inject itself)
-      return invoke(resolve(factory), invokeResolverOption ?? resolver);
+      const resolverForCtx = invokeResolverOption ?? resolver;
+
+      // If additional args provided, this is a parameterized factory
+      // Call directly without middleware (parameterized factories are simple creators)
+      if (args.length > 0) {
+        return (factory as any)(resolverForCtx, ...args);
+      }
+
+      // Standard factory - use middleware chain
+      return invoke(resolve(factory), resolverForCtx);
     },
 
     set<T>(factory: Factory<T>, override: Factory<T>): void {
@@ -207,14 +217,7 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
       const instance = cache.get(factory);
       if (instance) {
         // Try to call dispose if the instance has it
-        if (
-          instance &&
-          typeof instance === "object" &&
-          "dispose" in instance &&
-          typeof (instance as { dispose: unknown }).dispose === "function"
-        ) {
-          (instance as { dispose: () => void }).dispose();
-        }
+        tryDispose(instance);
         cache.delete(factory);
         return true;
       }
@@ -224,14 +227,7 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
     clear(): void {
       // Try to dispose all cached instances
       for (const instance of cache.values()) {
-        if (
-          instance &&
-          typeof instance === "object" &&
-          "dispose" in instance &&
-          typeof (instance as { dispose: unknown }).dispose === "function"
-        ) {
-          (instance as { dispose: () => void }).dispose();
-        }
+        tryDispose(instance);
       }
       cache.clear();
     },

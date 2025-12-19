@@ -75,6 +75,68 @@ describe("createResolver", () => {
       expect(cached.id).toBe(2);
       expect(stillCached).toBe(cached);
     });
+
+    it("should support parameterized factories with additional arguments", () => {
+      const createLogger = (
+        _resolver: Resolver,
+        namespace: string,
+        level: number
+      ) => ({
+        namespace,
+        level,
+        log: (msg: string) => `[${namespace}:${level}] ${msg}`,
+      });
+
+      const resolver = createResolver();
+
+      const logger1 = resolver.create(createLogger, "auth", 1);
+      const logger2 = resolver.create(createLogger, "api", 2);
+
+      expect(logger1.namespace).toBe("auth");
+      expect(logger1.level).toBe(1);
+      expect(logger1.log("test")).toBe("[auth:1] test");
+
+      expect(logger2.namespace).toBe("api");
+      expect(logger2.level).toBe(2);
+      expect(logger2.log("test")).toBe("[api:2] test");
+
+      // Each call creates a fresh instance
+      expect(logger1).not.toBe(logger2);
+    });
+
+    it("should pass resolver as first argument to parameterized factory", () => {
+      const otherFactory: Factory<{ value: number }> = () => ({ value: 42 });
+
+      const createService = (resolver: Resolver, multiplier: number) => {
+        const other = resolver.get(otherFactory);
+        return { result: other.value * multiplier };
+      };
+
+      const resolver = createResolver();
+
+      const service = resolver.create(createService, 2);
+
+      expect(service.result).toBe(84);
+    });
+
+    it("should create fresh instances for each parameterized factory call", () => {
+      let callCount = 0;
+      const createCounter = (_resolver: Resolver, prefix: string) => ({
+        id: ++callCount,
+        prefix,
+      });
+
+      const resolver = createResolver();
+
+      const c1 = resolver.create(createCounter, "a");
+      const c2 = resolver.create(createCounter, "a");
+      const c3 = resolver.create(createCounter, "b");
+
+      expect(c1.id).toBe(1);
+      expect(c2.id).toBe(2);
+      expect(c3.id).toBe(3);
+      expect(c1).not.toBe(c2);
+    });
   });
 
   describe("set (override)", () => {

@@ -533,7 +533,33 @@ export interface StoreContext<TState extends StateBase = StateBase>
    *   };
    * }
    */
-  create<T>(factory: (...args: any[]) => T): T;
+  create<T>(factory: (resolver: Resolver) => T): T;
+
+  /**
+   * Create a service or factory instance with additional arguments.
+   * The factory receives the resolver as the first argument, followed by custom args.
+   *
+   * Unlike `get()` which only supports parameterless factories, `create()` supports
+   * parameterized factories that need additional configuration.
+   *
+   * @example
+   * setup: (ctx) => {
+   *   // Create a database connection with specific config
+   *   const db = ctx.create(createDatabase, { host: 'localhost', port: 5432 });
+   *
+   *   // Create a logger with a namespace
+   *   const logger = ctx.create(createLogger, 'auth-store');
+   *
+   *   return {
+   *     getData: async () => db.query('SELECT * FROM users'),
+   *     log: (msg: string) => logger.info(msg),
+   *   };
+   * }
+   */
+  create<TResult, TArgs extends [any, ...any[]]>(
+    factory: (resolver: Resolver, ...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult;
 
   /**
    * Update state using Immer-style updater function or partial object.
@@ -1061,6 +1087,22 @@ export interface Resolver {
   create<T>(factory: Factory<T>): T;
 
   /**
+   * Create a fresh instance from a parameterized factory (bypasses cache).
+   * The factory receives the resolver as the first argument, followed by custom args.
+   *
+   * Unlike `get()` which only supports parameterless factories, `create()` supports
+   * parameterized factories that need additional configuration.
+   *
+   * @example
+   * const db = resolver.create(createDatabase, { host: 'localhost' });
+   * const logger = resolver.create(createLogger, 'my-namespace');
+   */
+  create<TResult, TArgs extends [any, ...any[]]>(
+    factory: (resolver: Resolver, ...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult;
+
+  /**
    * Override a factory with a custom implementation.
    * Useful for testing or environment-specific behavior.
    * Clears the cached instance if one exists.
@@ -1154,6 +1196,22 @@ export interface StoreContainer extends StorionObject<"container"> {
    * Returns the instance directly.
    */
   create<T>(factory: Factory<T>): T;
+
+  /**
+   * Create a fresh instance from a parameterized factory (bypasses cache).
+   * The factory receives the resolver as the first argument, followed by custom args.
+   *
+   * Unlike `get()` which only supports parameterless factories, `create()` supports
+   * parameterized factories that need additional configuration.
+   *
+   * @example
+   * const db = container.create(createDatabase, { host: 'localhost' });
+   * const logger = container.create(createLogger, 'my-namespace');
+   */
+  create<TResult, TArgs extends [any, ...any[]]>(
+    factory: (resolver: Resolver, ...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult;
 
   /**
    * Override a spec with a custom implementation.
@@ -1252,7 +1310,23 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
    * const db = get(indexedDBService);
    * await db.users.getAll();
    */
-  get<T>(factory: (...args: any[]) => T): T;
+  get<T>(factory: (resolver: Resolver) => T): T;
+
+  /**
+   * Create a fresh instance from a parameterized factory (bypasses cache).
+   * The factory receives the resolver as the first argument, followed by custom args.
+   *
+   * Unlike `get()` which only supports parameterless factories, `create()` supports
+   * parameterized factories that need additional configuration.
+   *
+   * @example
+   * const db = create(createDatabase, { host: 'localhost' });
+   * const logger = create(createLogger, 'my-namespace');
+   */
+  create<TResult, TArgs extends [any, ...any[]]>(
+    factory: (resolver: Resolver, ...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult;
 
   /**
    * Apply a mixin to compose reusable selector logic.
@@ -1324,3 +1398,7 @@ export type SingleOrMultipleListeners<T> =
  * Equality function type for pick().
  */
 export type PickEquality<T> = Equality<T>;
+
+export interface Disposable {
+  dispose: VoidFunction | (VoidFunction | Disposable)[];
+}

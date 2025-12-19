@@ -25,6 +25,7 @@ import { emitter } from "../emitter";
 import { untrack } from "./tracking";
 import { isSpec } from "../is";
 import { createResolver } from "./createResolver";
+import { tryDispose } from "./disposable";
 
 // ==========================================================================
 // Default Middleware
@@ -159,9 +160,11 @@ export const container: ContainerFn = function (
       return instance;
     },
 
-    create(specOrFactory: any): any {
+    create(specOrFactory: any, ...args: any[]): any {
       // Delegate to resolver (no caching)
-      const instance = untrack(() => internalResolver.create(specOrFactory));
+      const instance = untrack(() =>
+        internalResolver.create(specOrFactory, ...(args as any))
+      );
 
       // Track stores (but not in creation order since it's a fresh instance)
       if (isSpec(specOrFactory)) {
@@ -187,9 +190,7 @@ export const container: ContainerFn = function (
       const existing = internalResolver.tryGet(spec) as
         | StoreInstance<S, A>
         | undefined;
-      if (existing) {
-        existing.dispose();
-      }
+      tryDispose(existing);
       internalResolver.set(spec, override);
     },
 
@@ -209,7 +210,7 @@ export const container: ContainerFn = function (
         | undefined;
       if (instance) {
         // dispose() triggers onDispose which removes from resolver
-        instance.dispose();
+        tryDispose(instance);
         return true;
       }
       return false;
@@ -222,9 +223,7 @@ export const container: ContainerFn = function (
         const instance = internalResolver.tryGet(spec) as
           | StoreInstance<any, any>
           | undefined;
-        if (instance) {
-          instance.dispose();
-        }
+        tryDispose(instance);
       }
       internalResolver.clear();
       instancesById.clear();
