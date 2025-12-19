@@ -20,7 +20,7 @@ describe("store()", () => {
       }),
     });
 
-    expect(counter).toHaveProperty("name", "counter");
+    expect(counter).toHaveProperty("displayName", "counter");
     expect(counter).toHaveProperty("options");
     expect(counter.options.state).toEqual({ count: 0 });
   });
@@ -31,7 +31,7 @@ describe("store()", () => {
       setup: () => ({}),
     });
 
-    expect(counter.name).toMatch(/^spec-\d+$/);
+    expect(counter.displayName).toMatch(/^spec-\d+$/);
     expect(counter.options).toBeDefined();
   });
 });

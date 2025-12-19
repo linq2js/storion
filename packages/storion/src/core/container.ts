@@ -18,7 +18,9 @@ import {
   type StoreContainer,
   type ContainerOptions,
   type StoreMiddleware,
+  type StoreMiddlewareContext,
   type Factory,
+  type Resolver,
 } from "../types";
 
 import { emitter } from "../emitter";
@@ -128,27 +130,42 @@ export const container: ContainerFn = function (
 
   /**
    * Build middleware chain for store creation.
+   * Uses StoreMiddlewareContext which always has `spec` available.
+   * Middleware runs in order: first middleware wraps second, etc.
    */
   function buildMiddlewareChain(): <S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>
   ) => StoreInstance<S, A> {
-    // Start with direct spec invocation
-    let chain: StoreMiddleware = (spec, next) => next(spec);
-
-    // Wrap in reverse order so first middleware runs first
-    for (let i = middleware.length - 1; i >= 0; i--) {
-      const currentMiddleware = middleware[i];
-      const nextInChain = chain;
-      chain = (spec, next) =>
-        currentMiddleware(spec, (s) => nextInChain(s, next));
-    }
-
-    // Return function that starts the chain
-    // Note: Cast containerApi as Resolver since StoreSpec expects Resolver
-    // StoreContainer has compatible methods for what StoreSpec needs
+    // Return function that builds and executes the chain
     return <S extends StateBase, A extends ActionsBase>(
       spec: StoreSpec<S, A>
-    ) => chain(spec, (s) => s(containerApi as any)) as StoreInstance<S, A>;
+    ): StoreInstance<S, A> => {
+      // Build the chain starting from the first middleware
+      let index = 0;
+
+      const executeNext = (): StoreInstance<S, A> => {
+        if (index >= middleware.length) {
+          // End of chain - invoke the factory
+          return spec(containerApi as any);
+        }
+
+        const currentMiddleware = middleware[index];
+        index++;
+
+        // Create context for this middleware (spec is always present)
+        const ctx: StoreMiddlewareContext<S, A> = {
+          spec,
+          factory: spec,
+          resolver: containerApi as Resolver,
+          next: executeNext,
+          displayName: spec.displayName,
+        };
+
+        return currentMiddleware(ctx);
+      };
+
+      return executeNext();
+    };
   }
 
   const createWithMiddleware = buildMiddlewareChain();
@@ -256,7 +273,7 @@ export const container: ContainerFn = function (
 
       // Circular dependency check
       if (creating.has(spec)) {
-        const name = spec.name ?? "unknown";
+        const name = spec.displayName ?? "unknown";
         throw new Error(
           `Circular dependency detected: "${name}" is being created while already in creation stack.`
         );

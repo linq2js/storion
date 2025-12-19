@@ -1,17 +1,19 @@
 /**
- * Middleware utilities
+ * Middleware utilities for store containers.
  *
- * Helpers for composing and conditionally applying middleware.
+ * Helpers for composing and conditionally applying StoreMiddleware.
  */
 
+import { isSpec } from "../is";
 import type {
+  StoreMiddleware,
+  StoreMiddlewareContext,
   StateBase,
   ActionsBase,
-  StoreSpec,
-  StoreMiddleware,
+  StoreInstance,
 } from "../types";
 
-/** Pattern type for matching spec names */
+/** Pattern type for matching displayName */
 export type SpecPattern = string | RegExp;
 
 /**
@@ -55,60 +57,65 @@ function patternToPredicate(pattern: SpecPattern): (name: string) => boolean {
 }
 
 /**
- * Convert pattern(s) to a spec predicate.
+ * Convert pattern(s) to a context predicate.
  */
 function patternsToPredicate(
   patterns: SpecPattern | SpecPattern[]
-): (spec: StoreSpec<any, any>) => boolean {
+): (ctx: StoreMiddlewareContext) => boolean {
   if (Array.isArray(patterns)) {
     const predicates = patterns.map(patternToPredicate);
-    return (spec) => predicates.some((p) => p(spec.name));
+    return (ctx) => predicates.some((p) => p(ctx.displayName));
   }
   const predicate = patternToPredicate(patterns);
-  return (spec) => predicate(spec.name);
+  return (ctx) => predicate(ctx.displayName);
 }
 
 /**
- * Compose multiple middleware into one.
+ * Compose multiple store middleware into one.
  * Middleware are applied in order (first middleware wraps the chain).
  */
-export function compose(
-  ...middlewares: StoreMiddleware[]
-): StoreMiddleware {
+export function compose(...middlewares: StoreMiddleware[]): StoreMiddleware {
   if (middlewares.length === 0) {
-    return (spec, next) => next(spec);
+    return (ctx) => ctx.next();
   }
   if (middlewares.length === 1) {
     return middlewares[0];
   }
 
   return <S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>,
-    next: (spec: StoreSpec<S, A>) => StoreInstance<S, A>
-  ) => {
-    // Build chain from right to left
-    let chain = next;
-    for (let i = middlewares.length - 1; i >= 0; i--) {
-      const middleware = middlewares[i];
-      const prevChain = chain;
-      chain = (s) => middleware(s, prevChain);
-    }
-    return chain(spec);
+    ctx: StoreMiddlewareContext<S, A>
+  ): StoreInstance<S, A> => {
+    let index = 0;
+
+    const executeNext = (): StoreInstance<S, A> => {
+      if (index >= middlewares.length) {
+        return ctx.next();
+      }
+      const currentMiddleware = middlewares[index];
+      index++;
+
+      // Create a new context with updated next function
+      const wrappedCtx: StoreMiddlewareContext<S, A> = {
+        ...ctx,
+        next: executeNext,
+      };
+
+      return currentMiddleware(wrappedCtx);
+    };
+
+    return executeNext();
   };
 }
-
-// Import StoreInstance for type
-import type { StoreInstance } from "../types";
 
 /**
  * Conditionally apply middleware based on a predicate or pattern(s).
  *
  * @overload Apply middleware when predicate returns true
- * @param predicate - Function that receives spec and returns whether to apply middleware
+ * @param predicate - Function that receives context and returns whether to apply middleware
  * @param middleware - Middleware or array of middleware to apply
  *
  * @overload Apply middleware for matching pattern(s)
- * @param patterns - Pattern or array of patterns to match spec names
+ * @param patterns - Pattern or array of patterns to match displayName
  * @param middleware - Middleware or array of middleware to apply
  *
  * Pattern types:
@@ -136,7 +143,7 @@ import type { StoreInstance } from "../types";
  *
  * // Predicate function
  * applyFor(
- *   (spec) => spec.options.meta?.persist === true,
+ *   (ctx) => ctx.spec.options.meta?.persist === true,
  *   persistMiddleware
  * );
  *
@@ -145,7 +152,7 @@ import type { StoreInstance } from "../types";
  * ```
  */
 export function applyFor(
-  predicate: (spec: StoreSpec<any, any>) => boolean,
+  predicate: (ctx: StoreMiddlewareContext) => boolean,
   middleware: StoreMiddleware | StoreMiddleware[]
 ): StoreMiddleware;
 export function applyFor(
@@ -154,13 +161,15 @@ export function applyFor(
 ): StoreMiddleware;
 export function applyFor(
   predicateOrPatterns:
-    | ((spec: StoreSpec<any, any>) => boolean)
+    | ((ctx: StoreMiddlewareContext) => boolean)
     | SpecPattern
     | SpecPattern[],
   middleware: StoreMiddleware | StoreMiddleware[]
 ): StoreMiddleware {
   // Normalize predicate
-  const predicate: (spec: StoreSpec<any, any>) => boolean =
+  const predicate: (
+    ctx: StoreMiddlewareContext<StateBase, ActionsBase>
+  ) => boolean =
     typeof predicateOrPatterns === "function"
       ? predicateOrPatterns
       : patternsToPredicate(predicateOrPatterns);
@@ -172,13 +181,22 @@ export function applyFor(
 
   // Return conditional middleware
   return <S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>,
-    next: (spec: StoreSpec<S, A>) => StoreInstance<S, A>
-  ) => {
-    if (predicate(spec)) {
-      return composedMiddleware(spec, next);
+    ctx: StoreMiddlewareContext<S, A>
+  ): StoreInstance<S, A> => {
+    if (isSpec(ctx.factory)) {
+      const spec = ctx.factory;
+      const storeMiddlewareCtx = {
+        ...ctx,
+        spec,
+      } as unknown as StoreMiddlewareContext<StateBase, ActionsBase>;
+      if (predicate(storeMiddlewareCtx)) {
+        return composedMiddleware(
+          storeMiddlewareCtx as unknown as StoreMiddlewareContext<S, A>
+        );
+      }
     }
-    return next(spec);
+
+    return ctx.next();
   };
 }
 
@@ -186,7 +204,7 @@ export function applyFor(
  * Apply middleware to all stores except those matching predicate or pattern(s).
  *
  * @overload Exclude stores matching predicate
- * @param predicate - Function that receives spec and returns whether to exclude
+ * @param predicate - Function that receives context and returns whether to exclude
  * @param middleware - Middleware or array of middleware to apply
  *
  * @overload Exclude stores matching pattern(s)
@@ -197,7 +215,7 @@ export function applyFor(
  * ```ts
  * // Exclude by predicate
  * applyExcept(
- *   (spec) => spec.name.startsWith("_"),
+ *   (ctx) => ctx.displayName.startsWith("_"),
  *   loggingMiddleware
  * );
  *
@@ -213,7 +231,7 @@ export function applyFor(
  * ```
  */
 export function applyExcept(
-  predicate: (spec: StoreSpec<any, any>) => boolean,
+  predicate: (ctx: StoreMiddlewareContext) => boolean,
   middleware: StoreMiddleware | StoreMiddleware[]
 ): StoreMiddleware;
 export function applyExcept(
@@ -222,20 +240,19 @@ export function applyExcept(
 ): StoreMiddleware;
 export function applyExcept(
   predicateOrPatterns:
-    | ((spec: StoreSpec<any, any>) => boolean)
+    | ((ctx: StoreMiddlewareContext) => boolean)
     | SpecPattern
     | SpecPattern[],
   middleware: StoreMiddleware | StoreMiddleware[]
 ): StoreMiddleware {
   // Convert to predicate and invert
-  const matchPredicate: (spec: StoreSpec<any, any>) => boolean =
+  const matchPredicate: (ctx: StoreMiddlewareContext) => boolean =
     typeof predicateOrPatterns === "function"
       ? predicateOrPatterns
       : patternsToPredicate(predicateOrPatterns);
 
-  const invertedPredicate = (spec: StoreSpec<any, any>) =>
-    !matchPredicate(spec);
+  const invertedPredicate = (ctx: StoreMiddlewareContext) =>
+    !matchPredicate(ctx);
 
   return applyFor(invertedPredicate, middleware);
 }
-

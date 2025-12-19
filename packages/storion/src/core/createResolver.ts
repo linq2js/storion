@@ -27,7 +27,14 @@
  * ```
  */
 
-import type { Factory, Middleware, Resolver, ResolverOptions } from "../types";
+import type {
+  Factory,
+  Middleware,
+  Resolver,
+  ResolverOptions,
+  StoreSpec,
+} from "../types";
+import { isSpec } from "../is";
 
 // Re-export types for convenience
 export type {
@@ -37,6 +44,35 @@ export type {
   Resolver,
   ResolverOptions,
 } from "../types";
+
+/**
+ * Extract displayName from a factory function.
+ * - For StoreSpec: uses spec.displayName
+ * - For factory with displayName property: uses factory.displayName
+ * - For named function: uses function.name
+ * - Otherwise: undefined
+ */
+function extractDisplayName(factory: Factory): string | undefined {
+  // Check if it's a store spec
+  if (isSpec(factory)) {
+    return (factory as StoreSpec).displayName;
+  }
+
+  // Check for displayName property (custom annotation)
+  if (
+    typeof (factory as any).displayName === "string" &&
+    (factory as any).displayName
+  ) {
+    return (factory as any).displayName;
+  }
+
+  // Fall back to function name if it exists and is not anonymous
+  if (factory.name && factory.name !== "") {
+    return factory.name;
+  }
+
+  return undefined;
+}
 
 // =============================================================================
 // Implementation
@@ -64,6 +100,9 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
    * Apply middleware chain and invoke factory.
    */
   const invoke = <T>(factory: Factory<T>, resolver: Resolver): T => {
+    // Extract displayName and spec for context
+    const displayName = extractDisplayName(factory);
+
     // Build middleware chain from right to left
     // Each middleware wraps the next, with factory invocation at the end
     const chain = middleware.reduceRight<() => T>(
@@ -72,6 +111,7 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
           factory,
           resolver,
           next,
+          displayName,
         }),
       () => factory(resolver)
     );

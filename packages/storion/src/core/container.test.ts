@@ -605,7 +605,7 @@ describe("autoDispose lifetime", () => {
 
 describe("container middleware", () => {
   it("should call middleware during store creation", () => {
-    const middlewareFn = vi.fn((spec, next) => next(spec));
+    const middlewareFn = vi.fn((ctx) => ctx.next());
 
     const counter = store({
       name: "counter",
@@ -617,11 +617,16 @@ describe("container middleware", () => {
     stores.get(counter);
 
     expect(middlewareFn).toHaveBeenCalledTimes(1);
-    expect(middlewareFn).toHaveBeenCalledWith(counter, expect.any(Function));
+    expect(middlewareFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: "counter",
+        spec: counter,
+      })
+    );
   });
 
   it("should not call middleware for cached instances", () => {
-    const middlewareFn = vi.fn((spec, next) => next(spec));
+    const middlewareFn = vi.fn((ctx) => ctx.next());
 
     const counter = store({
       state: { count: 0 },
@@ -639,16 +644,16 @@ describe("container middleware", () => {
   it("should execute middleware in order", () => {
     const order: string[] = [];
 
-    const middleware1 = vi.fn((spec, next) => {
+    const middleware1 = vi.fn((ctx) => {
       order.push("m1:before");
-      const instance = next(spec);
+      const instance = ctx.next();
       order.push("m1:after");
       return instance;
     });
 
-    const middleware2 = vi.fn((spec, next) => {
+    const middleware2 = vi.fn((ctx) => {
       order.push("m2:before");
-      const instance = next(spec);
+      const instance = ctx.next();
       order.push("m2:after");
       return instance;
     });
@@ -665,8 +670,8 @@ describe("container middleware", () => {
   });
 
   it("should allow middleware to modify instance", () => {
-    const middleware = vi.fn((spec, next) => {
-      const instance = next(spec);
+    const middleware = vi.fn((ctx) => {
+      const instance = ctx.next();
       // Add custom property for testing
       (instance as any).customProp = "added-by-middleware";
       return instance;
@@ -686,9 +691,9 @@ describe("container middleware", () => {
   it("should allow logging middleware pattern", () => {
     const logs: string[] = [];
 
-    const loggingMiddleware = vi.fn((spec, next) => {
-      logs.push(`Creating: ${spec.name}`);
-      const instance = next(spec);
+    const loggingMiddleware = vi.fn((ctx) => {
+      logs.push(`Creating: ${ctx.displayName}`);
+      const instance = ctx.next();
       logs.push(`Created: ${instance.id}`);
       return instance;
     });
@@ -716,7 +721,7 @@ describe("container middleware", () => {
       disposed: false,
     };
 
-    const interceptMiddleware = vi.fn((_spec, _next) => {
+    const interceptMiddleware = vi.fn((_ctx) => {
       // Return mock instead of calling next
       return mockInstance as any;
     });
@@ -736,9 +741,9 @@ describe("container middleware", () => {
   it("should work with multiple stores", () => {
     const createdStores: string[] = [];
 
-    const trackingMiddleware = vi.fn((spec, next) => {
-      createdStores.push(spec.name ?? "unnamed");
-      return next(spec);
+    const trackingMiddleware = vi.fn((ctx) => {
+      createdStores.push(ctx.displayName ?? "unnamed");
+      return ctx.next();
     });
 
     const storeA = store({

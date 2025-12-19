@@ -3,17 +3,19 @@
  *
  * This middleware:
  * - Tracks all stores created in the container
- * - Injects __revertState and __takeSnapshot actions
+ * - Injects __revertState and __takeSnapshot actions for stores
  * - Records state history (last N changes)
  * - Exposes a controller to window.__STORION_DEVTOOLS__
  */
 
 import type {
   StoreMiddleware,
+  StoreMiddlewareContext,
   StoreSpec,
   StoreInstance,
   StateBase,
   ActionsBase,
+  Resolver,
 } from "../types";
 import { STORION_TYPE } from "../types";
 import { createStoreInstance } from "../core/store";
@@ -74,98 +76,123 @@ export function devtoolsMiddleware(
     actionArgs?: unknown[]
   ) => void;
 
-  // Return middleware function
+  // Return StoreMiddleware function - spec is always present
   return <S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>,
-    next: (spec: StoreSpec<S, A>) => StoreInstance<S, A>
+    ctx: StoreMiddlewareContext<S, A>
   ): StoreInstance<S, A> => {
-    // Wrap the setup function to inject devtools actions
-    const originalSetup = spec.options.setup;
+    const { spec, resolver } = ctx;
 
-    // Create modified options with devtools actions injected
-    const modifiedOptions = {
-      ...spec.options,
-      setup: (context: any) => {
-        // Call original setup
-        const originalActions = originalSetup(context);
-
-        // Create devtools actions
-        const devtoolsActions: DevtoolsActions = {
-          __revertState: (newState: Record<string, unknown>) => {
-            // Use update to replace state
-            context.update(() => newState as any);
-          },
-          __takeSnapshot: () => {
-            // Trigger a snapshot (placeholder - controller handles this)
-          },
-        };
-
-        // Return merged actions
-        return {
-          ...originalActions,
-          ...devtoolsActions,
-        } as A & DevtoolsActions;
-      },
-    };
-
-    // Create a new callable spec with modified options
-    // StoreSpec is now a callable function that creates instances
-    const modifiedSpec = function (resolver: any) {
-      return createStoreInstance(modifiedSpec as any, resolver, {});
-    } as StoreSpec<S, A>;
-
-    // Assign properties to make it a valid StoreSpec
-    Object.defineProperties(modifiedSpec, {
-      [STORION_TYPE]: { value: "store.spec", enumerable: false },
-      name: { value: spec.name, enumerable: true, writable: false },
-      options: { value: modifiedOptions, enumerable: true, writable: false },
-    });
-
-    // Create instance with modified spec
-    const instance = next(modifiedSpec);
-
-    // Register store with devtools
-    registerStore({
-      id: instance.id,
-      name: spec.name,
-      state: { ...instance.state },
-      disposed: false,
-      instance,
-      createdAt: Date.now(),
-      meta: spec.options.meta,
-    });
-
-    // Track last action for associating with state changes
-    let lastAction: { name: string; args: unknown[] } | null = null;
-
-    // Subscribe to action dispatches to track which action caused the change
-    const unsubscribeActions = instance.subscribe("@*", (event: any) => {
-      const { next } = event;
-      // Skip devtools internal actions
-      if (typeof next.name === "string" && next.name.startsWith("__")) return;
-      lastAction = { name: next.name, args: next.args };
-    });
-
-    // Subscribe to STATE changes (fires after mutations complete)
-    const unsubscribeState = instance.subscribe(() => {
-      recordStateChange(
-        instance.id,
-        { ...instance.state },
-        lastAction?.name,
-        lastAction?.args
-      );
-      lastAction = null; // Reset after recording
-    });
-
-    // Handle disposal
-    instance.onDispose(() => {
-      unsubscribeActions();
-      unsubscribeState();
-      unregisterStore(instance.id);
-    });
-
-    return instance;
+    return handleStoreCreation(
+      spec,
+      resolver,
+      registerStore,
+      unregisterStore,
+      recordStateChange
+    );
   };
+}
+
+/**
+ * Handle store-specific devtools features.
+ */
+function handleStoreCreation<S extends StateBase, A extends ActionsBase>(
+  spec: StoreSpec<S, A>,
+  resolver: Resolver,
+  registerStore: (entry: any) => void,
+  unregisterStore: (id: string) => void,
+  recordStateChange: (
+    id: string,
+    state: any,
+    action?: string,
+    actionArgs?: unknown[]
+  ) => void
+): StoreInstance<S, A> {
+  // Wrap the setup function to inject devtools actions
+  const originalSetup = spec.options.setup;
+
+  // Create modified options with devtools actions injected
+  const modifiedOptions = {
+    ...spec.options,
+    setup: (context: any) => {
+      // Call original setup
+      const originalActions = originalSetup(context);
+
+      // Create devtools actions
+      const devtoolsActions: DevtoolsActions = {
+        __revertState: (newState: Record<string, unknown>) => {
+          // Use update to replace state
+          context.update(() => newState as any);
+        },
+        __takeSnapshot: () => {
+          // Trigger a snapshot (placeholder - controller handles this)
+        },
+      };
+
+      // Return merged actions
+      return {
+        ...originalActions,
+        ...devtoolsActions,
+      } as A & DevtoolsActions;
+    },
+  };
+
+  // Create a new callable spec with modified options
+  // StoreSpec is now a callable function that creates instances
+  const modifiedSpec = function (r: Resolver) {
+    return createStoreInstance(modifiedSpec as any, r, {});
+  } as StoreSpec<S, A>;
+
+  // Assign properties to make it a valid StoreSpec
+  Object.defineProperties(modifiedSpec, {
+    [STORION_TYPE]: { value: "store.spec", enumerable: false },
+    displayName: { value: spec.displayName, enumerable: true, writable: false },
+    options: { value: modifiedOptions, enumerable: true, writable: false },
+  });
+
+  // Create instance with modified spec
+  const instance = modifiedSpec(resolver);
+
+  // Register store with devtools
+  registerStore({
+    id: instance.id,
+    name: spec.displayName,
+    state: { ...instance.state },
+    disposed: false,
+    instance,
+    createdAt: Date.now(),
+    meta: spec.options.meta,
+  });
+
+  // Track last action for associating with state changes
+  let lastAction: { name: string; args: unknown[] } | null = null;
+
+  // Subscribe to action dispatches to track which action caused the change
+  const unsubscribeActions = instance.subscribe("@*", (event: any) => {
+    const { next } = event;
+    // Skip devtools internal actions
+    if (typeof next.name === "string" && next.name.startsWith("__")) return;
+    lastAction = { name: next.name, args: next.args };
+  });
+
+  // Subscribe to STATE changes (fires after mutations complete)
+  const unsubscribeState = instance.subscribe(() => {
+    recordStateChange(
+      instance.id,
+      { ...instance.state },
+      lastAction?.name,
+      lastAction?.args
+    );
+    lastAction = null; // Reset after recording
+  });
+
+  // Handle disposal
+  instance.onDispose(() => {
+    unsubscribeActions();
+    unsubscribeState();
+    unregisterStore(instance.id);
+  });
+
+  return instance;
 }
 
 /**

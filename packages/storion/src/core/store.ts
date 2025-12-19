@@ -54,17 +54,22 @@ import { collection } from "../collection";
 export function store<TState extends StateBase, TActions extends ActionsBase>(
   options: StoreOptions<TState, TActions>
 ): StoreSpec<TState, TActions> {
-  const name = options.name ?? generateSpecName();
+  const displayName = options.name ?? generateSpecName();
 
   // Create callable factory function
   const spec = function (resolver: Resolver): StoreInstance<TState, TActions> {
-    return createStoreInstance(spec as StoreSpec<TState, TActions>, resolver, {});
+    return createStoreInstance(
+      spec as StoreSpec<TState, TActions>,
+      resolver,
+      {}
+    );
   } as StoreSpec<TState, TActions>;
 
   // Assign properties to make it a valid StoreSpec
+  // Note: we use displayName instead of name since name is a reserved function property
   Object.defineProperties(spec, {
     [STORION_TYPE]: { value: "store.spec", enumerable: false },
-    name: { value: name, enumerable: true, writable: false },
+    displayName: { value: displayName, enumerable: true, writable: false },
     options: { value: options, enumerable: true, writable: false },
   });
 
@@ -100,7 +105,7 @@ export function createStoreInstance<
   instanceOptions: CreateStoreInstanceOptions = {}
 ): StoreInstance<TState, TActions> {
   const options = spec.options;
-  const storeId = generateStoreId(spec.name);
+  const storeId = generateStoreId(spec.displayName);
 
   // State (immutable - replaced on each update)
   let disposed = false;

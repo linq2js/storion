@@ -216,7 +216,7 @@ class LocalStoreController<
     if (depsCount > 0) {
       this.dispose();
       throw new Error(
-        `Local store must not have dependencies, but "${this.spec.name}" has ${depsCount} dependencies. ` +
+        `Local store must not have dependencies, but "${this.spec.displayName}" has ${depsCount} dependencies. ` +
           `Use useStore() with a global container for stores with dependencies.`
       );
     }

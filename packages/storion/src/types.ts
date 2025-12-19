@@ -337,8 +337,8 @@ export interface StoreSpec<
   TState extends StateBase = StateBase,
   TActions extends ActionsBase = ActionsBase
 > extends StorionObject<"store.spec"> {
-  /** Store name for debugging */
-  readonly name: string;
+  /** Store display name for debugging (renamed from 'name' since that's a reserved function property) */
+  readonly displayName: string;
 
   /** Store options (state, setup, lifetime, etc.) */
   readonly options: StoreOptions<TState, TActions>;
@@ -874,39 +874,6 @@ export interface StoreInstance<
 // =============================================================================
 
 /**
- * Middleware function for intercepting store creation.
- *
- * Middleware can:
- * - Modify the spec before creation
- * - Call next() to get the instance
- * - Wrap or modify the instance after creation
- *
- * @example
- * // Logging middleware
- * const loggingMiddleware: StoreMiddleware = (spec, next) => {
- *   console.log(`Creating store: ${spec.name}`);
- *   const instance = next(spec);
- *   console.log(`Created store: ${instance.id}`);
- *   return instance;
- * };
- *
- * @example
- * // Wrap actions with error boundary
- * const errorBoundaryMiddleware: StoreMiddleware = (spec, next) => {
- *   const instance = next(spec);
- *   // Wrap actions here if needed
- *   return instance;
- * };
- */
-export type StoreMiddleware = <
-  S extends StateBase = StateBase,
-  A extends ActionsBase = ActionsBase
->(
-  spec: StoreSpec<S, A>,
-  next: (spec: StoreSpec<S, A>) => StoreInstance<S, A>
-) => StoreInstance<S, A>;
-
-/**
  * Container options.
  */
 export interface ContainerOptions {
@@ -930,39 +897,78 @@ export interface ContainerOptions {
 export type Factory<T = any> = (resolver: Resolver) => T;
 
 /**
- * Context passed to resolver middleware functions.
+ * Context passed to generic middleware functions (for any factory).
  */
 export interface MiddlewareContext<T = any> {
-  /** The factory being invoked */
+  /** The factory being invoked (StoreSpec or plain factory) */
   readonly factory: Factory<T>;
+
   /** The resolver instance */
   readonly resolver: Resolver;
+
   /** Call the next middleware or the factory itself */
   readonly next: () => T;
+
+  /**
+   * Display name for debugging.
+   * - For stores: spec.displayName
+   * - For factories: factory.displayName ?? factory.name ?? undefined
+   */
+  readonly displayName: string | undefined;
 }
 
 /**
- * Resolver middleware function that can intercept factory creation.
+ * Context passed to store middleware functions.
+ * Unlike MiddlewareContext, `spec` is always present.
+ */
+export interface StoreMiddlewareContext<
+  S extends StateBase = StateBase,
+  A extends ActionsBase = ActionsBase
+> extends MiddlewareContext<StoreInstance<S, A>> {
+  /** The store spec being invoked */
+  readonly spec: StoreSpec<S, A>;
+
+  /** Store display name (always present for stores) */
+  readonly displayName: string;
+}
+
+/**
+ * Generic middleware function for intercepting any factory creation.
+ * Use for resolver middleware that handles both stores and plain factories.
  *
  * @example
  * ```ts
  * const loggingMiddleware: Middleware = (ctx) => {
- *   console.log("Creating:", ctx.factory.name);
- *   const result = ctx.next();
- *   console.log("Created:", result);
- *   return result;
- * };
- *
- * // Type-specific middleware using is() guards
- * const storeMiddleware: Middleware = (ctx) => {
- *   if (is(ctx.factory, "store.spec")) {
- *     // Apply store-specific logic
+ *   if (ctx.displayName) {
+ *     console.log("Creating:", ctx.displayName);
  *   }
  *   return ctx.next();
  * };
  * ```
  */
 export type Middleware = <T>(ctx: MiddlewareContext<T>) => T;
+
+/**
+ * Store-specific middleware function.
+ * Use for container middleware where you always work with stores.
+ * The context always has `spec` available.
+ *
+ * @example
+ * ```ts
+ * const loggingMiddleware: StoreMiddleware = (ctx) => {
+ *   console.log(`Creating store: ${ctx.displayName}`);
+ *   const instance = ctx.next();
+ *   console.log(`Created: ${instance.id}`);
+ *   return instance;
+ * };
+ * ```
+ */
+export type StoreMiddleware = <
+  S extends StateBase = StateBase,
+  A extends ActionsBase = ActionsBase
+>(
+  ctx: StoreMiddlewareContext<S, A>
+) => StoreInstance<S, A>;
 
 /**
  * Options for creating a resolver.

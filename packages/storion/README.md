@@ -586,18 +586,24 @@ const userStore = store({
 
 ```ts
 import { container, compose, applyFor, applyExcept } from "storion";
+import type { StoreMiddleware } from "storion";
 
-// Logging middleware
-const loggingMiddleware = (spec, next) => {
-  const instance = next(spec);
-  console.log(`Store created: ${spec.name}`);
+// Logging middleware - ctx.spec is always available
+const loggingMiddleware: StoreMiddleware = (ctx) => {
+  console.log(`Creating store: ${ctx.displayName}`);
+  const instance = ctx.next();
+  console.log(`Created: ${instance.id}`);
   return instance;
 };
 
 // Persistence middleware
-const persistMiddleware = (spec, next) => {
-  const instance = next(spec);
-  // Add persistence logic...
+const persistMiddleware: StoreMiddleware = (ctx) => {
+  const instance = ctx.next();
+  // Access store-specific options directly
+  const isPersistent = ctx.spec.options.meta?.persist === true;
+  if (isPersistent) {
+    // Add persistence logic...
+  }
   return instance;
 };
 
@@ -613,7 +619,10 @@ const app = container({
     applyFor(["authStore", "settingsStore"], loggingMiddleware),
 
     // Apply based on custom condition
-    applyFor((spec) => spec.options.meta?.persist === true, persistMiddleware)
+    applyFor(
+      (ctx) => ctx.spec.options.meta?.persist === true,
+      persistMiddleware
+    )
   ),
 });
 ```
@@ -637,7 +646,7 @@ const app = container({
 
 ```ts
 interface StoreOptions<TState, TActions> {
-  name?: string; // Store name for debugging
+  name?: string; // Store display name for debugging (becomes spec.displayName)
   state: TState; // Initial state
   setup: (ctx: StoreContext) => TActions; // Setup function
   lifetime?: "singleton" | "autoDispose"; // Instance lifetime
@@ -715,6 +724,44 @@ interface AsyncState<T, M extends "fresh" | "stale"> {
   error: Error | undefined;
   timestamp: number | undefined;
 }
+```
+
+### Middleware
+
+| Export        | Description                                        |
+| ------------- | -------------------------------------------------- |
+| `compose`     | Compose multiple StoreMiddleware into one          |
+| `applyFor`    | Apply middleware conditionally (pattern/predicate) |
+| `applyExcept` | Apply middleware except for matching patterns      |
+
+#### StoreMiddlewareContext
+
+Container middleware uses `StoreMiddlewareContext` where `spec` is always available:
+
+```ts
+interface StoreMiddlewareContext<S, A> {
+  spec: StoreSpec<S, A>; // The store spec (always present)
+  resolver: Resolver; // The resolver/container instance
+  next: () => StoreInstance<S, A>; // Call next middleware or create the store
+  displayName: string; // Store name (always present for stores)
+}
+
+type StoreMiddleware = <S, A>(
+  ctx: StoreMiddlewareContext<S, A>
+) => StoreInstance<S, A>;
+```
+
+For generic resolver middleware (non-container), use `Middleware` with `MiddlewareContext`:
+
+```ts
+interface MiddlewareContext<T> {
+  factory: Factory<T>; // The factory being invoked
+  resolver: Resolver; // The resolver instance
+  next: () => T; // Call next middleware or the factory
+  displayName?: string; // Name (from factory.displayName or factory.name)
+}
+
+type Middleware = <T>(ctx: MiddlewareContext<T>) => T;
 ```
 
 ### Devtools (`storion/devtools`)
