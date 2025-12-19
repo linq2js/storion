@@ -7,6 +7,7 @@
 
 import type { Emitter } from "../emitter";
 import { emitter } from "../emitter";
+import { isPromiseLike } from "../utils/isPromiseLike";
 import {
   withHooks,
   getHooks,
@@ -154,14 +155,16 @@ export interface EffectContext {
  * Create an EffectContext for a single effect run.
  */
 function createEffectContext(
-  nth: number,
-  isStale: () => boolean
+  nth: number
 ): EffectContext & { _runCleanups: () => void } {
   // Lazy initialization - only create when actually used
   let cleanupEmitter: Emitter | null = null;
   let abortController: AbortController | null = null;
+  let isStale = false;
 
   const runCleanups = () => {
+    if (isStale) return;
+    isStale = true;
     // Abort signal first
     if (abortController) {
       abortController.abort();
@@ -173,6 +176,28 @@ function createEffectContext(
       cleanupEmitter.emitAndClearLifo();
     }
   };
+
+  /**
+   * return a promise that never resolves or rejects if the effect is stale
+   * @param promise - The promise to wrap
+   * @returns The wrapped promise
+   */
+  function wrapPromise<T>(promise: PromiseLike<T>): PromiseLike<T> {
+    return new Promise<T>((resolve, reject) => {
+      promise.then(
+        (value) => {
+          if (!isStale) {
+            resolve(value);
+          }
+        },
+        (error) => {
+          if (!isStale) {
+            reject(error);
+          }
+        }
+      );
+    });
+  }
 
   const context: EffectContext = {
     nth,
@@ -193,31 +218,25 @@ function createEffectContext(
       return cleanupEmitter.on(listener);
     },
 
-    safe<T>(promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)): any {
+    safe<T>(
+      promiseOrCallback: PromiseLike<T> | ((...args: unknown[]) => T)
+    ): any {
       if (promiseOrCallback instanceof Promise) {
         // Wrap promise
-        return new Promise<T>((resolve, reject) => {
-          promiseOrCallback.then(
-            (value) => {
-              if (!isStale()) {
-                resolve(value);
-              }
-              // Never resolve/reject if stale - promise stays pending
-            },
-            (error) => {
-              if (!isStale()) {
-                reject(error);
-              }
-              // Never resolve/reject if stale
-            }
-          );
-        });
+        return wrapPromise(promiseOrCallback);
       }
 
       // Wrap callback
       return (...args: unknown[]) => {
-        if (!isStale()) {
-          return (promiseOrCallback as (...args: unknown[]) => T)(...args);
+        if (!isStale) {
+          const result = (promiseOrCallback as (...args: unknown[]) => T)(
+            ...args
+          );
+          if (isPromiseLike<T>(result)) {
+            return wrapPromise<T>(result);
+          }
+
+          return result;
         }
         return undefined;
       };
@@ -484,13 +503,12 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       writtenProps.clear();
 
       // Lazy context creation
-      const isStale = () => isDisposed || runGeneration !== currentGeneration;
       let lazyContext: (EffectContext & { _runCleanups: () => void }) | null =
         null;
 
       const getOrCreateContext = () => {
         if (!lazyContext) {
-          lazyContext = createEffectContext(currentGeneration, isStale);
+          lazyContext = createEffectContext(currentGeneration);
         }
         return lazyContext;
       };

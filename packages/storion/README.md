@@ -315,9 +315,41 @@ export const settingsStore = store({
 
 ### Reactive Effects
 
-**The problem:** You need to sync with external systems (WebSocket, localStorage, event listeners) when state changes, and properly clean up when the state changes again or the component unmounts.
+**The problem:** You need to sync with external systems (WebSocket, localStorage) or compute derived state when dependencies change, and properly clean up when needed.
 
-**With Storion:** Effects automatically track which state properties you read and re-run only when those change. Register cleanup with `ctx.onCleanup()`.
+**With Storion:** Effects automatically track which state properties you read and re-run only when those change. Use them for side effects or computed state.
+
+**Example 1: Computed/Derived State**
+
+```ts
+import { store, effect } from "storion";
+
+export const userStore = store({
+  name: "user",
+  state: {
+    firstName: "",
+    lastName: "",
+    fullName: "", // Computed from firstName + lastName
+  },
+  setup({ state }) {
+    // Auto-updates fullName when firstName or lastName changes
+    effect(() => {
+      state.fullName = `${state.firstName} ${state.lastName}`.trim();
+    });
+
+    return {
+      setFirstName: (name: string) => {
+        state.firstName = name;
+      },
+      setLastName: (name: string) => {
+        state.lastName = name;
+      },
+    };
+  },
+});
+```
+
+**Example 2: External System Sync**
 
 ```ts
 import { store, effect } from "storion";
@@ -330,7 +362,6 @@ export const syncStore = store({
   },
   setup({ state }) {
     effect((ctx) => {
-      // Effect tracks state.userId and re-runs when it changes
       if (!state.userId) return;
 
       const ws = new WebSocket(`/ws?user=${state.userId}`);

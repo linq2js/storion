@@ -187,7 +187,9 @@ export type Focus<TValue> = [
    * - Reducer: `set(prev => newValue)` - returns new value
    * - Produce: `set(draft => { draft.x = y })` - immer-style mutation, no return
    */
-  setter: (valueOrReducerOrProduce: TValue | ((prev: TValue) => TValue | void)) => void
+  setter: (
+    valueOrReducerOrProduce: TValue | ((prev: TValue) => TValue | void)
+  ) => void
 ] & {
   readonly [STORION_TYPE]: "focus";
   /**
@@ -1010,12 +1012,14 @@ export interface Resolver {
 
   /**
    * Delete a cached instance.
+   * If the instance has a `dispose()` method, it will be called.
    * Returns true if an instance was deleted.
    */
   delete(factory: Factory): boolean;
 
   /**
    * Clear all cached instances.
+   * Calls `dispose()` on each instance that has the method.
    */
   clear(): void;
 

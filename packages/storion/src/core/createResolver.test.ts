@@ -178,6 +178,28 @@ describe("createResolver", () => {
 
       expect(resolver.delete(factory)).toBe(false);
     });
+
+    it("should call dispose() on instance if present", () => {
+      const disposeFn = vi.fn();
+      const factory: Factory<{ dispose: () => void }> = () => ({
+        dispose: disposeFn,
+      });
+      const resolver = createResolver();
+
+      resolver.get(factory);
+      resolver.delete(factory);
+
+      expect(disposeFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not throw if instance has no dispose method", () => {
+      const factory: Factory<{ value: number }> = () => ({ value: 42 });
+      const resolver = createResolver();
+
+      resolver.get(factory);
+
+      expect(() => resolver.delete(factory)).not.toThrow();
+    });
   });
 
   describe("clear", () => {
@@ -193,6 +215,29 @@ describe("createResolver", () => {
 
       expect(resolver.has(factory1)).toBe(false);
       expect(resolver.has(factory2)).toBe(false);
+    });
+
+    it("should call dispose() on all instances that have it", () => {
+      const dispose1 = vi.fn();
+      const dispose2 = vi.fn();
+      const factory1: Factory<{ dispose: () => void }> = () => ({
+        dispose: dispose1,
+      });
+      const factory2: Factory<{ dispose: () => void }> = () => ({
+        dispose: dispose2,
+      });
+      const factory3: Factory<number> = () => 42; // No dispose
+
+      const resolver = createResolver();
+
+      resolver.get(factory1);
+      resolver.get(factory2);
+      resolver.get(factory3);
+
+      resolver.clear();
+
+      expect(dispose1).toHaveBeenCalledTimes(1);
+      expect(dispose2).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -131,10 +131,35 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
 
     delete(factory: Factory): boolean {
       // Use original factory as cache key
-      return cache.delete(factory);
+      const instance = cache.get(factory);
+      if (instance) {
+        // Try to call dispose if the instance has it
+        if (
+          instance &&
+          typeof instance === "object" &&
+          "dispose" in instance &&
+          typeof (instance as { dispose: unknown }).dispose === "function"
+        ) {
+          (instance as { dispose: () => void }).dispose();
+        }
+        cache.delete(factory);
+        return true;
+      }
+      return false;
     },
 
     clear(): void {
+      // Try to dispose all cached instances
+      for (const instance of cache.values()) {
+        if (
+          instance &&
+          typeof instance === "object" &&
+          "dispose" in instance &&
+          typeof (instance as { dispose: unknown }).dispose === "function"
+        ) {
+          (instance as { dispose: () => void }).dispose();
+        }
+      }
       cache.clear();
     },
 
