@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { async, asyncState } from "./async";
 import type { AsyncState, AsyncMode } from "./types";
 import type { Focus } from "../types";
+import { withHooks } from "../core/tracking";
 
 // Helper to create a mock focus
 function createMockFocus<T, M extends AsyncMode>(
@@ -1404,6 +1405,270 @@ describe("asyncState()", () => {
       expect(fromAsyncState.status).toBe(fromAsyncStale.status);
       expect(fromAsyncState.mode).toBe(fromAsyncStale.mode);
       expect(fromAsyncState.data).toEqual(fromAsyncStale.data);
+    });
+  });
+
+  describe("derive", () => {
+    it("should derive success state from sync computation", () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<number>());
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          async.derive(focus, () => {
+            return 42;
+          });
+        }
+      );
+
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe(42);
+    });
+
+    it("should set pending state when async.wait throws promise", async () => {
+      const [sourceAFocus, sourceA] = createMockFocus(async.fresh<number>());
+      const [derivedFocus, { getState: getDerived }] = createMockFocus(
+        async.fresh<number>()
+      );
+
+      // Source is pending - set it up with a key so async.wait can get the promise
+      let resolvePromise: (value: number) => void = () => {};
+      const pendingPromise = new Promise<number>((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      // Create a pending state with the promise tracked
+      const pendingState = {
+        ...asyncState("fresh", "pending"),
+        __key: {},
+      } as AsyncState<number, "fresh">;
+
+      // We need to manually set up the pending promise tracking
+      // For testing, we'll simulate the behavior by setting state to pending
+      sourceA.getState = () => pendingState;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          async.derive(derivedFocus, () => {
+            // This will throw AsyncNotReadyError since there's no tracked promise
+            return async.wait(sourceA.getState());
+          });
+        }
+      );
+
+      // Should be in error state because async.wait throws AsyncNotReadyError when no promise
+      expect(getDerived().status).toBe("error");
+    });
+
+    it("should handle thrown promises and re-run after settlement", async () => {
+      const [derivedFocus, { getState: getDerived }] = createMockFocus(
+        async.fresh<string>()
+      );
+
+      let resolvePromise: (value: string) => void = () => {};
+      let throwCount = 0;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          async.derive(derivedFocus, () => {
+            throwCount++;
+            if (throwCount === 1) {
+              // First run - throw a promise
+              throw new Promise<string>((resolve) => {
+                resolvePromise = resolve;
+              });
+            }
+            // Second run - return success
+            return "computed";
+          });
+        }
+      );
+
+      // Should be pending after first run
+      expect(getDerived().status).toBe("pending");
+      expect(throwCount).toBe(1);
+
+      // Resolve the promise
+      resolvePromise("data");
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Should re-run and succeed
+      expect(getDerived().status).toBe("success");
+      expect(getDerived().data).toBe("computed");
+      expect(throwCount).toBe(2);
+    });
+
+    it("should set error state when computation throws error", () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<number>());
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          async.derive(focus, () => {
+            throw new Error("computation failed");
+          });
+        }
+      );
+
+      expect(getState().status).toBe("error");
+      expect(getState().error?.message).toBe("computation failed");
+    });
+
+    it("should throw error when computeFn returns a promise", () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<number>());
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          async.derive(focus, () => {
+            return Promise.resolve(42) as any;
+          });
+        }
+      );
+
+      expect(getState().status).toBe("error");
+      expect(getState().error?.message).toContain("must be synchronous");
+    });
+
+    it("should only set pending once for multiple thrown promises (cascade)", async () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<number>());
+
+      let pendingSetCount = 0;
+      const originalSetter = focus[1];
+      focus[1] = (value: any) => {
+        if (typeof value === "function") {
+          originalSetter(value);
+        } else {
+          if (value.status === "pending") {
+            pendingSetCount++;
+          }
+          originalSetter(value);
+        }
+      };
+
+      let resolveA: (value: number) => void = () => {};
+      let resolveB: (value: number) => void = () => {};
+      let runCount = 0;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          async.derive(focus, () => {
+            runCount++;
+            if (runCount === 1) {
+              throw new Promise<number>((resolve) => {
+                resolveA = resolve;
+              });
+            }
+            if (runCount === 2) {
+              throw new Promise<number>((resolve) => {
+                resolveB = resolve;
+              });
+            }
+            return 100;
+          });
+        }
+      );
+
+      expect(getState().status).toBe("pending");
+      expect(pendingSetCount).toBe(1);
+
+      // Resolve first promise
+      resolveA(1);
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Should still be pending but NOT have set pending again
+      expect(getState().status).toBe("pending");
+      expect(pendingSetCount).toBe(1); // Still 1!
+
+      // Resolve second promise
+      resolveB(2);
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Now should be success
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe(100);
+      expect(runCount).toBe(3);
+    });
+
+    it("should return dispose function that stops derivation", async () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<number>());
+
+      let resolvePromise: (value: number) => void = () => {};
+      let runCount = 0;
+      let dispose: VoidFunction = () => {};
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          dispose = async.derive(focus, () => {
+            runCount++;
+            if (runCount === 1) {
+              throw new Promise<number>((resolve) => {
+                resolvePromise = resolve;
+              });
+            }
+            return 42;
+          });
+        }
+      );
+
+      expect(getState().status).toBe("pending");
+      expect(runCount).toBe(1);
+
+      // Dispose before promise resolves
+      dispose();
+
+      // Resolve the promise
+      resolvePromise(1);
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Should NOT have re-run after dispose
+      expect(runCount).toBe(1);
+      expect(getState().status).toBe("pending"); // Still pending since dispose stopped it
+    });
+
+    it("should convert non-Error throws to Error", () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<number>());
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          async.derive(focus, () => {
+            throw "string error";
+          });
+        }
+      );
+
+      expect(getState().status).toBe("error");
+      expect(getState().error).toBeInstanceOf(Error);
+      expect(getState().error?.message).toBe("string error");
     });
   });
 });

@@ -1051,5 +1051,155 @@ describe("effect", () => {
         expect(firstCallback?.("test")).toBe("run1:test");
       });
     });
+
+    describe("refresh", () => {
+      it("should re-run effect when refresh is called", async () => {
+        let runCount = 0;
+        let savedRefresh: (() => void) | null = null;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            effect((ctx) => {
+              runCount++;
+              savedRefresh = ctx.refresh;
+            });
+          }
+        );
+
+        expect(runCount).toBe(1);
+
+        // Call refresh
+        savedRefresh?.();
+        expect(runCount).toBe(2);
+
+        // Call refresh again
+        savedRefresh?.();
+        expect(runCount).toBe(3);
+      });
+
+      it("should not refresh if effect is disposed", () => {
+        let runCount = 0;
+        let savedRefresh: (() => void) | null = null;
+        let dispose: VoidFunction | null = null;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            dispose = effect((ctx) => {
+              runCount++;
+              savedRefresh = ctx.refresh;
+            });
+          }
+        );
+
+        expect(runCount).toBe(1);
+
+        // Dispose effect
+        dispose?.();
+
+        // Refresh should not work
+        savedRefresh?.();
+        expect(runCount).toBe(1);
+      });
+
+      it("should not refresh from stale context", async () => {
+        let runCount = 0;
+        let firstRefresh: (() => void) | null = null;
+        let secondRefresh: (() => void) | null = null;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            effect((ctx) => {
+              runCount++;
+              if (runCount === 1) {
+                firstRefresh = ctx.refresh;
+              } else if (runCount === 2) {
+                secondRefresh = ctx.refresh;
+              }
+            });
+          }
+        );
+
+        expect(runCount).toBe(1);
+
+        // First refresh works
+        firstRefresh?.();
+        expect(runCount).toBe(2);
+
+        // First refresh is now stale, should not trigger
+        firstRefresh?.();
+        expect(runCount).toBe(2);
+
+        // Second refresh works
+        secondRefresh?.();
+        expect(runCount).toBe(3);
+      });
+
+      it("should work with async pattern (async.derive use case)", async () => {
+        let runCount = 0;
+        let resolvePromise: ((value: string) => void) | null = null;
+        let result: string | null = null;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            effect((ctx) => {
+              runCount++;
+
+              if (runCount === 1) {
+                // Simulate async.wait throwing a promise
+                const promise = new Promise<string>((resolve) => {
+                  resolvePromise = resolve;
+                });
+                ctx.safe(promise).then(ctx.refresh);
+              } else {
+                // Second run - data is available
+                result = "computed result";
+              }
+            });
+          }
+        );
+
+        expect(runCount).toBe(1);
+        expect(result).toBeNull();
+
+        // Resolve the promise
+        resolvePromise?.("data");
+        await new Promise((r) => setTimeout(r, 10));
+
+        expect(runCount).toBe(2);
+        expect(result).toBe("computed result");
+      });
+    });
   });
 });

@@ -149,13 +149,35 @@ export interface EffectContext {
   safe<TArgs extends unknown[], TReturn>(
     callback: (...args: TArgs) => TReturn
   ): (...args: TArgs) => TReturn | undefined;
+
+  /**
+   * Manually trigger a re-run of the effect.
+   * Useful for async.derive pattern where thrown promises should trigger re-computation.
+   *
+   * Note: If called while the effect is currently running, the refresh will be
+   * scheduled for after the current run completes.
+   *
+   * @example
+   * effect((ctx) => {
+   *   try {
+   *     const data = async.wait(state.asyncData); // throws if pending
+   *     state.computed = transform(data);
+   *   } catch (ex) {
+   *     if (isPromise(ex)) {
+   *       ctx.safe(ex).then(ctx.refresh, ctx.refresh);
+   *     }
+   *   }
+   * });
+   */
+  refresh(): void;
 }
 
 /**
  * Create an EffectContext for a single effect run.
  */
 function createEffectContext(
-  nth: number
+  nth: number,
+  onRefresh: () => void
 ): EffectContext & { _runCleanups: () => void } {
   // Lazy initialization - only create when actually used
   let cleanupEmitter: Emitter | null = null;
@@ -240,6 +262,12 @@ function createEffectContext(
         }
         return undefined;
       };
+    },
+
+    refresh() {
+      if (!isStale) {
+        onRefresh();
+      }
     },
   };
 
@@ -508,7 +536,9 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
 
       const getOrCreateContext = () => {
         if (!lazyContext) {
-          lazyContext = createEffectContext(currentGeneration);
+          lazyContext = createEffectContext(currentGeneration, () => {
+            scheduleNotification(execute, fn);
+          });
         }
         return lazyContext;
       };
