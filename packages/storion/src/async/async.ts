@@ -620,6 +620,97 @@ export function asyncState<T>(
   return Object.freeze(state);
 }
 
+/**
+ * Create a new AsyncState based on a previous state, preserving mode and stale data.
+ * Useful for deriving new states while maintaining the mode semantics.
+ *
+ * @example
+ * // From success to pending (preserves mode and stale data)
+ * const next = asyncState.from(prev, "pending");
+ *
+ * // From pending to success
+ * const next = asyncState.from(prev, "success", newData);
+ *
+ * // From any to error
+ * const next = asyncState.from(prev, "error", new Error("failed"));
+ */
+export function asyncStateFrom<T, M extends AsyncMode>(
+  prev: AsyncState<T, M>,
+  status: "idle"
+): AsyncState<T, M>;
+
+export function asyncStateFrom<T, M extends AsyncMode>(
+  prev: AsyncState<T, M>,
+  status: "pending"
+): AsyncState<T, M>;
+
+export function asyncStateFrom<T, M extends AsyncMode>(
+  prev: AsyncState<T, M>,
+  status: "success",
+  data: T
+): AsyncState<T, M>;
+
+export function asyncStateFrom<T, M extends AsyncMode>(
+  prev: AsyncState<T, M>,
+  status: "error",
+  error: Error
+): AsyncState<T, M>;
+
+export function asyncStateFrom<T, M extends AsyncMode>(
+  prev: AsyncState<T, M>,
+  status: "idle" | "pending" | "success" | "error",
+  dataOrError?: T | Error
+): AsyncState<T, M> {
+  const mode = prev.mode;
+  // Get stale data from previous state (for stale mode)
+  // In stale mode, data is always preserved across all statuses
+  const staleData = mode === "stale" ? prev.data : undefined;
+
+  if (mode === "stale") {
+    switch (status) {
+      case "idle":
+        return asyncState("stale", "idle", staleData as T) as AsyncState<T, M>;
+      case "pending":
+        return asyncState("stale", "pending", staleData as T) as AsyncState<
+          T,
+          M
+        >;
+      case "success":
+        return asyncState("stale", "success", dataOrError as T) as AsyncState<
+          T,
+          M
+        >;
+      case "error":
+        return asyncState(
+          "stale",
+          "error",
+          staleData as T,
+          dataOrError as Error
+        ) as AsyncState<T, M>;
+    }
+  } else {
+    switch (status) {
+      case "idle":
+        return asyncState("fresh", "idle") as AsyncState<T, M>;
+      case "pending":
+        return asyncState("fresh", "pending") as AsyncState<T, M>;
+      case "success":
+        return asyncState("fresh", "success", dataOrError as T) as AsyncState<
+          T,
+          M
+        >;
+      case "error":
+        return asyncState("fresh", "error", dataOrError as Error) as AsyncState<
+          T,
+          M
+        >;
+    }
+  }
+}
+
+// Attach as property for convenient access: asyncState.from(prev, status, data)
+asyncState.from = asyncStateFrom;
+
 export namespace async {
   // ===== State Creators =====
 
@@ -953,13 +1044,6 @@ export namespace async {
       // Read current state WITHOUT tracking to get mode and stale data
       // This prevents the derived state from depending on itself
       const currentState = untrack(getState);
-      const mode = currentState.mode;
-      const staleData =
-        mode === "stale"
-          ? currentState.data
-          : currentState.status === "success"
-          ? currentState.data
-          : undefined;
 
       try {
         const result = computeFn();
@@ -978,11 +1062,7 @@ export namespace async {
 
         // Success - reset pending flag and set success state
         hasSetPending = false;
-        if (mode === "stale") {
-          setState(asyncState("stale", "success", result) as AsyncState<T, M>);
-        } else {
-          setState(asyncState("fresh", "success", result) as AsyncState<T, M>);
-        }
+        setState(asyncState.from(currentState, "success", result));
       } catch (ex) {
         // Check if it's a thrown promise (from async.wait on pending state)
         if (
@@ -993,16 +1073,7 @@ export namespace async {
           // Only set pending state once per derivation cycle
           if (!hasSetPending) {
             hasSetPending = true;
-            if (mode === "stale") {
-              setState(
-                asyncState("stale", "pending", staleData as T) as AsyncState<
-                  T,
-                  M
-                >
-              );
-            } else {
-              setState(asyncState("fresh", "pending") as AsyncState<T, M>);
-            }
+            setState(asyncState.from(currentState, "pending"));
           }
 
           // When promise settles, refresh the effect to re-run computation
@@ -1011,16 +1082,7 @@ export namespace async {
           // Real error - reset pending flag and set error state
           hasSetPending = false;
           const error = ex instanceof Error ? ex : new Error(String(ex));
-          if (mode === "stale") {
-            setState(
-              asyncState("stale", "error", staleData as T, error) as AsyncState<
-                T,
-                M
-              >
-            );
-          } else {
-            setState(asyncState("fresh", "error", error) as AsyncState<T, M>);
-          }
+          setState(asyncState.from(currentState, "error", error));
         }
       }
     });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { async, asyncState } from "./async";
+import { async, asyncState, asyncStateFrom } from "./async";
 import type { AsyncState, AsyncMode } from "./types";
 import type { Focus } from "../types";
 import { withHooks } from "../core/tracking";
@@ -1405,6 +1405,162 @@ describe("asyncState()", () => {
       expect(fromAsyncState.status).toBe(fromAsyncStale.status);
       expect(fromAsyncState.mode).toBe(fromAsyncStale.mode);
       expect(fromAsyncState.data).toEqual(fromAsyncStale.data);
+    });
+  });
+
+  describe("asyncState.from()", () => {
+    describe("fresh mode", () => {
+      it("should create idle state from fresh", () => {
+        const prev = asyncState("fresh", "success", "data");
+        const next = asyncState.from(prev, "idle");
+
+        expect(next.status).toBe("idle");
+        expect(next.mode).toBe("fresh");
+        expect(next.data).toBeUndefined();
+      });
+
+      it("should create pending state from fresh", () => {
+        const prev = asyncState("fresh", "success", "data");
+        const next = asyncState.from(prev, "pending");
+
+        expect(next.status).toBe("pending");
+        expect(next.mode).toBe("fresh");
+        expect(next.data).toBeUndefined();
+      });
+
+      it("should create success state from fresh", () => {
+        const prev = asyncState("fresh", "pending");
+        const next = asyncState.from(prev, "success", "new data");
+
+        expect(next.status).toBe("success");
+        expect(next.mode).toBe("fresh");
+        expect(next.data).toBe("new data");
+      });
+
+      it("should create error state from fresh", () => {
+        const prev = asyncState("fresh", "success", "data");
+        const error = new Error("test error");
+        const next = asyncState.from(prev, "error", error);
+
+        expect(next.status).toBe("error");
+        expect(next.mode).toBe("fresh");
+        expect(next.data).toBeUndefined();
+        expect(next.error).toBe(error);
+      });
+    });
+
+    describe("stale mode", () => {
+      it("should create idle state preserving stale data", () => {
+        const prev = asyncState("stale", "success", "data");
+        const next = asyncState.from(prev, "idle");
+
+        expect(next.status).toBe("idle");
+        expect(next.mode).toBe("stale");
+        expect(next.data).toBe("data");
+      });
+
+      it("should create pending state preserving stale data", () => {
+        const prev = asyncState("stale", "idle", "initial");
+        const next = asyncState.from(prev, "pending");
+
+        expect(next.status).toBe("pending");
+        expect(next.mode).toBe("stale");
+        expect(next.data).toBe("initial");
+      });
+
+      it("should create pending state from success preserving data", () => {
+        const prev = asyncState("stale", "success", "cached");
+        const next = asyncState.from(prev, "pending");
+
+        expect(next.status).toBe("pending");
+        expect(next.mode).toBe("stale");
+        expect(next.data).toBe("cached");
+      });
+
+      it("should create success state with new data", () => {
+        const prev = asyncState("stale", "pending", "old");
+        const next = asyncState.from(prev, "success", "new data");
+
+        expect(next.status).toBe("success");
+        expect(next.mode).toBe("stale");
+        expect(next.data).toBe("new data");
+      });
+
+      it("should create error state preserving stale data", () => {
+        const prev = asyncState("stale", "success", "cached");
+        const error = new Error("test error");
+        const next = asyncState.from(prev, "error", error);
+
+        expect(next.status).toBe("error");
+        expect(next.mode).toBe("stale");
+        expect(next.data).toBe("cached");
+        expect(next.error).toBe(error);
+      });
+
+      it("should create error state from pending preserving stale data", () => {
+        const prev = asyncState("stale", "pending", "pending data");
+        const error = new Error("failed");
+        const next = asyncState.from(prev, "error", error);
+
+        expect(next.status).toBe("error");
+        expect(next.mode).toBe("stale");
+        expect(next.data).toBe("pending data");
+        expect(next.error).toBe(error);
+      });
+    });
+
+    describe("state transitions", () => {
+      it("should chain multiple transitions correctly (stale mode)", () => {
+        let state: AsyncState<string, "stale"> = asyncState(
+          "stale",
+          "idle",
+          "initial"
+        );
+
+        // idle -> pending
+        state = asyncState.from(state, "pending");
+        expect(state.status).toBe("pending");
+        expect(state.data).toBe("initial");
+
+        // pending -> success
+        state = asyncState.from(state, "success", "loaded");
+        expect(state.status).toBe("success");
+        expect(state.data).toBe("loaded");
+
+        // success -> pending (refetch)
+        state = asyncState.from(state, "pending");
+        expect(state.status).toBe("pending");
+        expect(state.data).toBe("loaded"); // Preserves previous success data
+
+        // pending -> error
+        state = asyncState.from(state, "error", new Error("failed"));
+        expect(state.status).toBe("error");
+        expect(state.data).toBe("loaded"); // Still preserves data
+      });
+
+      it("should chain multiple transitions correctly (fresh mode)", () => {
+        let state: AsyncState<string, "fresh"> = asyncState("fresh", "idle");
+
+        // idle -> pending
+        state = asyncState.from(state, "pending");
+        expect(state.status).toBe("pending");
+        expect(state.data).toBeUndefined();
+
+        // pending -> success
+        state = asyncState.from(state, "success", "loaded");
+        expect(state.status).toBe("success");
+        expect(state.data).toBe("loaded");
+
+        // success -> pending (refetch)
+        state = asyncState.from(state, "pending");
+        expect(state.status).toBe("pending");
+        expect(state.data).toBeUndefined(); // Data cleared in fresh mode
+
+        // pending -> error
+        state = asyncState.from(state, "error", new Error("failed"));
+        expect(state.status).toBe("error");
+        expect(state.data).toBeUndefined();
+      });
     });
   });
 

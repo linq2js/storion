@@ -9,7 +9,7 @@
  * - stale: data is preserved during loading/error (stale-while-revalidate)
  */
 
-export { async, asyncState, getPendingPromise } from "./async";
+export { async, asyncState, asyncStateFrom, getPendingPromise } from "./async";
 export {
   AsyncNotReadyError,
   AsyncAggregateError,
