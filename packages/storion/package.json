@@ -1,6 +1,6 @@
 {
   "name": "storion",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Reactive stores for modern apps. Type-safe. Auto-tracked. Effortlessly composable",
   "type": "module",
   "main": "./dist/storion.js",
@@ -46,9 +46,9 @@
     "version:minor": "npm version minor -m \"chore: bump version to %s\"",
     "version:major": "npm version major -m \"chore: bump version to %s\"",
     "prepublishOnly": "pnpm run build",
-    "release:patch": "pnpm version:patch && git push && git push --tags && npm publish",
-    "release:minor": "pnpm version:minor && git push && git push --tags && npm publish",
-    "release:major": "pnpm version:major && git push && git push --tags && npm publish",
+    "release:patch": "pnpm version:patch && git add -A && git commit --amend --no-edit && git push && git push --tags && npm publish",
+    "release:minor": "pnpm version:minor && git add -A && git commit --amend --no-edit && git push && git push --tags && npm publish",
+    "release:major": "pnpm version:major && git add -A && git commit --amend --no-edit && git push && git push --tags && npm publish",
     "publish:dry": "npm publish --dry-run"
   },
   "keywords": [
