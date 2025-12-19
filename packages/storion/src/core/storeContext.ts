@@ -420,6 +420,14 @@ export function createStoreContext<
     },
 
     focus(path: string, options?: FocusOptions<any>): any {
+      if (!isSetupPhase()) {
+        throw new Error(
+          `focus() can only be called during setup phase. ` +
+            `Do not call focus() inside actions or async callbacks. ` +
+            `Use the .to() method on an existing focus for dynamic sub-paths.`
+        );
+      }
+
       // Create focus context
       const focusCtx: FocusContext<TState> = {
         getState: getMutableState,

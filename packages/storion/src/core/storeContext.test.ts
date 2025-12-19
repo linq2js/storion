@@ -505,6 +505,39 @@ describe("focus()", () => {
         /Action "focus" must be a function/
       );
     });
+
+    it("should throw error when focus is called outside setup phase", () => {
+      let capturedCtx: any;
+
+      const userStore = store({
+        state: { value: 1 },
+        setup: (ctx) => {
+          capturedCtx = ctx;
+          const [get, set] = ctx.focus("value");
+          return {
+            get,
+            set,
+            createFocusOutsideSetup: () => {
+              // This should throw
+              return ctx.focus("value");
+            },
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      // Calling focus inside an action should throw
+      expect(() => instance.actions.createFocusOutsideSetup()).toThrow(
+        /focus\(\) can only be called during setup phase/
+      );
+
+      // Using captured context outside setup should also throw
+      expect(() => capturedCtx.focus("value")).toThrow(
+        /focus\(\) can only be called during setup phase/
+      );
+    });
   });
 
   describe("to() method for relative focus", () => {
