@@ -939,6 +939,156 @@ function FastestResult() {
 | `async.isLoading(state)` | `boolean`                             | Loading indicator         |
 | `async.isError(state)`   | `boolean`                             | Error check               |
 
+### Derived Async State with `async.derive()`
+
+**The problem:** You need to compute a value from multiple async states. If any source is loading, the derived value should be loading. If any errors, it should error. Writing this logic manually is verbose and error-prone.
+
+**With Storion:** Use `async.derive()` to create computed async state. It uses `async.wait()` internally, so it automatically handles pending/error states and re-computes when sources change.
+
+```ts
+import { store } from "storion";
+import { async, type AsyncState } from "storion/async";
+
+interface User {
+  id: string;
+  name: string;
+}
+
+interface Post {
+  id: string;
+  title: string;
+  authorId: string;
+}
+
+export const dashboardStore = store({
+  name: "dashboard",
+  state: {
+    user: async.fresh<User>(),
+    posts: async.fresh<Post[]>(),
+    // Derived async state - computed from user + posts
+    summary: async.fresh<{ userName: string; postCount: number }>(),
+  },
+  setup({ state, focus }) {
+    // Fetch actions
+    const userActions = async(focus("user"), async (ctx, userId: string) => {
+      const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
+      return res.json();
+    });
+
+    const postsActions = async(focus("posts"), async (ctx, userId: string) => {
+      const res = await fetch(`/api/users/${userId}/posts`, {
+        signal: ctx.signal,
+      });
+      return res.json();
+    });
+
+    // Derive summary from user + posts
+    // - If user OR posts is pending → summary is pending
+    // - If user OR posts has error → summary has error
+    // - If both succeed → summary is success with computed value
+    async.derive(focus("summary"), () => {
+      const user = async.wait(state.user);
+      const posts = async.wait(state.posts);
+      return {
+        userName: user.name,
+        postCount: posts.length,
+      };
+    });
+
+    return {
+      fetchUser: userActions.dispatch,
+      fetchPosts: postsActions.dispatch,
+    };
+  },
+});
+```
+
+**Conditional dependencies:**
+
+```ts
+// Derive with conditional async sources
+async.derive(focus("result"), () => {
+  const type = async.wait(state.type);
+
+  // Dynamically choose which async state to wait for
+  if (type === "user") {
+    return async.wait(state.userData);
+  } else {
+    return async.wait(state.guestData);
+  }
+});
+```
+
+**Parallel waiting with `async.all()`:**
+
+```ts
+// Wait for multiple states in parallel (more efficient)
+async.derive(focus("combined"), () => {
+  const [user, posts, comments] = async.all(
+    state.user,
+    state.posts,
+    state.comments
+  );
+  return { user, posts, comments };
+});
+```
+
+**Stale mode - preserve data during recomputation:**
+
+```ts
+state: {
+  // Stale mode: keeps previous computed value while recomputing
+  summary: async.stale({ userName: "Loading...", postCount: 0 }),
+}
+
+// The derive will preserve stale data during pending/error
+async.derive(focus("summary"), () => {
+  const user = async.wait(state.user);
+  const posts = async.wait(state.posts);
+  return { userName: user.name, postCount: posts.length };
+});
+```
+
+**Key behaviors:**
+
+| Source State       | Derived State                       |
+| ------------------ | ----------------------------------- |
+| Any source pending | `pending` (stale: preserves data)   |
+| Any source error   | `error` (stale: preserves data)     |
+| All sources ready  | `success` with computed value       |
+| Sources change     | Auto-recomputes via effect tracking |
+
+**`async.derive()` vs manual effects:**
+
+```ts
+// ❌ Manual - verbose, error-prone
+effect(() => {
+  if (state.user.status === "pending" || state.posts.status === "pending") {
+    state.summary = asyncState("fresh", "pending");
+    return;
+  }
+  if (state.user.status === "error") {
+    state.summary = asyncState("fresh", "error", state.user.error);
+    return;
+  }
+  if (state.posts.status === "error") {
+    state.summary = asyncState("fresh", "error", state.posts.error);
+    return;
+  }
+  state.summary = asyncState("fresh", "success", {
+    userName: state.user.data.name,
+    postCount: state.posts.data.length,
+  });
+});
+
+// ✅ With async.derive - clean and automatic
+async.derive(focus("summary"), () => {
+  const user = async.wait(state.user);
+  const posts = async.wait(state.posts);
+  return { userName: user.name, postCount: posts.length };
+});
+```
+
 ### Dependency Injection
 
 **The problem:** Your stores need shared services (API clients, loggers, config) but importing singletons directly causes issues:
@@ -1282,6 +1432,7 @@ const result = useStore(({ get, create, mixin, once }) => {
 | `async.all(...states)`            | Wait for all states to be ready             |
 | `async.any(...states)`            | Get first ready state                       |
 | `async.race(states)`              | Race between states                         |
+| `async.derive(focus, computeFn)`  | Derive async state from other async states  |
 | `async.hasData(state)`            | Check if state has data                     |
 | `async.isLoading(state)`          | Check if state is loading                   |
 | `async.isError(state)`            | Check if state has error                    |
