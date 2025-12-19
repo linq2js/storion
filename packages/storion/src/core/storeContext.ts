@@ -402,6 +402,10 @@ export function createStoreContext<
       reset();
     },
 
+    onDispose(callback: () => void): void {
+      onDispose?.(callback);
+    },
+
     mixin<TResult, TArgs extends unknown[]>(
       mixin: StoreMixin<TState, TResult, TArgs>,
       ...args: TArgs

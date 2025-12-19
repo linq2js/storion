@@ -5,10 +5,13 @@ import {
   roomsStore,
   invitationsStore,
   chatUIStore,
+  routeStore,
+  getActiveRoomId,
   resetAllStores,
 } from "../stores";
 import { crossTabSyncService } from "../services/crossTabSync";
 import type { Room, User, RoomInvitation } from "../types";
+import { isAdmin } from "../types";
 
 // Status indicator component
 // isOnline overrides the stored status with real-time heartbeat check
@@ -221,17 +224,20 @@ export const Sidebar = withStore(
     const [roomsState, roomsActions] = ctx.get(roomsStore);
     const [invitationsState, invitationsActions] = ctx.get(invitationsStore);
     const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+    const [routeState, routeActions] = ctx.get(routeStore);
     const sync = ctx.get(crossTabSyncService);
 
     return {
       currentUser: authState.currentUser,
+      isCurrentUserAdmin: isAdmin(authState.currentUser),
       rooms: roomsState.rooms.data ?? [],
       users: usersState.users.data ?? [],
       invitations: invitationsState.invitations.data ?? [],
-      activeRoomId: roomsState.activeRoomId,
+      activeRoomId: getActiveRoomId(routeState.route),
       sidebarView: chatUIState.sidebarView,
       setSidebarView: chatUIActions.setSidebarView,
-      selectRoom: roomsActions.selectRoom,
+      goToRoom: routeActions.goToRoom,
+      goToDashboard: routeActions.goToDashboard,
       startDirectMessage: roomsActions.startDirectMessage,
       setShowCreateRoom: chatUIActions.setShowCreateRoom,
       acceptInvitation: invitationsActions.acceptInvitation,
@@ -244,13 +250,15 @@ export const Sidebar = withStore(
   },
   ({
     currentUser,
+    isCurrentUserAdmin,
     rooms,
     users,
     invitations,
     activeRoomId,
     sidebarView,
     setSidebarView,
-    selectRoom,
+    goToRoom,
+    goToDashboard,
     startDirectMessage,
     setShowCreateRoom,
     acceptInvitation,
@@ -304,6 +312,33 @@ export const Sidebar = withStore(
                 </p>
               </div>
             </button>
+            {isCurrentUserAdmin && (
+              <button
+                onClick={() => goToDashboard()}
+                className="p-1 text-chat-accent hover:text-chat-accent hover:bg-chat-accent/10 rounded transition-colors flex-shrink-0"
+                title="Admin Dashboard"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </button>
+            )}
             <button
               onClick={() => {
                 logout();
@@ -404,7 +439,7 @@ export const Sidebar = withStore(
                         users={users}
                         currentUserId={currentUser.id}
                         isUserActive={isUserActive}
-                        onClick={() => selectRoom(room.id)}
+                        onClick={() => goToRoom(room.id)}
                       />
                     ))
                   )}
@@ -430,7 +465,7 @@ export const Sidebar = withStore(
                         users={users}
                         currentUserId={currentUser.id}
                         isUserActive={isUserActive}
-                        onClick={() => selectRoom(room.id)}
+                        onClick={() => goToRoom(room.id)}
                       />
                     ))
                   )}

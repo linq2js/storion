@@ -37,6 +37,14 @@ export function indexedDBInvitationsService(resolver: Resolver) {
       return invitations.filter((inv) => inv.status === "pending");
     },
 
+    async getForRoom(roomId: string): Promise<RoomInvitation[]> {
+      const db = await core.getDB();
+      const tx = db.transaction(core.stores.invitations, "readonly");
+      const store = tx.objectStore(core.stores.invitations);
+      const all: RoomInvitation[] = await core.promisifyRequest(store.getAll());
+      return all.filter((inv) => inv.roomId === roomId);
+    },
+
     async updateStatus(id: string, status: RoomInvitation["status"]) {
       const invitation = await service.get(id);
       if (invitation) {

@@ -12,7 +12,7 @@
 
 import { store, type ActionsBase } from "storion";
 import type { User } from "../types";
-import { generateId, getAvatarUrl } from "../types";
+import { getAvatarUrl } from "../types";
 import { indexedDBUsersService } from "../services/indexedDB";
 import { crossTabSyncService } from "../services/crossTabSync";
 
@@ -81,21 +81,33 @@ export const authStore = store<AuthState, AuthActions>({
       // ========================
       login: async (nickname: string, fullName: string) => {
         const now = Date.now();
-        const id = generateId();
+        // Use lowercase nickname as unique user ID
+        const id = nickname.toLowerCase().trim();
 
-        // Create new user object
-        const user: User = {
-          id,
-          nickname,
-          fullName,
-          avatar: getAvatarUrl(nickname), // Generate avatar from DiceBear
-          createdAt: now,
-          lastActiveAt: now,
-          status: "online",
-        };
+        // Check if user already exists
+        let user = await users.get(id);
 
-        // Persist to IndexedDB
-        await users.save(user);
+        if (user) {
+          // Existing user - update status and info
+          user.status = "online";
+          user.lastActiveAt = now;
+          user.fullName = fullName; // Update full name if changed
+          await users.save(user);
+        } else {
+          // Create new user object
+          user = {
+            id,
+            nickname,
+            fullName,
+            avatar: getAvatarUrl(nickname), // Generate avatar from DiceBear
+            createdAt: now,
+            lastActiveAt: now,
+            status: "online",
+          };
+
+          // Persist to IndexedDB
+          await users.save(user);
+        }
 
         // Save session to sessionStorage (tab-specific)
         sync.session.save(id);

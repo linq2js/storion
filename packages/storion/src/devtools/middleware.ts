@@ -9,12 +9,10 @@
  */
 
 import type {
-  StoreMiddleware,
-  StoreMiddlewareContext,
+  Middleware,
+  MiddlewareContext,
   StoreSpec,
   StoreInstance,
-  StateBase,
-  ActionsBase,
   Resolver,
 } from "../types";
 import { STORION_TYPE } from "../types";
@@ -41,7 +39,7 @@ import type {
  */
 export function devtoolsMiddleware(
   options: DevtoolsMiddlewareOptions = {}
-): StoreMiddleware {
+): Middleware {
   const {
     maxHistory = 5,
     windowObject = typeof window !== "undefined" ? window : undefined,
@@ -76,10 +74,13 @@ export function devtoolsMiddleware(
     actionArgs?: unknown[]
   ) => void;
 
-  // Return StoreMiddleware function - spec is always present
-  return <S extends StateBase, A extends ActionsBase>(
-    ctx: StoreMiddlewareContext<S, A>
-  ): StoreInstance<S, A> => {
+  // Return middleware - handles both stores and factories
+  return (ctx: MiddlewareContext): unknown => {
+    // Only track stores
+    if (ctx.type !== "store") {
+      return ctx.next();
+    }
+
     const { spec, resolver } = ctx;
 
     return handleStoreCreation(
@@ -95,8 +96,8 @@ export function devtoolsMiddleware(
 /**
  * Handle store-specific devtools features.
  */
-function handleStoreCreation<S extends StateBase, A extends ActionsBase>(
-  spec: StoreSpec<S, A>,
+function handleStoreCreation(
+  spec: StoreSpec,
   resolver: Resolver,
   registerStore: (entry: any) => void,
   unregisterStore: (id: string) => void,
@@ -106,93 +107,92 @@ function handleStoreCreation<S extends StateBase, A extends ActionsBase>(
     action?: string,
     actionArgs?: unknown[]
   ) => void
-): StoreInstance<S, A> {
-  // Wrap the setup function to inject devtools actions
-  const originalSetup = spec.options.setup;
+): StoreInstance {
+    // Wrap the setup function to inject devtools actions
+    const originalSetup = spec.options.setup;
 
-  // Create modified options with devtools actions injected
-  const modifiedOptions = {
-    ...spec.options,
-    setup: (context: any) => {
-      // Call original setup
-      const originalActions = originalSetup(context);
+    // Create modified options with devtools actions injected
+    const modifiedOptions = {
+      ...spec.options,
+      setup: (context: any) => {
+        // Call original setup
+        const originalActions = originalSetup(context);
 
-      // Create devtools actions
-      const devtoolsActions: DevtoolsActions = {
-        __revertState: (newState: Record<string, unknown>) => {
-          // Use update to replace state
-          context.update(() => newState as any);
-        },
-        __takeSnapshot: () => {
-          // Trigger a snapshot (placeholder - controller handles this)
-        },
+        // Create devtools actions
+        const devtoolsActions: DevtoolsActions = {
+          __revertState: (newState: Record<string, unknown>) => {
+            // Use update to replace state
+            context.update(() => newState as any);
+          },
+          __takeSnapshot: () => {
+            // Trigger a snapshot (placeholder - controller handles this)
+          },
+        };
+
+        // Return merged actions
+        return {
+          ...originalActions,
+          ...devtoolsActions,
       };
+      },
+    };
 
-      // Return merged actions
-      return {
-        ...originalActions,
-        ...devtoolsActions,
-      } as A & DevtoolsActions;
-    },
-  };
-
-  // Create a new callable spec with modified options
-  // StoreSpec is now a callable function that creates instances
+    // Create a new callable spec with modified options
   const modifiedSpec = function (r: Resolver) {
     return createStoreInstance(modifiedSpec as any, r, {});
-  } as StoreSpec<S, A>;
+  } as StoreSpec;
 
-  // Assign properties to make it a valid StoreSpec
-  Object.defineProperties(modifiedSpec, {
-    [STORION_TYPE]: { value: "store.spec", enumerable: false },
+    // Assign properties to make it a valid StoreSpec
+    Object.defineProperties(modifiedSpec, {
+      [STORION_TYPE]: { value: "store.spec", enumerable: false },
     displayName: { value: spec.displayName, enumerable: true, writable: false },
-    options: { value: modifiedOptions, enumerable: true, writable: false },
-  });
+      options: { value: modifiedOptions, enumerable: true, writable: false },
+    });
 
-  // Create instance with modified spec
+    // Create instance with modified spec
   const instance = modifiedSpec(resolver);
 
-  // Register store with devtools
-  registerStore({
-    id: instance.id,
+    // Register store with devtools
+    registerStore({
+      id: instance.id,
     name: spec.displayName,
-    state: { ...instance.state },
-    disposed: false,
-    instance,
-    createdAt: Date.now(),
-    meta: spec.options.meta,
-  });
+      state: { ...instance.state },
+      disposed: false,
+      instance,
+      createdAt: Date.now(),
+      meta: spec.options.meta,
+    });
 
-  // Track last action for associating with state changes
-  let lastAction: { name: string; args: unknown[] } | null = null;
+    // Track last action for associating with state changes
+    let lastAction: { name: string; args: unknown[] } | null = null;
 
-  // Subscribe to action dispatches to track which action caused the change
-  const unsubscribeActions = instance.subscribe("@*", (event: any) => {
-    const { next } = event;
-    // Skip devtools internal actions
-    if (typeof next.name === "string" && next.name.startsWith("__")) return;
-    lastAction = { name: next.name, args: next.args };
-  });
+    // Subscribe to action dispatches to track which action caused the change
+    const unsubscribeActions = instance.subscribe("@*", (event: any) => {
+      const { next } = event;
+      // Skip devtools internal actions
+      if (typeof next.name === "string" && next.name.startsWith("__")) return;
+      lastAction = { name: next.name, args: next.args };
+    });
 
-  // Subscribe to STATE changes (fires after mutations complete)
-  const unsubscribeState = instance.subscribe(() => {
-    recordStateChange(
-      instance.id,
-      { ...instance.state },
-      lastAction?.name,
-      lastAction?.args
-    );
-    lastAction = null; // Reset after recording
-  });
+    // Subscribe to STATE changes (fires after mutations complete)
+    const unsubscribeState = instance.subscribe(() => {
+      recordStateChange(
+        instance.id,
+        { ...instance.state },
+        lastAction?.name,
+        lastAction?.args
+      );
+      lastAction = null; // Reset after recording
+    });
 
-  // Handle disposal
-  instance.onDispose(() => {
-    unsubscribeActions();
-    unsubscribeState();
-    unregisterStore(instance.id);
-  });
+    // Handle disposal
+    instance.onDispose(() => {
+      unsubscribeActions();
+      unsubscribeState();
+      unregisterStore(instance.id);
+    });
 
-  return instance;
+    return instance;
 }
 
 /**

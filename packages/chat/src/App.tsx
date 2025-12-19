@@ -1,6 +1,7 @@
 import { useEffect, useState, useLayoutEffect } from "react";
 import { useContainer, withStore } from "storion/react";
-import { authStore, loadInitialData } from "./stores";
+import { authStore, routeStore, isDashboard, loadInitialData } from "./stores";
+import { isAdmin } from "./types";
 import {
   LoginScreen,
   Sidebar,
@@ -9,6 +10,7 @@ import {
   InviteUserModal,
   ProfileModal,
   ToastContainer,
+  AdminPanel,
 } from "./components";
 import { indexedDBCoreService } from "./services/indexedDB";
 
@@ -60,10 +62,14 @@ function LoadingScreen() {
 // Main chat layout
 const ChatLayout = withStore(
   (ctx) => {
-    const [state] = ctx.get(authStore);
-    return { currentUser: state.currentUser };
+    const [authState] = ctx.get(authStore);
+    const [routeState] = ctx.get(routeStore);
+    return {
+      currentUser: authState.currentUser,
+      showAdminDashboard: isDashboard(routeState.route) && isAdmin(authState.currentUser),
+    };
   },
-  ({ currentUser }) => {
+  ({ currentUser, showAdminDashboard }) => {
     if (!currentUser) return <LoginScreen />;
 
     return (
@@ -72,7 +78,7 @@ const ChatLayout = withStore(
         style={{ height: "var(--vh, 100vh)" }}
       >
         <Sidebar />
-        <ChatRoom />
+        {showAdminDashboard ? <AdminPanel /> : <ChatRoom />}
         <CreateRoomModal />
         <InviteUserModal />
         <ProfileModal />

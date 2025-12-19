@@ -1,20 +1,21 @@
 import { useState } from "react";
 import { withStore } from "storion/react";
-import { roomsStore, chatUIStore } from "../stores";
+import { roomsStore, chatUIStore, routeStore } from "../stores";
 
 export const CreateRoomModal = withStore(
   (ctx) => {
     const [, roomsActions] = ctx.get(roomsStore);
     const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+    const [, routeActions] = ctx.get(routeStore);
 
     return {
       show: chatUIState.showCreateRoom,
       setShow: chatUIActions.setShowCreateRoom,
       createRoom: roomsActions.createRoom,
-      selectRoom: roomsActions.selectRoom,
+      goToRoom: routeActions.goToRoom,
     };
   },
-  ({ show, setShow, createRoom, selectRoom }) => {
+  ({ show, setShow, createRoom, goToRoom }) => {
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -28,7 +29,7 @@ export const CreateRoomModal = withStore(
       setIsLoading(true);
       try {
         const room = await createRoom(name.trim(), description.trim() || undefined);
-        selectRoom(room.id);
+        goToRoom(room.id);
         setName("");
         setDescription("");
       } finally {

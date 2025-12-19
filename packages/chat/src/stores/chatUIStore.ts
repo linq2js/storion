@@ -8,14 +8,14 @@
  *
  * Dependencies:
  * - authStore: To get current user for typing operations
- * - roomsStore: To get active room for typing operations
+ * - routeStore: To get active room for typing operations
  */
 
 import { store, type ActionsBase } from "storion";
 import type { TypingIndicator } from "../types";
 import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
-import { roomsStore } from "./roomsStore";
+import { routeStore, getActiveRoomId } from "./routeStore";
 
 // ============================================================================
 // State Interface
@@ -94,7 +94,7 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
     // Get store references during setup phase (MUST be at top level)
     // State is reactive - reads current value when accessed later
     const [authState] = get(authStore);
-    const [roomsState] = get(roomsStore);
+    const [routeState] = get(routeStore);
 
     // Interval for periodically refreshing typing indicators
     let typingInterval: ReturnType<typeof setInterval> | null = null;
@@ -103,9 +103,11 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       // ========================
       // Sidebar View Action
       // ========================
-      setSidebarView: update.action((draft: ChatUIState, view: ChatUIState["sidebarView"]) => {
-        draft.sidebarView = view;
-      }),
+      setSidebarView: update.action(
+        (draft: ChatUIState, view: ChatUIState["sidebarView"]) => {
+          draft.sidebarView = view;
+        }
+      ),
 
       // ========================
       // Modal Actions
@@ -118,34 +120,38 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
         draft.showInviteUser = show;
       }),
 
-      setShowProfile: update.action((draft: ChatUIState, userId: string | null) => {
-        draft.showProfile = userId;
-      }),
+      setShowProfile: update.action(
+        (draft: ChatUIState, userId: string | null) => {
+          draft.showProfile = userId;
+        }
+      ),
 
       // ========================
       // Start Typing Action
       // ========================
       startTyping: () => {
-        if (!authState.currentUser || !roomsState.activeRoomId) return;
+        const activeRoomId = getActiveRoomId(routeState.route);
+        if (!authState.currentUser || !activeRoomId) return;
 
         // Broadcast typing start to localStorage (for cross-tab sync)
-        sync.typing.start(roomsState.activeRoomId, authState.currentUser.id);
+        sync.typing.start(activeRoomId, authState.currentUser.id);
 
         // Set up interval to refresh typing users periodically
         // This is needed because typing status expires after a few seconds
         if (!typingInterval) {
           typingInterval = setInterval(() => {
-            if (roomsState.activeRoomId) {
+            const roomId = getActiveRoomId(routeState.route);
+            if (roomId) {
               // Get list of users currently typing (excluding self)
               const typingUserIds = sync.typing.getUsersForRoom(
-                roomsState.activeRoomId,
+                roomId,
                 authState.currentUser?.id
               );
 
               // Update state with typing indicators
               update((s: ChatUIState) => {
                 s.typingUsers = typingUserIds.map((userId) => ({
-                  roomId: roomsState.activeRoomId!,
+                  roomId: roomId,
                   userId,
                   timestamp: Date.now(),
                 }));
@@ -159,26 +165,28 @@ export const chatUIStore = store<ChatUIState, ChatUIActions>({
       // Stop Typing Action
       // ========================
       stopTyping: () => {
-        if (!authState.currentUser || !roomsState.activeRoomId) return;
+        const activeRoomId = getActiveRoomId(routeState.route);
+        if (!authState.currentUser || !activeRoomId) return;
 
         // Broadcast typing stop to localStorage
-        sync.typing.stop(roomsState.activeRoomId, authState.currentUser.id);
+        sync.typing.stop(activeRoomId, authState.currentUser.id);
       },
 
       // ========================
       // Update Typing Users Action
       // ========================
       updateTypingUsers: () => {
-        if (roomsState.activeRoomId) {
+        const activeRoomId = getActiveRoomId(routeState.route);
+        if (activeRoomId) {
           // Get users typing in the active room (excluding self)
           const typingUserIds = sync.typing.getUsersForRoom(
-            roomsState.activeRoomId,
+            activeRoomId,
             authState.currentUser?.id
           );
 
           update((s: ChatUIState) => {
             s.typingUsers = typingUserIds.map((userId) => ({
-              roomId: roomsState.activeRoomId!,
+              roomId: activeRoomId,
               userId,
               timestamp: Date.now(),
             }));

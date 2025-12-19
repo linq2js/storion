@@ -29,9 +29,12 @@
 
 import type {
   Factory,
+  FactoryMiddlewareContext,
   Middleware,
   Resolver,
   ResolverOptions,
+  StoreInstance,
+  StoreMiddlewareContext,
   StoreSpec,
 } from "../types";
 import { isSpec } from "../is";
@@ -82,7 +85,11 @@ function extractDisplayName(factory: Factory): string | undefined {
  * Create a new resolver with optional middleware and parent.
  */
 export function createResolver(options: ResolverOptions = {}): Resolver {
-  const { middleware = [], parent } = options;
+  const {
+    middleware = [],
+    parent,
+    invokeResolver: invokeResolverOption,
+  } = options;
 
   // Cache: factory -> instance (uses factory reference as key)
   const cache = new Map<Factory, any>();
@@ -98,25 +105,46 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
 
   /**
    * Apply middleware chain and invoke factory.
+   * Detects if factory is a store spec and creates appropriate context type.
+   *
+   * @param factory - The factory to invoke
+   * @param resolverForCtx - The resolver to pass in middleware context (usually invokeResolver ?? self)
    */
-  const invoke = <T>(factory: Factory<T>, resolver: Resolver): T => {
-    // Extract displayName and spec for context
+  const invoke = <T>(factory: Factory<T>, resolverForCtx: Resolver): T => {
+    // Detect if this is a store spec
+    const isStoreSpec = isSpec(factory);
     const displayName = extractDisplayName(factory);
 
     // Build middleware chain from right to left
     // Each middleware wraps the next, with factory invocation at the end
-    const chain = middleware.reduceRight<() => T>(
-      (next, mw) => () =>
-        mw<T>({
-          factory,
-          resolver,
-          next,
-          displayName,
-        }),
-      () => factory(resolver)
+    const chain = middleware.reduceRight<() => unknown>(
+      (next, mw) => () => {
+        // Create discriminated context based on factory type
+        if (isStoreSpec) {
+          const ctx: StoreMiddlewareContext = {
+            type: "store",
+            factory,
+            resolver: resolverForCtx,
+            next: next as () => StoreInstance,
+            displayName: displayName!,
+            spec: factory as StoreSpec,
+          };
+          return mw(ctx);
+        } else {
+          const ctx: FactoryMiddlewareContext = {
+            type: "factory",
+            factory,
+            resolver: resolverForCtx,
+            next,
+            displayName,
+          };
+          return mw(ctx);
+        }
+      },
+      () => factory(resolverForCtx)
     );
 
-    return chain();
+    return chain() as T;
   };
 
   const resolver: Resolver = {
@@ -133,14 +161,19 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
       }
 
       // Use mapped factory for creation
-      const instance = invoke(resolve(factory), resolver);
+      // Pass invokeResolver if provided (for container to inject itself)
+      const instance = invoke(
+        resolve(factory),
+        invokeResolverOption ?? resolver
+      );
       cache.set(factory, instance);
       return instance;
     },
 
     create<T>(factory: Factory<T>): T {
       // Use mapped factory for creation (no caching)
-      return invoke(resolve(factory), resolver);
+      // Pass invokeResolver if provided (for container to inject itself)
+      return invoke(resolve(factory), invokeResolverOption ?? resolver);
     },
 
     set<T>(factory: Factory<T>, override: Factory<T>): void {

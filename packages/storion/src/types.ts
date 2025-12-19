@@ -582,6 +582,27 @@ export interface StoreContext<TState extends StateBase = StateBase>
   reset(): void;
 
   /**
+   * Register a cleanup callback to run when the store is disposed.
+   * Callbacks are called in registration order.
+   *
+   * @example
+   * setup: (ctx) => {
+   *   const subscription = api.subscribe(data => {
+   *     ctx.state.data = data;
+   *   });
+   *   ctx.onDispose(() => subscription.unsubscribe());
+   *
+   *   const intervalId = setInterval(() => {
+   *     ctx.state.tick++;
+   *   }, 1000);
+   *   ctx.onDispose(() => clearInterval(intervalId));
+   *
+   *   return {};
+   * }
+   */
+  onDispose(callback: () => void): void;
+
+  /**
    * Apply a mixin to compose reusable logic.
    * Mixins receive the same context and can return actions or values.
    * Only callable during setup phase.
@@ -880,8 +901,8 @@ export interface ContainerOptions {
   /** Auto dispose options for all stores */
   autoDispose?: AutoDisposeOptions;
 
-  /** Middleware chain for intercepting store creation */
-  middleware?: StoreMiddleware[];
+  /** Middleware chain for intercepting creation (stores and factories) */
+  middleware?: Middleware[];
 }
 
 // =============================================================================
@@ -896,45 +917,85 @@ export interface ContainerOptions {
  */
 export type Factory<T = any> = (resolver: Resolver) => T;
 
+// =============================================================================
+// Middleware Context (Discriminated Union)
+// =============================================================================
+
 /**
- * Context passed to generic middleware functions (for any factory).
+ * Base properties shared by all middleware contexts.
  */
-export interface MiddlewareContext<T = any> {
-  /** The factory being invoked (StoreSpec or plain factory) */
-  readonly factory: Factory<T>;
+interface BaseMiddlewareContext {
+  /** The factory being invoked */
+  readonly factory: Factory;
 
   /** The resolver instance */
   readonly resolver: Resolver;
 
   /** Call the next middleware or the factory itself */
-  readonly next: () => T;
+  readonly next: () => unknown;
 
   /**
    * Display name for debugging.
-   * - For stores: spec.displayName
+   * - For stores: spec.displayName (always present)
    * - For factories: factory.displayName ?? factory.name ?? undefined
    */
   readonly displayName: string | undefined;
 }
 
 /**
- * Context passed to store middleware functions.
- * Unlike MiddlewareContext, `spec` is always present.
+ * Context for plain factory middleware.
  */
-export interface StoreMiddlewareContext<
-  S extends StateBase = StateBase,
-  A extends ActionsBase = ActionsBase
-> extends MiddlewareContext<StoreInstance<S, A>> {
-  /** The store spec being invoked */
-  readonly spec: StoreSpec<S, A>;
+export interface FactoryMiddlewareContext extends BaseMiddlewareContext {
+  /** Discriminant - this is a plain factory */
+  readonly type: "factory";
+}
+
+/**
+ * Context for store middleware.
+ * `spec` and `displayName` are always present.
+ */
+export interface StoreMiddlewareContext {
+  /** Discriminant - this is a store */
+  readonly type: "store";
+
+  /** The store spec (always present for stores) */
+  readonly spec: StoreSpec;
+
+  /** The factory being invoked (same as spec) */
+  readonly factory: Factory;
+
+  /** The resolver instance */
+  readonly resolver: Resolver;
+
+  /** Call the next middleware or the factory itself */
+  readonly next: () => StoreInstance;
 
   /** Store display name (always present for stores) */
   readonly displayName: string;
 }
 
 /**
- * Generic middleware function for intercepting any factory creation.
- * Use for resolver middleware that handles both stores and plain factories.
+ * Middleware context - discriminated union.
+ * Use `ctx.type` to narrow to specific context type.
+ *
+ * @example
+ * ```ts
+ * const middleware: Middleware = (ctx) => {
+ *   if (ctx.type === "store") {
+ *     // ctx is StoreMiddlewareContext here
+ *     console.log("Store:", ctx.spec.displayName);
+ *   }
+ *   return ctx.next();
+ * };
+ * ```
+ */
+export type MiddlewareContext =
+  | FactoryMiddlewareContext
+  | StoreMiddlewareContext;
+
+/**
+ * Generic middleware function for intercepting factory/store creation.
+ * Works with both plain factories and stores.
  *
  * @example
  * ```ts
@@ -946,11 +1007,11 @@ export interface StoreMiddlewareContext<
  * };
  * ```
  */
-export type Middleware = <T>(ctx: MiddlewareContext<T>) => T;
+export type Middleware = (ctx: MiddlewareContext) => unknown;
 
 /**
  * Store-specific middleware function.
- * Use for container middleware where you always work with stores.
+ * Use when you only want to handle stores (e.g., container middleware).
  * The context always has `spec` available.
  *
  * @example
@@ -963,12 +1024,7 @@ export type Middleware = <T>(ctx: MiddlewareContext<T>) => T;
  * };
  * ```
  */
-export type StoreMiddleware = <
-  S extends StateBase = StateBase,
-  A extends ActionsBase = ActionsBase
->(
-  ctx: StoreMiddlewareContext<S, A>
-) => StoreInstance<S, A>;
+export type StoreMiddleware = (ctx: StoreMiddlewareContext) => StoreInstance;
 
 /**
  * Options for creating a resolver.
@@ -978,6 +1034,12 @@ export interface ResolverOptions {
   middleware?: Middleware[];
   /** Parent resolver for hierarchical lookup */
   parent?: Resolver;
+  /**
+   * Resolver to pass to factories when invoking them.
+   * If not provided, uses the resolver itself.
+   * Useful for container to pass itself for circular dependency detection.
+   */
+  invokeResolver?: Resolver;
 }
 
 /**

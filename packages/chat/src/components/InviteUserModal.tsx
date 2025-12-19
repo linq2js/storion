@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { withStore } from "storion/react";
-import { authStore, usersStore, roomsStore, invitationsStore, chatUIStore } from "../stores";
+import { authStore, usersStore, roomsStore, invitationsStore, chatUIStore, routeStore, getActiveRoomId } from "../stores";
 import type { User } from "../types";
 
 export const InviteUserModal = withStore(
@@ -10,8 +10,10 @@ export const InviteUserModal = withStore(
     const [roomsState] = ctx.get(roomsStore);
     const [, invitationsActions] = ctx.get(invitationsStore);
     const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+    const [routeState] = ctx.get(routeStore);
 
-    const activeRoom = (roomsState.rooms.data ?? []).find((r) => r.id === roomsState.activeRoomId);
+    const activeRoomId = getActiveRoomId(routeState.route);
+    const activeRoom = (roomsState.rooms.data ?? []).find((r) => r.id === activeRoomId);
     const usersNotInRoom = (usersState.users.data ?? []).filter(
       (u) =>
         u.id !== authState.currentUser?.id && !activeRoom?.members.includes(u.id)

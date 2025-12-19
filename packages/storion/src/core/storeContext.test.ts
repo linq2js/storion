@@ -633,3 +633,109 @@ describe("focus()", () => {
     });
   });
 });
+
+describe("onDispose()", () => {
+  it("should register cleanup callback that runs on dispose", () => {
+    const cleanup = vi.fn();
+
+    const testStore = store({
+      state: { value: 0 },
+      setup: (ctx) => {
+        ctx.onDispose(cleanup);
+        return {};
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(testStore);
+
+    expect(cleanup).not.toHaveBeenCalled();
+
+    instance.dispose();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("should call multiple cleanup callbacks in registration order", () => {
+    const order: number[] = [];
+
+    const testStore = store({
+      state: { value: 0 },
+      setup: (ctx) => {
+        ctx.onDispose(() => order.push(1));
+        ctx.onDispose(() => order.push(2));
+        ctx.onDispose(() => order.push(3));
+        return {};
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(testStore);
+
+    instance.dispose();
+
+    expect(order).toEqual([1, 2, 3]);
+  });
+
+  it("should allow cleanup of subscriptions", () => {
+    const unsubscribe = vi.fn();
+    const mockApi = {
+      subscribe: vi.fn().mockReturnValue(unsubscribe),
+    };
+
+    const testStore = store({
+      state: { data: null as string | null },
+      setup: (ctx) => {
+        const unsub = mockApi.subscribe((data: string) => {
+          ctx.state.data = data;
+        });
+        ctx.onDispose(unsub);
+        return {};
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(testStore);
+
+    expect(mockApi.subscribe).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).not.toHaveBeenCalled();
+
+    instance.dispose();
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("should allow cleanup of intervals/timers", () => {
+    vi.useFakeTimers();
+
+    const tickFn = vi.fn();
+
+    const testStore = store({
+      state: { tick: 0 },
+      setup: (ctx) => {
+        const intervalId = setInterval(() => {
+          ctx.state.tick++;
+          tickFn();
+        }, 100);
+        ctx.onDispose(() => clearInterval(intervalId));
+        return {};
+      },
+    });
+
+    const stores = container();
+    const instance = stores.get(testStore);
+
+    // Advance time - interval should fire
+    vi.advanceTimersByTime(350);
+    expect(tickFn).toHaveBeenCalledTimes(3);
+
+    // Dispose should clear interval
+    instance.dispose();
+
+    // Advance more time - interval should NOT fire
+    vi.advanceTimersByTime(500);
+    expect(tickFn).toHaveBeenCalledTimes(3); // Still 3
+
+    vi.useRealTimers();
+  });
+});

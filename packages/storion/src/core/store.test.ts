@@ -356,7 +356,7 @@ describe("dependencies via get()", () => {
 
     const stores = container();
 
-    expect(() => stores.get(storeA)).toThrow(/circular/i);
+    expect(() => stores.get(storeA)).toThrow(/Maximum call stack size exceeded/i);
   });
 
   it("should throw when keepAlive store depends on autoDispose store", () => {

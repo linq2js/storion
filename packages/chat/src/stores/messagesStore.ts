@@ -8,7 +8,7 @@
  *
  * Dependencies:
  * - authStore: To get current user for message operations
- * - roomsStore: To get active room for sending messages
+ * - routeStore: To get active room for sending messages
  */
 
 import { store, type ActionsBase } from "storion";
@@ -18,7 +18,7 @@ import { generateId } from "../types";
 import { indexedDBMessagesService } from "../services/indexedDB";
 import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
-import { roomsStore } from "./roomsStore";
+import { routeStore, getActiveRoomId } from "./routeStore";
 
 // ============================================================================
 // Helpers
@@ -105,7 +105,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
     // Get store references during setup phase (MUST be at top level)
     // State is reactive - reads current value when accessed later
     const [authState] = get(authStore);
-    const [roomsState] = get(roomsStore);
+    const [routeState] = get(routeStore);
 
     return {
       // ========================
@@ -134,12 +134,13 @@ export const messagesStore = store<MessagesState, MessagesActions>({
       // ========================
       sendMessage: async (content: string, replyTo?: string) => {
         // Access reactive state obtained during setup
-        if (!authState.currentUser || !roomsState.activeRoomId) return;
+        const activeRoomId = getActiveRoomId(routeState.route);
+        if (!authState.currentUser || !activeRoomId) return;
 
         // Create message object
         const message: Message = {
           id: generateId(),
-          roomId: roomsState.activeRoomId,
+          roomId: activeRoomId,
           senderId: authState.currentUser.id,
           content,
           createdAt: Date.now(),
@@ -159,7 +160,7 @@ export const messagesStore = store<MessagesState, MessagesActions>({
         });
 
         // Stop typing indicator when message is sent
-        sync.typing.stop(roomsState.activeRoomId, authState.currentUser.id);
+        sync.typing.stop(activeRoomId, authState.currentUser.id);
       },
 
       // ========================

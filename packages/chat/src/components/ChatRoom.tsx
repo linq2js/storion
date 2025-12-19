@@ -6,6 +6,8 @@ import {
   roomsStore,
   messagesStore,
   chatUIStore,
+  routeStore,
+  getActiveRoomId,
 } from "../stores";
 import type { Message, User, Room } from "../types";
 
@@ -258,11 +260,13 @@ export const ChatRoom = withStore(
     const [roomsState, roomsActions] = ctx.get(roomsStore);
     const [messagesState, messagesActions] = ctx.get(messagesStore);
     const [chatUIState, chatUIActions] = ctx.get(chatUIStore);
+    const [routeState] = ctx.get(routeStore);
 
-    const activeRoom = (roomsState.rooms.data ?? []).find((r) => r.id === roomsState.activeRoomId);
-    const messages = roomsState.activeRoomId ? messagesState.messages[roomsState.activeRoomId]?.data ?? [] : [];
+    const activeRoomId = getActiveRoomId(routeState.route);
+    const activeRoom = (roomsState.rooms.data ?? []).find((r) => r.id === activeRoomId);
+    const messages = activeRoomId ? messagesState.messages[activeRoomId]?.data ?? [] : [];
     const typingUserIds = chatUIState.typingUsers
-      .filter((t) => t.roomId === roomsState.activeRoomId)
+      .filter((t) => t.roomId === activeRoomId)
       .map((t) => t.userId);
     const typingUsers = (usersState.users.data ?? []).filter((u) => typingUserIds.includes(u.id));
 

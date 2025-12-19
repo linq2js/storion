@@ -527,9 +527,18 @@ function ProductList() {
 
 ### Dependency Injection
 
-**The problem:** Your stores need shared services (API clients, loggers, config) but you don't want to import singletons directly—it makes testing hard and creates tight coupling.
+**The problem:** Your stores need shared services (API clients, loggers, config) but importing singletons directly causes issues:
 
-**With Storion:** The container acts as a DI container. Define factory functions and resolve them with `get()`. Services are cached as singletons automatically.
+- **No lifecycle management** — ES imports are forever; you can't dispose or recreate instances
+- **Testing is painful** — Mocking ES modules requires awkward workarounds
+- **No cleanup** — Resources like connections, intervals, or subscriptions leak between tests
+
+**With Storion:** The container is a full DI system that manages the complete lifecycle:
+
+- **Automatic caching** — Services are singletons by default, created on first use
+- **Dispose & cleanup** — Call `dispose()` to clean up resources, `delete()` to remove and recreate
+- **Override for testing** — Swap implementations with `set()` without touching module imports
+- **Hierarchical containers** — Create child containers for scoped dependencies
 
 ```ts
 import { container, type Resolver } from "storion";
@@ -576,6 +585,24 @@ const userStore = store({
     };
   },
 });
+
+// Testing - easy to mock without module mocking
+const mockApi: ApiService = {
+  get: async () => ({ id: "1", name: "Test User" }),
+  post: async () => ({}),
+};
+
+const testApp = container();
+testApp.set(createApiService, () => mockApi); // Override with mock
+
+// Now userStore will use mockApi instead of real API
+const { actions } = testApp.get(userStore);
+await actions.fetchUser("1"); // Uses mockApi.get()
+
+// Lifecycle management
+testApp.delete(createApiService); // Remove cached instance
+testApp.clear(); // Clear all cached instances
+testApp.dispose(); // Dispose container and all instances
 ```
 
 ### Middleware
@@ -734,34 +761,61 @@ interface AsyncState<T, M extends "fresh" | "stale"> {
 | `applyFor`    | Apply middleware conditionally (pattern/predicate) |
 | `applyExcept` | Apply middleware except for matching patterns      |
 
-#### StoreMiddlewareContext
+#### Middleware Context (Discriminated Union)
 
-Container middleware uses `StoreMiddlewareContext` where `spec` is always available:
+Middleware context uses a discriminated union with `type` field:
 
 ```ts
-interface StoreMiddlewareContext<S, A> {
-  spec: StoreSpec<S, A>; // The store spec (always present)
-  resolver: Resolver; // The resolver/container instance
-  next: () => StoreInstance<S, A>; // Call next middleware or create the store
-  displayName: string; // Store name (always present for stores)
+// For stores (container middleware)
+interface StoreMiddlewareContext {
+  type: "store"; // Discriminant
+  spec: StoreSpec; // Always present for stores
+  factory: Factory;
+  resolver: Resolver;
+  next: () => unknown;
+  displayName: string; // Always present for stores
 }
 
-type StoreMiddleware = <S, A>(
-  ctx: StoreMiddlewareContext<S, A>
-) => StoreInstance<S, A>;
+// For plain factories (resolver middleware)
+interface FactoryMiddlewareContext {
+  type: "factory"; // Discriminant
+  factory: Factory;
+  resolver: Resolver;
+  next: () => unknown;
+  displayName: string | undefined;
+}
+
+type MiddlewareContext = FactoryMiddlewareContext | StoreMiddlewareContext;
 ```
 
-For generic resolver middleware (non-container), use `Middleware` with `MiddlewareContext`:
+**Store-specific middleware** (for containers):
 
 ```ts
-interface MiddlewareContext<T> {
-  factory: Factory<T>; // The factory being invoked
-  resolver: Resolver; // The resolver instance
-  next: () => T; // Call next middleware or the factory
-  displayName?: string; // Name (from factory.displayName or factory.name)
-}
+// No generics needed - simple and clean
+type StoreMiddleware = (ctx: StoreMiddlewareContext) => StoreInstance;
 
-type Middleware = <T>(ctx: MiddlewareContext<T>) => T;
+const loggingMiddleware: StoreMiddleware = (ctx) => {
+  console.log(`Creating: ${ctx.displayName}`);
+  const instance = ctx.next();
+  console.log(`Created: ${instance.id}`);
+  return instance as StoreInstance;
+};
+```
+
+**Generic middleware** (for resolver, works with both stores and factories):
+
+```ts
+type Middleware = (ctx: MiddlewareContext) => unknown;
+
+const loggingMiddleware: Middleware = (ctx) => {
+  // Use type narrowing
+  if (ctx.type === "store") {
+    console.log(`Store: ${ctx.spec.displayName}`);
+  } else {
+    console.log(`Factory: ${ctx.displayName ?? "anonymous"}`);
+  }
+  return ctx.next();
+};
 ```
 
 ### Devtools (`storion/devtools`)

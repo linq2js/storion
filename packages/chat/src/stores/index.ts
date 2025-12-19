@@ -74,6 +74,19 @@ export { chatUIStore, type ChatUIState, type ChatUIActions } from "./chatUIStore
 /** Toast store - manages toast notifications */
 export { toastStore, type Toast, type ToastType, type ToastState, type ToastActions } from "./toastStore";
 
+/** Admin store - manages admin-only operations */
+export { adminStore, type AdminState, type AdminActions } from "./adminStore";
+
+/** Route store - manages current view/route */
+export {
+  routeStore,
+  type RouteState,
+  type RouteActions,
+  getActiveRoomId,
+  isDashboard,
+  isRoom,
+} from "./routeStore";
+
 // ============================================================================
 // Cross-Tab Sync Setup
 // ============================================================================
@@ -87,6 +100,7 @@ import { roomsStore } from "./roomsStore";
 import { messagesStore } from "./messagesStore";
 import { invitationsStore } from "./invitationsStore";
 import { chatUIStore } from "./chatUIStore";
+import { routeStore, getActiveRoomId } from "./routeStore";
 
 /**
  * Interface for the toast notification system
@@ -145,9 +159,10 @@ export function setupCrossTabSync(
     const { state: authState } = app.get(authStore);
     const { state: usersState } = app.get(usersStore);
     const { state: roomsState } = app.get(roomsStore);
+    const { state: routeState } = app.get(routeStore);
 
     const currentUserId = authState.currentUser?.id ?? null;
-    const activeRoomId = roomsState.activeRoomId;
+    const activeRoomId = getActiveRoomId(routeState.route);
     const users = usersState.users.data ?? [];
     const rooms = roomsState.rooms.data ?? [];
 
@@ -380,6 +395,7 @@ export function resetAllStores(app: StoreContainer): void {
   const { actions: messagesActions } = app.get(messagesStore);
   const { actions: invitationsActions } = app.get(invitationsStore);
   const { actions: chatUIActions } = app.get(chatUIStore);
+  const { actions: routeActions } = app.get(routeStore);
 
   // Reset all stores to their initial state
   usersActions.reset();
@@ -387,4 +403,5 @@ export function resetAllStores(app: StoreContainer): void {
   messagesActions.reset();
   invitationsActions.reset();
   chatUIActions.reset();
+  routeActions.reset();
 }

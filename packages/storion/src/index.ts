@@ -93,6 +93,7 @@ export {
   applyFor,
   applyExcept,
   compose,
+  forStores,
   type SpecPattern,
 } from "./core/middleware";
 

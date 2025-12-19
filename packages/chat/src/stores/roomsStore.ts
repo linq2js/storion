@@ -4,11 +4,11 @@
  * Manages chat rooms including:
  * - Loading rooms the user is a member of
  * - Creating and deleting rooms
- * - Selecting the active room
  * - Starting direct message conversations
  *
  * Dependencies:
  * - authStore: To get current user for room operations
+ * - routeStore: For navigation after room operations
  */
 
 import { store, type ActionsBase } from "storion";
@@ -22,6 +22,7 @@ import {
 } from "../services/indexedDB";
 import { crossTabSyncService } from "../services/crossTabSync";
 import { authStore } from "./authStore";
+import { routeStore, getActiveRoomId } from "./routeStore";
 
 // ============================================================================
 // Helpers
@@ -47,9 +48,6 @@ function success<T>(data: T): AsyncState<T, "stale"> {
 export interface RoomsState {
   /** List of rooms the current user is a member of */
   rooms: AsyncState<Room[], "stale">;
-
-  /** Currently selected/active room ID */
-  activeRoomId: string | null;
 }
 
 // ============================================================================
@@ -68,9 +66,6 @@ export interface RoomsActions extends ActionsBase {
 
   /** Delete a room and all its messages */
   deleteRoom: (roomId: string) => Promise<void>;
-
-  /** Select a room as the active room for chatting */
-  selectRoom: (roomId: string | null) => void;
 
   /**
    * Start a direct message conversation with another user
@@ -98,7 +93,6 @@ export const roomsStore = store<RoomsState, RoomsActions>({
   // Initial state
   state: {
     rooms: async.stale<Room[]>([]),
-    activeRoomId: null,
   },
 
   // Setup receives StoreContext for accessing other stores
@@ -114,6 +108,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
     // Get store references during setup phase (MUST be at top level)
     // State is reactive - reads current value when accessed later
     const [authState] = get(authStore);
+    const [routeState, routeActions] = get(routeStore);
 
     // Async action for loading rooms
     const roomsAsync = async(focus("rooms"), async () => {
@@ -137,9 +132,6 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // ========================
       reset: () => {
         roomsAsync.reset();
-        update((s: RoomsState) => {
-          s.activeRoomId = null;
-        });
       },
 
       // ========================
@@ -193,21 +185,13 @@ export const roomsStore = store<RoomsState, RoomsActions>({
         update((s: RoomsState) => {
           const rooms = s.rooms.data ?? [];
           s.rooms = success(rooms.filter((r: Room) => r.id !== roomId));
-
-          // Clear active room if it was deleted
-          if (s.activeRoomId === roomId) {
-            s.activeRoomId = null;
-          }
         });
-      },
 
-      // ========================
-      // Select Room Action
-      // ========================
-      // Simple synchronous action using update.action
-      selectRoom: update.action((draft: RoomsState, roomId: string | null) => {
-        draft.activeRoomId = roomId;
-      }),
+        // Navigate away if viewing the deleted room
+        if (getActiveRoomId(routeState.route) === roomId) {
+          routeActions.goToWelcome();
+        }
+      },
 
       // ========================
       // Start Direct Message Action
@@ -241,11 +225,9 @@ export const roomsStore = store<RoomsState, RoomsActions>({
           sync.broadcast("ROOM_CREATED", room);
         }
 
-        // Refresh rooms list and select the DM room
+        // Refresh rooms list and navigate to the DM room
         await roomsAsync.dispatch();
-        update((s: RoomsState) => {
-          s.activeRoomId = room!.id;
-        });
+        routeActions.goToRoom(room.id);
       },
 
       // ========================
@@ -273,12 +255,12 @@ export const roomsStore = store<RoomsState, RoomsActions>({
         update((s: RoomsState) => {
           const rooms = s.rooms.data ?? [];
           s.rooms = success(rooms.filter((r: Room) => r.id !== roomId));
-
-          // Clear active room if removed
-          if (s.activeRoomId === roomId) {
-            s.activeRoomId = null;
-          }
         });
+
+        // Navigate away if viewing the removed room
+        if (getActiveRoomId(routeState.route) === roomId) {
+          routeActions.goToWelcome();
+        }
       },
 
       // ========================

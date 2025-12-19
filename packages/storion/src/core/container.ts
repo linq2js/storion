@@ -1,12 +1,12 @@
 /**
  * Container implementation.
  *
- * Manages store instances with resolver pattern:
- * - Factory-based dependency injection
- * - Caching (singleton per spec)
- * - Override support for testing
- * - Scoped containers
- * - Lifecycle events
+ * A specialized resolver for stores that adds:
+ * - ID lookup for store instances
+ * - Lifecycle events (onCreate, onDispose)
+ * - Ordered disposal
+ *
+ * Delegates to resolver for caching, overrides, and middleware.
  */
 
 import {
@@ -17,15 +17,14 @@ import {
   type StoreInstance,
   type StoreContainer,
   type ContainerOptions,
-  type StoreMiddleware,
-  type StoreMiddlewareContext,
-  type Factory,
+  type Middleware,
   type Resolver,
 } from "../types";
 
 import { emitter } from "../emitter";
 import { untrack } from "./tracking";
 import { isSpec } from "../is";
+import { createResolver } from "./createResolver";
 
 // ==========================================================================
 // Default Middleware
@@ -33,9 +32,9 @@ import { isSpec } from "../is";
 
 interface DefaultMiddlewareConfig {
   /** Middleware to run before container's middleware */
-  pre?: StoreMiddleware[];
+  pre?: Middleware[];
   /** Middleware to run after container's middleware */
-  post?: StoreMiddleware[];
+  post?: Middleware[];
 }
 
 let defaultMiddlewareConfig: DefaultMiddlewareConfig = {};
@@ -65,16 +64,10 @@ interface ContainerFn {
 /**
  * Create a store container.
  *
- * Container provides resolver methods plus store-specific lifecycle:
- * - get(spec): cached instance
- * - create(spec): fresh instance
- * - set(spec, override): override for DI/testing
- * - has(spec): check cache
- * - tryGet(spec): get if cached
- * - delete(spec): remove from cache
- * - clear(): dispose all
- * - scope(): child container
+ * Container wraps a resolver and adds store-specific features:
+ * - get(id): lookup store by instance ID
  * - onCreate/onDispose: lifecycle events
+ * - Ordered disposal (reverse creation order)
  */
 export const container: ContainerFn = function (
   options: InternalContainerOptions = {}
@@ -86,105 +79,47 @@ export const container: ContainerFn = function (
     ...(defaultMiddlewareConfig.post ?? []),
   ];
 
-  // Instance cache: spec → instance
-  const cache = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
-
-  // Factory cache: factory → instance (for plain factory functions)
-  const factoryCache = new Map<Factory<unknown>, unknown>();
-
-  // Instance cache: id → instance (for ID lookup)
+  // Store-specific tracking
   const instancesById = new Map<string, StoreInstance<any, any>>();
-
-  // Overrides: spec → replacement spec
-  const overrides = new Map<StoreSpec<any, any>, StoreSpec<any, any>>();
-
-  // Factory overrides: factory → replacement factory
-  const factoryOverrides = new Map<Factory<unknown>, Factory<unknown>>();
-
-  // Creation order (for disposal in reverse order)
   const creationOrder: StoreSpec<any, any>[] = [];
 
   // Lifecycle emitters
   const createEmitter = emitter<StoreInstance<any, any>>();
   const disposeEmitter = emitter<StoreInstance<any, any>>();
 
-  // Currently creating (for circular dependency detection)
-  const creating = new Set<StoreSpec<any, any>>();
-
-  // Currently creating factories (for circular dependency detection)
-  const creatingFactories = new Set<Factory<unknown>>();
-
   // Parent container (for scoped containers)
   const parent = options._parent;
 
-  // ==========================================================================
-  // Helpers
-  // ==========================================================================
+  // Forward declaration for resolver setup
+  let containerApi: StoreContainer;
+
+  // Create internal resolver with middleware
+  // Pass containerApi as invokeResolver so stores get container for DI
+  const internalResolver = createResolver({
+    middleware,
+    parent: parent as Resolver | undefined,
+    get invokeResolver() {
+      return containerApi as unknown as Resolver;
+    },
+  });
 
   /**
-   * Resolve spec to actual spec (respecting overrides).
+   * Setup store-specific tracking after creation.
    */
-  const resolve = <S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>
-  ): StoreSpec<S, A> => (overrides.get(spec) as StoreSpec<S, A>) ?? spec;
+  function trackStore(
+    spec: StoreSpec<any, any>,
+    instance: StoreInstance<any, any>
+  ): void {
+    instancesById.set(instance.id, instance);
+    creationOrder.push(spec);
 
-  /**
-   * Build middleware chain for store creation.
-   * Uses StoreMiddlewareContext which always has `spec` available.
-   * Middleware runs in order: first middleware wraps second, etc.
-   */
-  function buildMiddlewareChain(): <S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>
-  ) => StoreInstance<S, A> {
-    // Return function that builds and executes the chain
-    return <S extends StateBase, A extends ActionsBase>(
-      spec: StoreSpec<S, A>
-    ): StoreInstance<S, A> => {
-      // Build the chain starting from the first middleware
-      let index = 0;
-
-      const executeNext = (): StoreInstance<S, A> => {
-        if (index >= middleware.length) {
-          // End of chain - invoke the factory
-          return spec(containerApi as any);
-        }
-
-        const currentMiddleware = middleware[index];
-        index++;
-
-        // Create context for this middleware (spec is always present)
-        const ctx: StoreMiddlewareContext<S, A> = {
-          spec,
-          factory: spec,
-          resolver: containerApi as Resolver,
-          next: executeNext,
-          displayName: spec.displayName,
-        };
-
-        return currentMiddleware(ctx);
-      };
-
-      return executeNext();
-    };
-  }
-
-  const createWithMiddleware = buildMiddlewareChain();
-
-  /**
-   * Create instance and set up disposal handling.
-   */
-  function createInstance<S extends StateBase, A extends ActionsBase>(
-    spec: StoreSpec<S, A>
-  ): StoreInstance<S, A> {
-    const instance = untrack(() => createWithMiddleware(spec));
-
-    // Set up disposal cleanup (if instance supports it)
-    // Middleware may return mock instances without onDispose
+    // Setup disposal cleanup
     if (typeof instance.onDispose === "function") {
       instance.onDispose(() => {
         disposeEmitter.emit(instance);
-        cache.delete(spec);
         instancesById.delete(instance.id);
+        // Remove from resolver cache
+        internalResolver.delete(spec);
         const index = creationOrder.indexOf(spec);
         if (index !== -1) {
           creationOrder.splice(index, 1);
@@ -192,183 +127,106 @@ export const container: ContainerFn = function (
       });
     }
 
-    return instance;
+    // Emit creation event
+    createEmitter.emit(instance);
   }
 
   // ==========================================================================
-  // Container API (implements Resolver + container-specific methods)
+  // Container API
   // ==========================================================================
 
-  const containerApi: StoreContainer = {
+  containerApi = {
     [STORION_TYPE]: "container",
 
-    // ========================================================================
-    // Resolver Methods
-    // ========================================================================
-
-    // Implementation handles multiple overloads
+    // Get by ID or factory/spec
     get(specOrIdOrFactory: any): any {
-      // ID lookup
+      // ID lookup (store-specific)
       if (typeof specOrIdOrFactory === "string") {
         return instancesById.get(specOrIdOrFactory);
       }
 
-      // Plain factory function (not a StoreSpec)
-      if (!isSpec(specOrIdOrFactory)) {
-        const factory = specOrIdOrFactory as Factory<unknown>;
+      // Check if already cached (for stores, track on first creation)
+      const wasCached = internalResolver.has(specOrIdOrFactory);
 
-        // Check local cache
-        if (factoryCache.has(factory)) {
-          return factoryCache.get(factory);
-        }
+      // Delegate to resolver
+      const instance = untrack(() => internalResolver.get(specOrIdOrFactory));
 
-        // Check parent
-        if (
-          parent &&
-          factoryOverrides.size === 0 &&
-          "tryGet" in parent &&
-          typeof (parent as any).tryGet === "function"
-        ) {
-          const parentInstance = (parent as any).tryGet(factory);
-          if (parentInstance !== undefined) {
-            return parentInstance;
-          }
-        }
-
-        // Circular dependency check
-        if (creatingFactories.has(factory)) {
-          const name = factory.name || "anonymous";
-          throw new Error(
-            `Circular dependency detected: factory "${name}" is being created while already in creation stack.`
-          );
-        }
-
-        creatingFactories.add(factory);
-
-        try {
-          // Get mapped factory (respecting overrides)
-          const mapped =
-            (factoryOverrides.get(factory) as Factory<unknown>) ?? factory;
-          // Create instance - pass container as resolver
-          const instance = mapped(containerApi as any);
-          // Cache with original factory as key
-          factoryCache.set(factory, instance);
-          return instance;
-        } finally {
-          creatingFactories.delete(factory);
-        }
+      // Track stores on first creation
+      if (!wasCached && isSpec(specOrIdOrFactory)) {
+        trackStore(specOrIdOrFactory, instance as StoreInstance<any, any>);
       }
 
-      const spec = specOrIdOrFactory;
-
-      // Check local cache (use original spec as key)
-      if (cache.has(spec)) {
-        return cache.get(spec);
-      }
-
-      // Check parent (only if no local overrides)
-      if (parent && overrides.size === 0 && parent.has(spec)) {
-        return parent.get(spec);
-      }
-
-      // Circular dependency check
-      if (creating.has(spec)) {
-        const name = spec.displayName ?? "unknown";
-        throw new Error(
-          `Circular dependency detected: "${name}" is being created while already in creation stack.`
-        );
-      }
-
-      creating.add(spec);
-
-      try {
-        // Create instance using mapped spec
-        const mapped = resolve(spec);
-        const instance = createInstance(mapped);
-
-        // Cache with original spec as key
-        cache.set(spec, instance);
-        instancesById.set(instance.id, instance);
-        creationOrder.push(spec);
-
-        // Emit creation event
-        createEmitter.emit(instance);
-
-        return instance;
-      } finally {
-        creating.delete(spec);
-      }
+      return instance;
     },
 
-    // Implementation handles both StoreSpec and Factory overloads
     create(specOrFactory: any): any {
-      // Handle plain factory functions
-      if (!isSpec(specOrFactory)) {
-        const factory = specOrFactory as Factory<unknown>;
-        // Get mapped factory (respecting overrides)
-        const mapped =
-          (factoryOverrides.get(factory) as Factory<unknown>) ?? factory;
-        // Create fresh instance (no caching) - pass container as resolver
-        return mapped(containerApi as any);
+      // Delegate to resolver (no caching)
+      const instance = untrack(() => internalResolver.create(specOrFactory));
+
+      // Track stores (but not in creation order since it's a fresh instance)
+      if (isSpec(specOrFactory)) {
+        const storeInstance = instance as StoreInstance<any, any>;
+        instancesById.set(storeInstance.id, storeInstance);
+
+        if (typeof storeInstance.onDispose === "function") {
+          storeInstance.onDispose(() => {
+            disposeEmitter.emit(storeInstance);
+            instancesById.delete(storeInstance.id);
+          });
+        }
       }
 
-      // Create fresh store instance using mapped spec (no caching)
-      const mapped = resolve(specOrFactory);
-      return createInstance(mapped);
+      return instance;
     },
 
     set<S extends StateBase, A extends ActionsBase>(
       spec: StoreSpec<S, A>,
       override: StoreSpec<S, A>
     ): void {
-      overrides.set(spec, override);
-      // Invalidate cache - dispose existing instance if any
-      const existing = cache.get(spec);
+      // Dispose existing instance if any
+      const existing = internalResolver.tryGet(spec) as
+        | StoreInstance<S, A>
+        | undefined;
       if (existing) {
         existing.dispose();
       }
+      internalResolver.set(spec, override);
     },
 
     has(spec: StoreSpec<any, any>): boolean {
-      const inParent = parent && overrides.size === 0 && parent.has(spec);
-      return cache.has(spec) || (inParent ?? false);
+      return internalResolver.has(spec);
     },
 
     tryGet<S extends StateBase, A extends ActionsBase>(
       spec: StoreSpec<S, A>
     ): StoreInstance<S, A> | undefined {
-      if (cache.has(spec)) {
-        return cache.get(spec) as StoreInstance<S, A>;
-      }
-      if (parent && overrides.size === 0) {
-        return parent.tryGet(spec);
-      }
-      return undefined;
+      return internalResolver.tryGet(spec) as StoreInstance<S, A> | undefined;
     },
 
     delete(spec: StoreSpec<any, any>): boolean {
-      const instance = cache.get(spec);
+      const instance = internalResolver.tryGet(spec) as
+        | StoreInstance<any, any>
+        | undefined;
       if (instance) {
+        // dispose() triggers onDispose which removes from resolver
         instance.dispose();
         return true;
       }
       return false;
     },
 
-    // ========================================================================
-    // Container-Specific Methods
-    // ========================================================================
-
     clear(): void {
       // Dispose in reverse creation order
       const specs = [...creationOrder].reverse();
       for (const spec of specs) {
-        const instance = cache.get(spec);
+        const instance = internalResolver.tryGet(spec) as
+          | StoreInstance<any, any>
+          | undefined;
         if (instance) {
           instance.dispose();
         }
       }
-      cache.clear();
+      internalResolver.clear();
       instancesById.clear();
       creationOrder.length = 0;
     },
@@ -378,7 +236,6 @@ export const container: ContainerFn = function (
     },
 
     scope(scopeOptions: ContainerOptions = {}): StoreContainer {
-      // Create child container with this as parent
       return container({
         ...options,
         ...scopeOptions,

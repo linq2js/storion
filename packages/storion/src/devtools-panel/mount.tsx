@@ -49,34 +49,86 @@ export interface MountOptions {
 let panelRoot: Root | null = null;
 let panelContainer: HTMLElement | null = null;
 let currentPosition: PanelPosition = "left";
-let originalBodyPadding: string = "";
+
+// Track original body padding for each side
+const originalBodyPadding = {
+  left: "",
+  right: "",
+  bottom: "",
+};
+
+// Track which padding is currently applied
+let currentPaddingSide: PanelPosition | null = null;
 
 /**
- * Update body padding to prevent content overlap when panel is at bottom.
+ * Update body padding to prevent content overlap based on panel position.
+ * Clears padding from previous position before applying new padding.
  */
 function updateBodyPadding(
   position: PanelPosition,
   size: number,
   collapsed: boolean
 ) {
-  if (position === "bottom" && !collapsed) {
-    // Save original padding on first call
-    if (!originalBodyPadding) {
-      originalBodyPadding = document.body.style.paddingBottom || "";
+  // First, restore previous padding if position changed
+  if (currentPaddingSide && currentPaddingSide !== position) {
+    restorePaddingForPosition(currentPaddingSide);
+  }
+
+  if (collapsed) {
+    // Restore current position padding when collapsed
+    if (currentPaddingSide) {
+      restorePaddingForPosition(currentPaddingSide);
+      currentPaddingSide = null;
+    }
+    return;
+  }
+
+  // Apply padding for current position
+  if (position === "bottom") {
+    if (currentPaddingSide !== "bottom") {
+      originalBodyPadding.bottom = document.body.style.paddingBottom || "";
     }
     document.body.style.paddingBottom = `${size}px`;
-  } else {
-    // Restore original padding
-    document.body.style.paddingBottom = originalBodyPadding;
+    currentPaddingSide = "bottom";
+  } else if (position === "left") {
+    if (currentPaddingSide !== "left") {
+      originalBodyPadding.left = document.body.style.paddingLeft || "";
+    }
+    document.body.style.paddingLeft = `${size}px`;
+    currentPaddingSide = "left";
+  } else if (position === "right") {
+    if (currentPaddingSide !== "right") {
+      originalBodyPadding.right = document.body.style.paddingRight || "";
+    }
+    document.body.style.paddingRight = `${size}px`;
+    currentPaddingSide = "right";
   }
 }
 
 /**
- * Reset body padding to original value.
+ * Restore padding for a specific position to its original value.
+ */
+function restorePaddingForPosition(position: PanelPosition) {
+  if (position === "bottom") {
+    document.body.style.paddingBottom = originalBodyPadding.bottom;
+  } else if (position === "left") {
+    document.body.style.paddingLeft = originalBodyPadding.left;
+  } else if (position === "right") {
+    document.body.style.paddingRight = originalBodyPadding.right;
+  }
+}
+
+/**
+ * Reset all body padding to original values.
  */
 function resetBodyPadding() {
-  document.body.style.paddingBottom = originalBodyPadding;
-  originalBodyPadding = "";
+  document.body.style.paddingLeft = originalBodyPadding.left;
+  document.body.style.paddingRight = originalBodyPadding.right;
+  document.body.style.paddingBottom = originalBodyPadding.bottom;
+  originalBodyPadding.left = "";
+  originalBodyPadding.right = "";
+  originalBodyPadding.bottom = "";
+  currentPaddingSide = null;
 }
 
 // Track if panel was previously collapsed (for fade-in effect)

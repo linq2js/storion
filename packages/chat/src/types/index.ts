@@ -11,6 +11,29 @@ export interface User {
 
 export type UserStatus = "online" | "away" | "offline";
 
+/** Admin user ID - has full control over the app */
+export const ADMIN_USER_ID = "admin";
+
+/** Check if a user is an admin */
+export function isAdmin(user: User | null | undefined): boolean {
+  return user?.id === ADMIN_USER_ID;
+}
+
+// Route types for navigation
+export type Route =
+  | { type: "welcome" }
+  | { type: "room"; payload: { id: string } }
+  | { type: "dashboard" };
+
+/** Create a welcome route (no room selected) */
+export const welcomeRoute = (): Route => ({ type: "welcome" });
+
+/** Create a room route */
+export const roomRoute = (id: string): Route => ({ type: "room", payload: { id } });
+
+/** Create a dashboard route */
+export const dashboardRoute = (): Route => ({ type: "dashboard" });
+
 export interface CurrentUser extends User {
   tabId: string;
 }
