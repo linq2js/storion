@@ -1200,6 +1200,342 @@ describe("effect", () => {
         expect(runCount).toBe(2);
         expect(result).toBe("computed result");
       });
+
+      it("should throw error when refresh is called while effect is running", () => {
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            expect(() => {
+              effect((ctx) => {
+                // Calling refresh synchronously inside the effect body
+                // should throw because the effect is still running
+                ctx.refresh();
+              });
+            }).toThrow("Effect is already running, cannot refresh");
+          }
+        );
+      });
+
+      it("should re-run effect when returning ctx.refresh", () => {
+        let runCount = 0;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            effect((ctx) => {
+              runCount++;
+              // Return ctx.refresh to request a re-run after first execution
+              if (runCount === 1) {
+                return ctx.refresh;
+              }
+            });
+          }
+        );
+
+        // Effect should have run twice - initial run and re-run from returning ctx.refresh
+        expect(runCount).toBe(2);
+      });
+
+      it("should only re-run once when returning ctx.refresh multiple times", () => {
+        let runCount = 0;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            effect((ctx) => {
+              runCount++;
+              // Keep returning ctx.refresh for first 3 runs
+              if (runCount <= 3) {
+                return ctx.refresh;
+              }
+            });
+          }
+        );
+
+        // Effect should have run 4 times total (initial + 3 re-runs)
+        expect(runCount).toBe(4);
+      });
+
+      it("should not re-run when returning something other than ctx.refresh", () => {
+        let runCount = 0;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            effect((ctx) => {
+              runCount++;
+              // Return something else - should not trigger re-run
+              return () => {};
+            });
+          }
+        );
+
+        expect(runCount).toBe(1);
+      });
+
+      it("should not re-run from returning ctx.refresh after dispose", () => {
+        let runCount = 0;
+        let dispose: VoidFunction | undefined;
+        let savedRefresh: (() => void) | undefined;
+
+        withHooks(
+          {
+            scheduleEffect: (runEffect) => {
+              runEffect();
+            },
+            scheduleNotification: (execute) => {
+              execute();
+            },
+          },
+          () => {
+            dispose = effect((ctx) => {
+              runCount++;
+              savedRefresh = ctx.refresh;
+              // Only return ctx.refresh on first run to avoid infinite loop
+              if (runCount === 1) {
+                return ctx.refresh;
+              }
+            });
+          }
+        );
+
+        // Effect ran twice (initial + re-run from returning ctx.refresh)
+        expect(runCount).toBe(2);
+
+        // Now dispose
+        dispose?.();
+
+        // Calling refresh after dispose should not trigger re-run
+        savedRefresh?.();
+        expect(runCount).toBe(2);
+      });
+    });
+  });
+
+  describe("Effect Re-run Triggers", () => {
+    it("should re-run from ctx.refresh() called in setTimeout", async () => {
+      let runCount = 0;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect((ctx) => {
+            runCount++;
+            if (runCount === 1) {
+              setTimeout(() => {
+                ctx.refresh();
+              }, 10);
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+
+      // Wait for setTimeout
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(runCount).toBe(2);
+    });
+
+    it("should re-run from ctx.refresh() called in promise.then", async () => {
+      let runCount = 0;
+      let resolvePromise: (() => void) | null = null;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect((ctx) => {
+            runCount++;
+            if (runCount === 1) {
+              const promise = new Promise<void>((resolve) => {
+                resolvePromise = resolve;
+              });
+              promise.then(() => {
+                ctx.refresh();
+              });
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+
+      // Resolve promise and wait for microtask
+      resolvePromise?.();
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(runCount).toBe(2);
+    });
+
+    it("should re-run from ctx.refresh() called in ctx.safe().then", async () => {
+      let runCount = 0;
+      let resolvePromise: ((value: string) => void) | null = null;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect((ctx) => {
+            runCount++;
+            if (runCount === 1) {
+              const promise = new Promise<string>((resolve) => {
+                resolvePromise = resolve;
+              });
+              ctx.safe(promise).then(() => {
+                ctx.refresh();
+              });
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+
+      // Resolve promise and wait
+      resolvePromise?.("data");
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(runCount).toBe(2);
+    });
+
+    it("should not re-run from stale ctx.refresh() after effect re-runs", async () => {
+      let runCount = 0;
+      let firstCtxRefresh: (() => void) | null = null;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect((ctx) => {
+            runCount++;
+            if (runCount === 1) {
+              firstCtxRefresh = ctx.refresh;
+              // Return ctx.refresh to trigger immediate re-run
+              return ctx.refresh;
+            }
+          });
+        }
+      );
+
+      // After returning ctx.refresh, effect ran twice
+      expect(runCount).toBe(2);
+
+      // The first context's refresh should be stale and not trigger
+      firstCtxRefresh?.();
+      expect(runCount).toBe(2);
+    });
+
+    it("should invalidate old ctx.refresh when effect re-runs", async () => {
+      let runCount = 0;
+      let firstCtxRefresh: (() => void) | undefined;
+      let secondCtxRefresh: (() => void) | undefined;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect((ctx) => {
+            runCount++;
+
+            if (runCount === 1) {
+              // Save the first context's refresh
+              firstCtxRefresh = ctx.refresh;
+              // Schedule async refresh that will trigger run 2
+              setTimeout(() => {
+                ctx.refresh();
+              }, 10);
+            } else if (runCount === 2) {
+              // Save the second context's refresh
+              secondCtxRefresh = ctx.refresh;
+              // Schedule another async refresh
+              setTimeout(() => {
+                ctx.refresh(); // This will be stale after run 3
+              }, 10);
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+
+      // Wait for first setTimeout to trigger run 2
+      await new Promise((r) => setTimeout(r, 20));
+      expect(runCount).toBe(2);
+
+      // First context's refresh should be stale now
+      firstCtxRefresh?.();
+      expect(runCount).toBe(2);
+
+      // Second context's refresh still works
+      secondCtxRefresh?.();
+      expect(runCount).toBe(3);
+
+      // Wait for the stale setTimeout from run 2
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Should be 3 - the setTimeout refresh from run 2 was stale
+      expect(runCount).toBe(3);
     });
   });
 });

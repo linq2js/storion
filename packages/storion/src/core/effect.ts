@@ -274,6 +274,12 @@ function createEffectContext(
   return Object.assign(context, { _runCleanups: runCleanups });
 }
 
+class CannotRefreshError extends Error {
+  constructor() {
+    super("Effect is already running, cannot refresh");
+  }
+}
+
 // =============================================================================
 // Effect
 // =============================================================================
@@ -511,6 +517,7 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
   const execute = () => {
     if (isDisposed || isRunning) return;
     isRunning = true;
+    let shouldRefresh = false;
 
     const currentGeneration = ++runGeneration;
 
@@ -534,24 +541,20 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       let lazyContext: (EffectContext & { _runCleanups: () => void }) | null =
         null;
 
-      const getOrCreateContext = () => {
-        if (!lazyContext) {
-          lazyContext = createEffectContext(currentGeneration, () => {
-            scheduleNotification(execute, fn);
-          });
-        }
-        return lazyContext;
-      };
-
-      const lazyContextProxy = new Proxy({} as EffectContext, {
-        get(_, prop) {
-          return getOrCreateContext()[prop as keyof EffectContext];
-        },
-      });
+      if (fn.length) {
+        lazyContext = createEffectContext(currentGeneration, () => {
+          if (isRunning) {
+            throw new CannotRefreshError();
+          }
+          // refreshing the effect will re-run the effect, no need to re-schedule effect
+          // typically calling refresh must be async, so it will be scheduled after the current run completes
+          execute();
+        });
+      }
 
       // Run effect with tracking
       withHooks(getTrackingHooks, () => {
-        const result: unknown = fn(lazyContextProxy);
+        const result: unknown = fn(lazyContext as EffectContext);
 
         if (
           result !== null &&
@@ -562,6 +565,12 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
             "Effect function must be synchronous. " +
               "Use ctx.safe(promise) for async operations instead of returning a Promise."
           );
+        }
+
+        // by returning the refresh function from the effect, it can be used to manually trigger a re-run of the effect
+        // with this approach, we won't break rest of the effect execution
+        if (lazyContext && lazyContext.refresh === result) {
+          shouldRefresh = true;
         }
       });
 
@@ -586,9 +595,17 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       prevTrackedDeps.clear();
       prevSubscriptionEmitter = null;
     } catch (error) {
+      // Programming errors should always be thrown, not handled
+      if (error instanceof Error && error instanceof CannotRefreshError) {
+        throw error;
+      }
       handleError(error);
     } finally {
       isRunning = false;
+    }
+
+    if (shouldRefresh) {
+      execute();
     }
   };
 

@@ -385,6 +385,60 @@ export const syncStore = store({
 });
 ```
 
+### Effect Re-run
+
+Effects automatically re-run when their tracked state changes. There are three ways an effect can be triggered to re-run:
+
+**1. Tracked state changes** — The most common case. When any state property read during the effect's execution changes, the effect re-runs automatically.
+
+```ts
+effect(() => {
+  // This effect tracks `state.count` and re-runs when it changes
+  console.log("Count is:", state.count);
+});
+```
+
+**2. Calling `ctx.refresh()` asynchronously** — You can manually trigger a re-run from async code (promises, setTimeout, event handlers).
+
+```ts
+effect((ctx) => {
+  // Schedule a refresh after some async work
+  ctx.safe(fetchData()).then(() => {
+    ctx.refresh(); // Re-runs the effect
+  });
+
+  // Or from a setTimeout
+  setTimeout(() => {
+    ctx.refresh();
+  }, 1000);
+});
+```
+
+**3. Returning `ctx.refresh`** — For synchronous refresh requests, return `ctx.refresh` from the effect. The effect will re-run after the current execution completes.
+
+```ts
+effect((ctx) => {
+  const data = async.wait(state.asyncData); // May throw a promise
+  // If we get here, data is available
+  state.result = transform(data);
+
+  // Return ctx.refresh to request a re-run after this execution
+  if (needsAnotherRun) {
+    return ctx.refresh;
+  }
+});
+```
+
+> **Important:** Effects cannot re-run while already executing. Calling `ctx.refresh()` synchronously during effect execution throws an error:
+>
+> ```ts
+> effect((ctx) => {
+>   ctx.refresh(); // ❌ Error: Effect is already running, cannot refresh
+> });
+> ```
+>
+> This prevents infinite loops and ensures predictable execution. Use the return pattern or async scheduling instead.
+
 ### Effect with Safe Async
 
 **The problem:** When an effect re-runs before an async operation completes, you get stale data or "state update on unmounted component" warnings. Managing this manually is error-prone.
