@@ -2085,6 +2085,10 @@ fix(react): resolve hook issue
 docs: update README
 ```
 
+### AI Assistance
+
+For AI coding assistants, see [AI_GUIDE.md](./AI_GUIDE.md) for rules and patterns when generating Storion code.
+
 ---
 
 ## License

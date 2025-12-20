@@ -1,0 +1,182 @@
+# Storion - AI Coding Rules
+
+This project uses **Storion**, a reactive state management library for React.
+For detailed documentation, see `packages/storion/README.md` and `packages/storion/AI_GUIDE.md`.
+
+## Naming Conventions
+
+- Store specs: `xxxStore` (e.g., `userStore`, `cartStore`)
+- Service factories: `xxxService` (e.g., `apiService`, `loggerService`)
+- Mixins: `xxxMixin` (e.g., `counterMixin`)
+
+## Imports
+
+**For React apps** - import everything from `storion/react` (it re-exports from `storion`):
+
+```ts
+import { store, container, effect, pick, trigger, useStore, StoreProvider } from "storion/react";
+import { async } from "storion/async";
+```
+
+**For non-React apps:**
+
+```ts
+import { store, container, effect, pick, trigger } from "storion";
+import { async } from "storion/async";
+```
+
+## Critical Rules
+
+### 1. Direct Mutation: First-Level Only
+
+```ts
+// ✅ CORRECT
+state.count = 10;
+
+// ❌ WRONG - nested (won't trigger reactivity)
+state.profile.name = "John";
+
+// ✅ CORRECT - use update() for nested
+update((draft) => { draft.profile.name = "John"; });
+```
+
+### 2. get() is Setup-Time Only
+
+```ts
+// ✅ CORRECT
+setup({ get }) {
+  const [otherState, otherActions] = get(otherStore);
+  return {
+    doSomething: () => { /* use otherState here */ },
+  };
+}
+
+// ❌ WRONG - get() inside action throws
+setup({ get }) {
+  return {
+    doSomething: () => { get(otherStore); }, // THROWS!
+  };
+}
+```
+
+### 3. Effects Must Be Synchronous
+
+```ts
+// ❌ WRONG
+effect(async (ctx) => { await fetchData(); });
+
+// ✅ CORRECT
+effect((ctx) => {
+  ctx.safe(fetchData()).then((data) => { state.data = data; });
+});
+```
+
+### 4. trigger() is Global Function
+
+```ts
+import { trigger } from "storion/react";
+
+// ✅ CORRECT
+trigger(actions.fetch, [userId], userId);
+
+// ❌ WRONG - anonymous function
+trigger(() => actions.fetch(userId), [userId]);
+```
+
+### 5. async.wait() Behavior
+
+| Status    | Fresh Mode                     | Stale Mode            |
+| --------- | ------------------------------ | --------------------- |
+| `idle`    | ❌ Throws AsyncNotReadyError   | ✅ Returns stale data |
+| `pending` | ❌ Throws promise (Suspense)   | ✅ Returns stale data |
+| `success` | ✅ Returns data                | ✅ Returns data       |
+| `error`   | ❌ Throws error                | ✅ Returns stale data |
+
+### 6. Store Lifetime
+
+```ts
+// ❌ WRONG - keepAlive cannot depend on autoDispose
+const shortLived = store({ lifetime: "autoDispose", ... });
+const longLived = store({
+  lifetime: "keepAlive",
+  setup: ({ get }) => { get(shortLived); }, // THROWS!
+});
+```
+
+## Quick Patterns
+
+### Define Store
+
+```ts
+const userStore = store({
+  name: "user",
+  state: { name: "", age: 0 },
+  setup({ state, update }) {
+    return {
+      setName: (name: string) => { state.name = name; },
+    };
+  },
+});
+```
+
+### Use in React
+
+```tsx
+function Component() {
+  const { name, setName } = useStore(({ get }) => {
+    const [state, actions] = get(userStore);
+    return { name: state.name, setName: actions.setName };
+  });
+  return <input value={name} onChange={(e) => setName(e.target.value)} />;
+}
+```
+
+### Async State
+
+```ts
+const userStore = store({
+  name: "user",
+  state: {
+    user: async.fresh<User>(),      // undefined during loading
+    users: async.stale<User[]>([]), // keeps previous data
+  },
+  setup({ focus }) {
+    const userAsync = async(focus("user"), async (ctx, id: string) => {
+      const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
+      return res.json();
+    });
+    return { fetchUser: userAsync.dispatch };
+  },
+});
+```
+
+### Trigger Fetch
+
+```tsx
+function UserProfile({ userId }: { userId: string }) {
+  const { user } = useStore(({ get }) => {
+    const [state, actions] = get(userStore);
+    trigger(actions.fetchUser, [userId], userId);
+    return { user: state.user };
+  });
+
+  if (user.status === "pending") return <Spinner />;
+  if (user.status === "error") return <Error error={user.error} />;
+  return <div>{user.data?.name}</div>;
+}
+```
+
+## Common Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Cannot wait: state is idle` | async.wait() on fresh idle | Call trigger/dispatch first |
+| `Setup phase has ended` | get/mixin/focus in action | Move to setup phase |
+| `Effect must be synchronous` | async effect | Use ctx.safe() |
+| `lifetime mismatch` | keepAlive → autoDispose dep | Fix dependency direction |
+
+## Testing
+
+- Use `jest` with `it()` (not `test()`)
+- Write tests first, then code, then run and fix
+
