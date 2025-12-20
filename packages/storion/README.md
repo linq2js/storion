@@ -20,24 +20,51 @@
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#usage">Usage</a> •
+  <a href="#core-concepts">Core Concepts</a> •
   <a href="#api-reference">API Reference</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="#advanced-patterns">Advanced Patterns</a> •
+  <a href="#limitations--anti-patterns">Limitations</a>
 </p>
+
+---
+
+## Table of Contents
+
+- [What is Storion?](#what-is-storion)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Core Concepts](#core-concepts)
+  - [Stores](#stores)
+  - [Services](#services)
+  - [Container](#container)
+  - [Reactivity](#reactivity)
+- [Working with State](#working-with-state)
+  - [Direct Mutation](#direct-mutation)
+  - [Nested State with update()](#nested-state-with-update)
+  - [Focus (Lens-like Access)](#focus-lens-like-access)
+- [Reactive Effects](#reactive-effects)
+- [Async State Management](#async-state-management)
+- [Using Stores in React](#using-stores-in-react)
+- [API Reference](#api-reference)
+- [Advanced Patterns](#advanced-patterns)
+- [Limitations & Anti-patterns](#limitations--anti-patterns)
+- [Contributing](#contributing)
 
 ---
 
 ## What is Storion?
 
-Storion is a lightweight state management library with **automatic dependency tracking**:
+Storion is a lightweight state management library that automatically tracks which parts of your state you use and only updates when those parts change.
 
-- **You read state** → Storion tracks the read
-- **That read changes** → only then your effect/component updates
+**The core idea is simple:**
 
-No manual selectors to "optimize", no accidental over-subscription to large objects. Just write natural code and let Storion handle the reactivity.
+1. You read state → Storion remembers what you read
+2. That state changes → Storion updates only the components that need it
+
+No manual selectors. No accidental over-rendering. Just write natural code.
 
 ```tsx
-// Component only re-renders when `count` actually changes
 function Counter() {
   const { count, inc } = useStore(({ get }) => {
     const [state, actions] = get(counterStore);
@@ -48,39 +75,43 @@ function Counter() {
 }
 ```
 
+**What Storion does:**
+
+- When you access `state.count`, Storion notes that this component depends on `count`
+- When `count` changes, Storion re-renders only this component
+- If other state properties change, this component stays untouched
+
 ---
 
 ## Features
 
-- 🎯 **Auto-tracking** — Dependencies tracked automatically when you read state
-- 🔒 **Type-safe** — Full TypeScript support with excellent inference
-- ⚡ **Fine-grained updates** — Only re-render what actually changed
-- 🧩 **Composable** — Mix stores, use DI, create derived values
-- 🔄 **Reactive effects** — Side effects that automatically respond to state changes
-- 📦 **Tiny footprint** — ~4KB minified + gzipped
-- 🛠️ **DevTools** — Built-in devtools panel for debugging
-- 🔌 **Middleware** — Extensible with conditional middleware patterns
-- ⏳ **Async helpers** — First-class async state management with cancellation
+| Feature                     | Description                                                 |
+| --------------------------- | ----------------------------------------------------------- |
+| 🎯 **Auto-tracking**        | Dependencies tracked automatically when you read state      |
+| 🔒 **Type-safe**            | Full TypeScript support with excellent inference            |
+| ⚡ **Fine-grained updates** | Only re-render what actually changed                        |
+| 🧩 **Composable**           | Mix stores, use dependency injection, create derived values |
+| 🔄 **Reactive effects**     | Side effects that automatically respond to state changes    |
+| 📦 **Tiny footprint**       | ~4KB minified + gzipped                                     |
+| 🛠️ **DevTools**             | Built-in devtools panel for debugging                       |
+| 🔌 **Middleware**           | Extensible with conditional middleware patterns             |
+| ⏳ **Async helpers**        | First-class async state management with cancellation        |
 
 ---
 
 ## Installation
 
 ```bash
-# npm
 npm install storion
-
-# pnpm
+# or
 pnpm add storion
-
-# yarn
+# or
 yarn add storion
 ```
 
-**Peer dependency:** React is optional, required only if using `storion/react`.
+For React integration:
 
 ```bash
-# If using React integration
 npm install storion react
 ```
 
@@ -88,14 +119,15 @@ npm install storion react
 
 ## Quick Start
 
-### Option 1: Single Store with `create()` (Simplest)
+### Single Store (Simplest Approach)
 
-Perfect for small apps or isolated features:
+Best for small apps or isolated features.
 
 ```tsx
 import { create } from "storion/react";
 
-const [counter, useCounter] = create({
+// Define store + hook in one call
+const [counterStore, useCounter] = create({
   name: "counter",
   state: { count: 0 },
   setup({ state }) {
@@ -108,35 +140,35 @@ const [counter, useCounter] = create({
 
 // Use in React
 function Counter() {
-  const { count, inc, dec } = useCounter((state, actions) => ({
+  const { count, inc } = useCounter((state, actions) => ({
     count: state.count,
     inc: actions.inc,
-    dec: actions.dec,
   }));
 
-  return (
-    <div>
-      <button onClick={dec}>-</button>
-      <span>{count}</span>
-      <button onClick={inc}>+</button>
-    </div>
-  );
+  return <button onClick={inc}>{count}</button>;
 }
 
 // Use outside React
-counter.actions.inc();
-console.log(counter.state.count);
+counterStore.actions.inc();
+console.log(counterStore.state.count);
 ```
 
-### Option 2: Multi-Store with Container (Scalable)
+**What Storion does:**
 
-Best for larger apps with multiple stores:
+1. Creates a reactive state container with `{ count: 0 }`
+2. Wraps the state so any read is tracked
+3. When `inc()` changes `count`, Storion notifies only subscribers using `count`
+4. The React hook connects the component to the store and handles cleanup automatically
+
+### Multi-Store with Container (Scalable Approach)
+
+Best for larger apps with multiple stores.
 
 ```tsx
 import { store, container } from "storion";
 import { StoreProvider, useStore } from "storion/react";
 
-// Define stores
+// Define stores separately
 const authStore = store({
   name: "auth",
   state: { userId: null as string | null },
@@ -162,19 +194,14 @@ const todosStore = store({
           draft.items.push(text);
         });
       },
-      remove: (index: number) => {
-        update((draft) => {
-          draft.items.splice(index, 1);
-        });
-      },
     };
   },
 });
 
-// Create container
+// Create container (manages all store instances)
 const app = container();
 
-// Provide to React
+// Provide to React tree
 function App() {
   return (
     <StoreProvider container={app}>
@@ -211,43 +238,220 @@ function Screen() {
 }
 ```
 
+**What Storion does:**
+
+1. Each `store()` call creates a store specification (a blueprint)
+2. The `container()` manages store instances and their lifecycles
+3. When you call `get(authStore)`, the container either returns an existing instance or creates one
+4. All stores share the same container, enabling cross-store communication
+5. The container handles cleanup when the app unmounts
+
 ---
 
-## Usage
+## Core Concepts
 
-### Defining a Store
+### Stores
 
-**The problem:** You have related pieces of state and operations that belong together, but managing them with `useState` leads to scattered logic and prop drilling.
-
-**With Storion:** Group state and actions in a single store. Actions have direct access to state, and the store can be shared across your app.
+A **store** is a container for related state and actions. Think of it as a module that owns a piece of your application's data.
 
 ```ts
 import { store } from "storion";
 
-export const userStore = store({
+const userStore = store({
+  name: "user", // Identifier for debugging
+  state: {
+    // Initial state
+    name: "",
+    email: "",
+  },
+  setup({ state }) {
+    // Setup function returns actions
+    return {
+      setName: (name: string) => {
+        state.name = name;
+      },
+      setEmail: (email: string) => {
+        state.email = email;
+      },
+    };
+  },
+});
+```
+
+**Naming convention:** Use `xxxStore` for store specifications (e.g., `userStore`, `authStore`, `cartStore`).
+
+### Services
+
+A **service** is a factory function that creates dependencies like API clients, loggers, or utilities. Services are cached by the container.
+
+```ts
+// Service factory (use xxxService naming)
+function apiService(resolver) {
+  return {
+    get: (url: string) => fetch(url).then((r) => r.json()),
+    post: (url: string, data: unknown) =>
+      fetch(url, { method: "POST", body: JSON.stringify(data) }).then((r) =>
+        r.json()
+      ),
+  };
+}
+
+function loggerService(resolver) {
+  return {
+    info: (msg: string) => console.log(`[INFO] ${msg}`),
+    error: (msg: string) => console.error(`[ERROR] ${msg}`),
+  };
+}
+```
+
+**Naming convention:** Use `xxxService` for service factories (e.g., `apiService`, `loggerService`, `authService`).
+
+### Using Services in Stores
+
+```ts
+const userStore = store({
+  name: "user",
+  state: { user: null },
+  setup({ get }) {
+    // Get services (cached automatically)
+    const api = get(apiService);
+    const logger = get(loggerService);
+
+    return {
+      fetchUser: async (id: string) => {
+        logger.info(`Fetching user ${id}`);
+        return api.get(`/users/${id}`);
+      },
+    };
+  },
+});
+```
+
+**What Storion does:**
+
+1. When `get(apiService)` is called, the container checks if an instance exists
+2. If not, it calls `apiService()` to create one and caches it
+3. Future calls to `get(apiService)` return the same instance
+4. This gives you dependency injection without complex configuration
+
+### Container
+
+The **container** is the central hub that:
+
+- Creates and caches store instances
+- Creates and caches service instances
+- Provides dependency injection
+- Manages cleanup and disposal
+
+```ts
+import { container } from "storion";
+
+const app = container();
+
+// Get store instance
+const { state, actions } = app.get(userStore);
+
+// Get service instance
+const api = app.get(apiService);
+
+// Clear all instances (useful for testing)
+app.clear();
+
+// Dispose container (cleanup all resources)
+app.dispose();
+```
+
+### Reactivity
+
+Storion's reactivity is built on a simple principle: **track reads, notify on writes**.
+
+```ts
+// When you read state.count, Storion tracks this access
+const value = state.count;
+
+// When you write state.count, Storion notifies all trackers
+state.count = value + 1;
+```
+
+**What Storion does behind the scenes:**
+
+1. State is wrapped in a tracking layer
+2. Each read is recorded: "Component A depends on `count`"
+3. Each write triggers a check: "Who depends on `count`? Notify them."
+4. Only affected subscribers are notified, keeping updates minimal
+
+---
+
+## Working with State
+
+### Direct Mutation
+
+For **first-level properties**, you can assign directly:
+
+```ts
+const userStore = store({
+  name: "user",
+  state: {
+    name: "",
+    age: 0,
+    isActive: false,
+  },
+  setup({ state }) {
+    return {
+      setName: (name: string) => {
+        state.name = name;
+      },
+      setAge: (age: number) => {
+        state.age = age;
+      },
+      activate: () => {
+        state.isActive = true;
+      },
+    };
+  },
+});
+```
+
+**Use case:** Simple state updates where you're changing a top-level property.
+
+**What Storion does:**
+
+1. Intercepts the assignment `state.name = name`
+2. Compares old and new values
+3. If different, notifies all subscribers watching `name`
+
+### Nested State with update()
+
+For **nested objects or arrays**, use `update()` with an immer-style draft:
+
+```ts
+const userStore = store({
   name: "user",
   state: {
     profile: { name: "", email: "" },
-    theme: "light" as "light" | "dark",
+    tags: [] as string[],
   },
   setup({ state, update }) {
     return {
-      // Direct mutation - only works for first-level properties
-      setTheme: (theme: "light" | "dark") => {
-        state.theme = theme;
-      },
-
-      // For nested state, use update() with immer-style draft
-      setName: (name: string) => {
+      // Update nested object
+      setProfileName: (name: string) => {
         update((draft) => {
           draft.profile.name = name;
         });
       },
 
-      // Batch update multiple nested properties
-      updateProfile: (profile: Partial<typeof state.profile>) => {
+      // Update array
+      addTag: (tag: string) => {
         update((draft) => {
-          Object.assign(draft.profile, profile);
+          draft.tags.push(tag);
+        });
+      },
+
+      // Batch multiple changes
+      updateProfile: (name: string, email: string) => {
+        update((draft) => {
+          draft.profile.name = name;
+          draft.profile.email = email;
         });
       },
     };
@@ -255,18 +459,22 @@ export const userStore = store({
 });
 ```
 
-> **Important:** Direct mutation (`state.prop = value`) only works for **first-level properties**. For nested state or array mutations, always use `update()` which provides an immer-powered draft.
+**Use case:** Any mutation to nested objects, arrays, or when you need to update multiple properties atomically.
 
-### Using Focus (Lens-like State Access)
+**What Storion does:**
 
-**The problem:** Updating deeply nested state is verbose. You end up writing `update(draft => { draft.a.b.c = value })` repeatedly, or creating many small `update()` calls.
+1. Creates a draft copy of the state
+2. Lets you mutate the draft freely
+3. Compares the draft to the original state
+4. Applies only the changes and notifies affected subscribers
+5. All changes within one `update()` call are batched into a single notification
 
-**With Storion:** `focus()` gives you a getter/setter pair for any path. The setter supports direct values, reducers, and immer-style mutations.
+### Focus (Lens-like Access)
+
+`focus()` creates a getter/setter pair for any state path:
 
 ```ts
-import { store } from "storion";
-
-export const settingsStore = store({
+const settingsStore = store({
   name: "settings",
   state: {
     user: { name: "", email: "" },
@@ -276,7 +484,7 @@ export const settingsStore = store({
     },
   },
   setup({ focus }) {
-    // Focus on nested paths - returns [getter, setter]
+    // Create focused accessors
     const [getTheme, setTheme] = focus("preferences.theme");
     const [getUser, setUser] = focus("user");
 
@@ -284,53 +492,64 @@ export const settingsStore = store({
       // Direct value
       setTheme,
 
-      // Reducer - returns new value
+      // Computed from previous value
       toggleTheme: () => {
         setTheme((prev) => (prev === "light" ? "dark" : "light"));
       },
 
-      // Produce - immer-style mutation (no return)
+      // Immer-style mutation on focused path
       updateUserName: (name: string) => {
         setUser((draft) => {
           draft.name = name;
         });
       },
 
-      // Getter is reactive - can be used in effects
+      // Getter for use in effects
       getTheme,
     };
   },
 });
 ```
 
-**Focus setter supports three patterns:**
+**Use case:** When you frequently access a deep path and want cleaner code.
 
-| Pattern      | Example                         | Use when                      |
+**What Storion does:**
+
+1. Parses the path `"preferences.theme"` once at setup time
+2. The getter reads directly from that path
+3. The setter determines the update type automatically:
+   - Direct value: `setTheme("dark")`
+   - Reducer (returns new value): `setTheme(prev => newValue)`
+   - Producer (mutates draft): `setTheme(draft => { draft.x = y })`
+
+**Focus setter patterns:**
+
+| Pattern      | Example                         | When to use                   |
 | ------------ | ------------------------------- | ----------------------------- |
-| Direct value | `set(newValue)`                 | Replacing entire value        |
-| Reducer      | `set(prev => newValue)`         | Computing from previous       |
-| Produce      | `set(draft => { draft.x = y })` | Partial updates (immer-style) |
+| Direct value | `set("dark")`                   | Replacing the entire value    |
+| Reducer      | `set(prev => prev + 1)`         | Computing from previous value |
+| Producer     | `set(draft => { draft.x = 1 })` | Partial updates to objects    |
 
-### Reactive Effects
+---
 
-**The problem:** You need to sync with external systems (WebSocket, localStorage) or compute derived state when dependencies change, and properly clean up when needed.
+## Reactive Effects
 
-**With Storion:** Effects automatically track which state properties you read and re-run only when those change. Use them for side effects or computed state.
+Effects are functions that run automatically when their dependencies change.
 
-**Example 1: Computed/Derived State**
+### Basic Effect
 
 ```ts
 import { store, effect } from "storion";
 
-export const userStore = store({
+const userStore = store({
   name: "user",
   state: {
     firstName: "",
     lastName: "",
-    fullName: "", // Computed from firstName + lastName
+    fullName: "",
   },
   setup({ state }) {
-    // Auto-updates fullName when firstName or lastName changes
+    // Effect runs when firstName or lastName changes
     effect(() => {
       state.fullName = `${state.firstName} ${state.lastName}`.trim();
     });
@@ -347,30 +566,36 @@ export const userStore = store({
 });
 ```
 
-**Example 2: External System Sync**
+**Use case:** Computed/derived state that should stay in sync with source data.
+
+**What Storion does:**
+
+1. Runs the effect function immediately
+2. Tracks every state read during execution (`firstName`, `lastName`)
+3. When any tracked value changes, re-runs the effect
+4. The effect updates `fullName`, which notifies its own subscribers
+
+### Effect with Cleanup
 
 ```ts
-import { store, effect } from "storion";
-
-export const syncStore = store({
+const syncStore = store({
   name: "sync",
   state: {
     userId: null as string | null,
-    syncStatus: "idle" as "idle" | "syncing" | "synced",
+    status: "idle" as "idle" | "connected" | "error",
   },
   setup({ state }) {
     effect((ctx) => {
       if (!state.userId) return;
 
       const ws = new WebSocket(`/ws?user=${state.userId}`);
-      state.syncStatus = "syncing";
+      state.status = "connected";
 
-      ws.onopen = () => {
-        state.syncStatus = "synced";
-      };
-
-      // Cleanup when effect re-runs or store disposes
-      ctx.onCleanup(() => ws.close());
+      // Cleanup runs before next effect or on dispose
+      ctx.onCleanup(() => {
+        ws.close();
+        state.status = "idle";
+      });
     });
 
     return {
@@ -385,74 +610,27 @@ export const syncStore = store({
 });
 ```
 
-### Effect Re-run
+**Use case:** Managing resources like WebSocket connections, event listeners, or timers.
 
-Effects automatically re-run when their tracked state changes. There are three ways an effect can be triggered to re-run:
+**What Storion does:**
 
-**1. Tracked state changes** — The most common case. When any state property read during the effect's execution changes, the effect re-runs automatically.
+1. Runs effect when `userId` changes
+2. Before re-running, calls the cleanup function from the previous run
+3. When the store is disposed, calls cleanup one final time
+4. This prevents resource leaks
 
-```ts
-effect(() => {
-  // This effect tracks `state.count` and re-runs when it changes
-  console.log("Count is:", state.count);
-});
-```
+### Effect with Async Operations
 
-**2. Calling `ctx.refresh()` asynchronously** — You can manually trigger a re-run from async code (promises, setTimeout, event handlers).
-
-```ts
-effect((ctx) => {
-  // Schedule a refresh after some async work
-  ctx.safe(fetchData()).then(() => {
-    ctx.refresh(); // Re-runs the effect
-  });
-
-  // Or from a setTimeout
-  setTimeout(() => {
-    ctx.refresh();
-  }, 1000);
-});
-```
-
-**3. Returning `ctx.refresh`** — For synchronous refresh requests, return `ctx.refresh` from the effect. The effect will re-run after the current execution completes.
-
-```ts
-effect((ctx) => {
-  const data = async.wait(state.asyncData); // May throw a promise
-  // If we get here, data is available
-  state.result = transform(data);
-
-  // Return ctx.refresh to request a re-run after this execution
-  if (needsAnotherRun) {
-    return ctx.refresh;
-  }
-});
-```
-
-> **Important:** Effects cannot re-run while already executing. Calling `ctx.refresh()` synchronously during effect execution throws an error:
->
-> ```ts
-> effect((ctx) => {
->   ctx.refresh(); // ❌ Error: Effect is already running, cannot refresh
-> });
-> ```
->
-> This prevents infinite loops and ensures predictable execution. Use the return pattern or async scheduling instead.
-
-### Effect with Safe Async
-
-**The problem:** When an effect re-runs before an async operation completes, you get stale data or "state update on unmounted component" warnings. Managing this manually is error-prone.
-
-**With Storion:** Use `ctx.safe()` to wrap promises that should be ignored if stale, or `ctx.signal` for fetch cancellation.
+Effects must be synchronous, but you can handle async operations safely:
 
 ```ts
 effect((ctx) => {
   const userId = state.userId;
   if (!userId) return;
 
-  // ctx.safe() wraps promises to never resolve if stale
+  // ctx.safe() wraps a promise to ignore stale results
   ctx.safe(fetchUserData(userId)).then((data) => {
-    // Only runs if effect hasn't re-run
+    // Only runs if this effect is still current
     state.userData = data;
   });
 
@@ -465,876 +643,310 @@ effect((ctx) => {
 });
 ```
 
-### Fine-Grained Updates with `pick()`
+**Use case:** Data fetching that should be cancelled when dependencies change.
 
-**The problem:** Your component re-renders when _any_ property of a nested object changes, even though you only use one field. For example, reading `state.profile.name` triggers re-renders when `profile.email` changes too.
+**What Storion does:**
 
-**With Storion:** Wrap computed values in `pick()` to track the _result_ instead of the _path_. Re-renders only happen when the picked value actually changes.
+1. `ctx.safe()` wraps the promise in a guard
+2. If the effect re-runs before the promise resolves, the guard prevents the callback from executing
+3. `ctx.signal` is an AbortSignal that aborts when the effect re-runs
+4. This prevents race conditions and stale data updates
 
-```tsx
-import { pick } from "storion";
-
-function UserProfile() {
-  // Without pick: re-renders when ANY profile property changes
-  const { name } = useStore(({ get }) => {
-    const [state] = get(userStore);
-    return { name: state.profile.name };
-  });
-
-  // With pick: re-renders ONLY when the picked value changes
-  // Multiple picks can be used in one selector
-  const { name, fullName, coords, settings, nested } = useStore(({ get }) => {
-    const [state] = get(userStore);
-    return {
-      // Simple pick - uses default equality (===)
-      name: pick(() => state.profile.name),
-
-      // Computed value - only re-renders when result changes
-      fullName: pick(() => `${state.profile.first} ${state.profile.last}`),
-
-      // 'shallow' - compares object properties one level deep
-      coords: pick(
-        () => ({ x: state.position.x, y: state.position.y }),
-        "shallow"
-      ),
-
-      // 'deep' - recursively compares nested objects/arrays
-      settings: pick(() => state.userSettings, "deep"),
-
-      // Custom equality function - full control
-      nested: pick(
-        () => state.data.items.map((i) => i.id),
-        (a, b) => a.length === b.length && a.every((id, i) => id === b[i])
-      ),
-    };
-  });
-
-  return <h1>{name}</h1>;
-}
-```
-
-### Understanding Equality: Store vs Component Level
-
-Storion provides two layers of equality control, each solving different problems:
-
-| Layer                | API               | When it runs          | Purpose                                          |
-| -------------------- | ----------------- | --------------------- | ------------------------------------------------ |
-| **Store (write)**    | `equality` option | When state is mutated | Prevent unnecessary notifications to subscribers |
-| **Component (read)** | `pick(fn, eq)`    | When selector runs    | Prevent unnecessary re-renders                   |
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Store                                                              │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  state.coords = { x: 1, y: 2 }                               │   │
-│  │         │                                                    │   │
-│  │         ▼                                                    │   │
-│  │  equality: { coords: "shallow" }  ──► Same x,y? Skip notify  │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                              │                                      │
-│                    notify if changed                                │
-│                              ▼                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Component A              │            Component B           │   │
-│  │  pick(() => coords.x)     │     pick(() => coords, "shallow")│   │
-│  │         │                 │                   │              │   │
-│  │         ▼                 │                   ▼              │   │
-│  │  Re-render if x changed   │    Re-render if x OR y changed   │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**Example: Coordinates update**
+### Manual Effect Refresh
 
 ```ts
-// Store level - controls when subscribers get notified
-const mapStore = store({
-  state: { coords: { x: 0, y: 0 }, zoom: 1 },
-  equality: {
-    coords: "shallow", // Don't notify if same { x, y } values
-  },
-  setup({ state }) {
-    return {
-      setCoords: (x: number, y: number) => {
-        state.coords = { x, y }; // New object, but shallow-equal = no notify
-      },
-    };
-  },
-});
+effect((ctx) => {
+  // From async code
+  setTimeout(() => {
+    ctx.refresh(); // Triggers a re-run
+  }, 1000);
 
-// Component level - controls when THIS component re-renders
-function XCoordinate() {
-  const { x } = useStore(({ get }) => {
-    const [state] = get(mapStore);
-    return {
-      // Even if coords changed, only re-render if x specifically changed
-      x: pick(() => state.coords.x),
-    };
-  });
-  return <span>X: {x}</span>;
-}
+  // Or by returning ctx.refresh
+  if (needsAnotherRun) {
+    return ctx.refresh;
+  }
+});
 ```
 
-### Comparison with Other Libraries
+**Important:** You cannot call `ctx.refresh()` synchronously during effect execution. This throws an error to prevent infinite loops.
 
-| Feature            | Storion               | Redux                    | Zustand          | Jotai             | MobX            |
-| ------------------ | --------------------- | ------------------------ | ---------------- | ----------------- | --------------- |
-| **Tracking**       | Automatic             | Manual selectors         | Manual selectors | Automatic (atoms) | Automatic       |
-| **Write equality** | Per-property config   | Reducer-based            | Built-in shallow | Per-atom          | Deep by default |
-| **Read equality**  | `pick()` with options | `useSelector` + equality | `shallow` helper | Atom-level        | Computed        |
-| **Granularity**    | Property + component  | Selector-based           | Selector-based   | Atom-based        | Property-based  |
-| **Bundle size**    | ~4KB                  | ~2KB + toolkit           | ~1KB             | ~2KB              | ~15KB           |
-| **DI / Lifecycle** | Built-in container    | External (thunk/saga)    | External         | Provider-based    | External        |
+---
 
-**Key differences:**
+## Async State Management
 
-- **Redux/Zustand**: You write selectors manually and pass equality functions to `useSelector`. Easy to forget and over-subscribe.
+Storion provides helpers for managing async operations with loading, error, and success states.
 
-  ```ts
-  // Zustand - must remember to add shallow
-  const coords = useStore((s) => s.coords, shallow);
-  ```
-
-- **Jotai**: Fine-grained via atoms, but requires splitting state into many atoms upfront.
-
-  ```ts
-  // Jotai - must create separate atoms
-  const xAtom = atom((get) => get(coordsAtom).x);
-  ```
-
-- **Storion**: Auto-tracking by default, `pick()` for opt-in fine-grained control, store-level equality for write optimization.
-
-  ```ts
-  // Storion - automatic tracking, pick() when you need precision
-  const x = pick(() => state.coords.x);
-  ```
-
-### Async State Management
-
-**The problem:** Every async operation needs loading, error, and success states. You write the same boilerplate: `isLoading`, `error`, `data`, plus handling race conditions, retries, and cancellation.
-
-**With Storion:** The `async()` helper manages all async states automatically. Choose "fresh" mode (clear data while loading) or "stale" mode (keep previous data like SWR).
+### Defining Async State
 
 ```ts
 import { store } from "storion";
-import { async, type AsyncState } from "storion/async";
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-}
-
-export const productStore = store({
-  name: "products",
-  state: {
-    // Fresh mode: data is undefined during loading
-    featured: async.fresh<Product>(),
-    // Stale mode: preserves previous data during loading (SWR pattern)
-    list: async.stale<Product[]>([]),
-  },
-  setup({ focus }) {
-    const featuredActions = async<Product, "fresh", [string]>(
-      focus("featured"),
-      async (ctx, productId) => {
-        const res = await fetch(`/api/products/${productId}`, {
-          signal: ctx.signal,
-        });
-        return res.json();
-      },
-      {
-        retry: { count: 3, delay: (attempt) => attempt * 1000 },
-        onError: (err) => console.error("Failed to fetch product:", err),
-      }
-    );
-
-    const listActions = async<Product[], "stale", []>(
-      focus("list"),
-      async () => {
-        const res = await fetch("/api/products");
-        return res.json();
-      }
-    );
-
-    return {
-      fetchFeatured: featuredActions.dispatch,
-      fetchList: listActions.dispatch,
-      refreshList: listActions.refresh,
-      cancelFeatured: featuredActions.cancel,
-    };
-  },
-});
-
-// In React - handle async states
-function ProductList() {
-  const { list, fetchList } = useStore(({ get }) => {
-    const [state, actions] = get(productStore);
-    return { list: state.list, fetchList: actions.fetchList };
-  });
-
-  useEffect(() => {
-    fetchList();
-  }, []);
-
-  if (list.status === "pending" && !list.data?.length) {
-    return <Spinner />;
-  }
-
-  if (list.status === "error") {
-    return <Error message={list.error.message} />;
-  }
-
-  return (
-    <ul>
-      {list.data?.map((p) => (
-        <li key={p.id}>{p.name}</li>
-      ))}
-      {list.status === "pending" && <li>Loading more...</li>}
-    </ul>
-  );
-}
-```
-
-### When to Fetch Data
-
-Storion provides multiple patterns for data fetching. Choose based on your use case:
-
-| Pattern                 | When to use                                    | Example                            |
-| ----------------------- | ---------------------------------------------- | ---------------------------------- |
-| **Setup time**          | Data needed immediately when store initializes | App config, user session           |
-| **Trigger (no deps)**   | One-time fetch when component mounts           | Initial page data                  |
-| **Trigger (with deps)** | Refetch when component visits or deps change   | Dashboard refresh                  |
-| **useEffect**           | Standard React pattern, explicit control       | Compatibility with existing code   |
-| **User interaction**    | On-demand fetching                             | Search, pagination, refresh button |
-
-```tsx
-import { store } from "storion";
-import { async, type AsyncState } from "storion/async";
-import { useStore } from "storion/react";
-import { useEffect } from "react";
+import { async } from "storion/async";
 
 interface User {
   id: string;
   name: string;
 }
 
-export const userStore = store({
-  name: "users",
+const userStore = store({
+  name: "user",
   state: {
+    // Fresh mode: data is undefined during loading
     currentUser: async.fresh<User>(),
-    searchResults: async.stale<User[]>([]),
+
+    // Stale mode: preserves previous data during loading (SWR pattern)
+    userList: async.stale<User[]>([]),
   },
-  setup({ focus, effect }) {
-    // ═══════════════════════════════════════════════════════════════════
-    // Pattern 1: Fetch at SETUP TIME
-    // Data is fetched immediately when store is created
-    // Good for: App config, auth state, critical data
-    // ═══════════════════════════════════════════════════════════════════
-    const currentUserAsync = async(focus("currentUser"), async (ctx) => {
-      const res = await fetch("/api/me", { signal: ctx.signal });
-      return res.json();
-    });
-
-    // Fetch immediately during setup
-    currentUserAsync.dispatch();
-
-    // ═══════════════════════════════════════════════════════════════════
-    // Pattern 2: Expose DISPATCH for UI control
-    // Store provides action, UI decides when to call
-    // Good for: Search, pagination, user-triggered refresh
-    // ═══════════════════════════════════════════════════════════════════
-    const searchAsync = async(
-      focus("searchResults"),
-      async (ctx, query: string) => {
-        const res = await fetch(`/api/users/search?q=${query}`, {
-          signal: ctx.signal,
-        });
+  setup({ focus }) {
+    const currentUserAsync = async(
+      focus("currentUser"),
+      async (ctx, userId: string) => {
+        const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
         return res.json();
+      },
+      {
+        retry: { count: 3, delay: (attempt) => attempt * 1000 },
+        onError: (err) => console.error("Failed:", err),
       }
     );
 
     return {
-      currentUser: currentUserAsync,
-      search: searchAsync.dispatch,
-      cancelSearch: searchAsync.cancel,
+      fetchUser: currentUserAsync.dispatch,
+      cancelFetch: currentUserAsync.cancel,
+      refreshUser: currentUserAsync.refresh,
     };
   },
 });
+```
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Pattern 3: TRIGGER with dependencies
-// Uses useStore's `trigger` for declarative data fetching
-// ═══════════════════════════════════════════════════════════════════════════
+**Use case:** API calls, data fetching, any async operation that needs loading/error states.
 
-// 3a. No deps - fetch ONCE when component mounts
+**What Storion does:**
+
+1. `async.fresh<User>()` creates initial state: `{ status: "idle", data: undefined, error: undefined }`
+2. When `dispatch()` is called:
+   - Sets status to `"pending"`
+   - In fresh mode, clears data; in stale mode, keeps previous data
+3. When the promise resolves:
+   - Sets status to `"success"` and stores the data
+4. When the promise rejects:
+   - Sets status to `"error"` and stores the error
+5. If `cancel()` is called, aborts the request via `ctx.signal`
+
+### Consuming Async State
+
+```tsx
 function UserProfile() {
-  const { user } = useStore(({ get, trigger }) => {
+  const { user, fetchUser } = useStore(({ get }) => {
     const [state, actions] = get(userStore);
-
-    // No deps array = fetch once, never refetch
-    trigger(actions.currentUser.dispatch, []);
-
-    return { user: state.currentUser };
-  });
-
-  if (user.status === "pending") return <Spinner />;
-  return <div>{user.data?.name}</div>;
-}
-
-// 3b. With context.id - refetch EVERY TIME component visits
-function Dashboard() {
-  const { user } = useStore(({ get, trigger, id }) => {
-    const [state, actions] = get(userStore);
-
-    // `id` changes each time component mounts = refetch on every visit
-    trigger(actions.currentUser.dispatch, [id]);
-
-    return { user: state.currentUser };
-  });
-
-  return <div>Welcome back, {user.data?.name}</div>;
-}
-
-// 3c. With custom deps - refetch when deps change
-function UserById({ userId }: { userId: string }) {
-  const { user } = useStore(({ get, trigger }) => {
-    const [state, actions] = get(userStore);
-
-    // Refetch when userId prop changes
-    trigger(actions.currentUser.dispatch, [userId]);
-
-    return { user: state.currentUser };
-  });
-
-  return <div>{user.data?.name}</div>;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Pattern 4: useEffect - standard React pattern
-// For compatibility or when you need more control
-// ═══════════════════════════════════════════════════════════════════════════
-function UserListWithEffect() {
-  const { search } = useStore(({ get }) => {
-    const [, actions] = get(userStore);
-    return { search: actions.search };
+    return { user: state.currentUser, fetchUser: actions.fetchUser };
   });
 
   useEffect(() => {
-    search("initial");
+    fetchUser("123");
   }, []);
 
-  return <div>...</div>;
-}
+  if (user.status === "pending") return <Spinner />;
+  if (user.status === "error") return <Error message={user.error.message} />;
+  if (user.status === "idle") return null;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Pattern 5: USER INTERACTION - on-demand fetching
-// ═══════════════════════════════════════════════════════════════════════════
-function SearchBox() {
-  const [query, setQuery] = useState("");
-  const { results, search, cancel } = useStore(({ get }) => {
-    const [state, actions] = get(userStore);
-    return {
-      results: state.searchResults,
-      search: actions.search,
-      cancel: actions.cancelSearch,
-    };
-  });
-
-  const handleSearch = () => {
-    cancel(); // Cancel previous search
-    search(query);
-  };
-
-  return (
-    <div>
-      <input value={query} onChange={(e) => setQuery(e.target.value)} />
-      <button onClick={handleSearch}>Search</button>
-      <button onClick={cancel}>Cancel</button>
-
-      {results.status === "pending" && <Spinner />}
-      {results.data?.map((user) => (
-        <div key={user.id}>{user.name}</div>
-      ))}
-    </div>
-  );
+  return <div>{user.data.name}</div>;
 }
 ```
 
-**Summary: Choosing the right pattern**
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  When should data be fetched?                                           │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  App starts?  ──────────►  Setup time (dispatch in setup)               │
-│                                                                         │
-│  Component mounts?                                                      │
-│       │                                                                 │
-│       ├── Once ever? ────►  trigger(fn, [])                             │
-│       │                                                                 │
-│       ├── Every visit? ──►  trigger(fn, [context.id])                   │
-│       │                                                                 │
-│       └── When deps change? ► trigger(fn, [dep1, dep2])                 │
-│                                                                         │
-│  User clicks? ──────────►  onClick handler calls action                 │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Suspense Pattern with `async.wait()`
-
-**The problem:** You want to use React Suspense for loading states, but managing the "throw promise" pattern manually is complex and error-prone.
-
-**With Storion:** Use `async.wait()` to extract data from async state — it throws a promise if pending (triggering Suspense) or throws the error if failed.
+### Async State with Suspense
 
 ```tsx
-import { Suspense } from "react";
 import { async } from "storion/async";
-import { useStore } from "storion/react";
+import { Suspense } from "react";
 
-// Component that uses Suspense - no loading/error handling needed!
 function UserProfile() {
   const { user } = useStore(({ get, trigger }) => {
     const [state, actions] = get(userStore);
 
     // Trigger fetch on mount
-    trigger(actions.fetchUser, []);
+    trigger(actions.fetchUser, [], "123");
 
     return {
-      // async.wait() throws if pending/error, returns data if success
+      // async.wait() throws if pending (triggers Suspense)
       user: async.wait(state.currentUser),
     };
   });
 
-  // This only renders when data is ready
-  return (
-    <div>
-      <h1>{user.name}</h1>
-      <p>{user.email}</p>
-    </div>
-  );
+  // Only renders when data is ready
+  return <div>{user.name}</div>;
 }
 
-// Parent wraps with Suspense and ErrorBoundary
 function App() {
   return (
-    <ErrorBoundary fallback={<div>Something went wrong</div>}>
-      <Suspense fallback={<Spinner />}>
-        <UserProfile />
-      </Suspense>
-    </ErrorBoundary>
+    <Suspense fallback={<Spinner />}>
+      <UserProfile />
+    </Suspense>
   );
 }
 ```
 
-**Multiple async states with `async.all()`:**
+**What Storion does:**
 
-```tsx
-function Dashboard() {
-  const { user, posts, comments } = useStore(({ get, trigger }) => {
-    const [userState, userActions] = get(userStore);
-    const [postState, postActions] = get(postStore);
-    const [commentState, commentActions] = get(commentStore);
+1. `async.wait()` checks the async state's status
+2. If `"pending"`, throws a promise that React Suspense catches
+3. If `"error"`, throws the error for ErrorBoundary to catch
+4. If `"success"`, returns the data
+5. When the data arrives, Suspense re-renders the component
 
-    trigger(userActions.fetch);
-    trigger(postActions.fetch);
-    trigger(commentActions.fetch);
-
-    // Wait for ALL async states - suspends until all are ready
-    const [user, posts, comments] = async.all(
-      userState.current,
-      postState.list,
-      commentState.recent
-    );
-
-    return { user, posts, comments };
-  });
-
-  return (
-    <div>
-      <h1>Welcome, {user.name}</h1>
-      <PostList posts={posts} />
-      <CommentList comments={comments} />
-    </div>
-  );
-}
-```
-
-**Race pattern with `async.race()`:**
-
-```tsx
-function FastestResult() {
-  const { result } = useStore(({ get, trigger }) => {
-    const [state, actions] = get(searchStore);
-
-    trigger(actions.searchAPI1, [], query);
-    trigger(actions.searchAPI2, [], query);
-
-    // Returns whichever finishes first
-    return {
-      result: async.race(state.api1Results, state.api2Results),
-    };
-  });
-
-  return <ResultList items={result} />;
-}
-```
-
-**Async helpers summary:**
-
-| Helper                   | Behavior                              | Use case                  |
-| ------------------------ | ------------------------------------- | ------------------------- |
-| `async.wait(state)`      | Throws if pending/error, returns data | Single Suspense resource  |
-| `async.all(...states)`   | Waits for all, returns tuple          | Multiple parallel fetches |
-| `async.any(...states)`   | Returns first successful              | Fallback sources          |
-| `async.race(states)`     | Returns fastest                       | Competitive fetching      |
-| `async.hasData(state)`   | `boolean`                             | Check without suspending  |
-| `async.isLoading(state)` | `boolean`                             | Loading indicator         |
-| `async.isError(state)`   | `boolean`                             | Error check               |
-
-### Derived Async State with `async.derive()`
-
-**The problem:** You need to compute a value from multiple async states. If any source is loading, the derived value should be loading. If any errors, it should error. Writing this logic manually is verbose and error-prone.
-
-**With Storion:** Use `async.derive()` to create computed async state. It uses `async.wait()` internally, so it automatically handles pending/error states and re-computes when sources change.
+### Derived Async State
 
 ```ts
-import { store } from "storion";
-import { async, type AsyncState } from "storion/async";
-
-interface User {
-  id: string;
-  name: string;
-}
-
-interface Post {
-  id: string;
-  title: string;
-  authorId: string;
-}
-
-export const dashboardStore = store({
+const dashboardStore = store({
   name: "dashboard",
   state: {
     user: async.fresh<User>(),
     posts: async.fresh<Post[]>(),
-    // Derived async state - computed from user + posts
-    summary: async.fresh<{ userName: string; postCount: number }>(),
+    summary: async.fresh<{ name: string; postCount: number }>(),
   },
   setup({ state, focus }) {
-    // Fetch actions
-    const userActions = async(focus("user"), async (ctx, userId: string) => {
-      const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
-      return res.json();
-    });
-
-    const postsActions = async(focus("posts"), async (ctx, userId: string) => {
-      const res = await fetch(`/api/users/${userId}/posts`, {
-        signal: ctx.signal,
-      });
-      return res.json();
-    });
+    // ... async actions for user and posts ...
 
     // Derive summary from user + posts
-    // - If user OR posts is pending → summary is pending
-    // - If user OR posts has error → summary has error
-    // - If both succeed → summary is success with computed value
     async.derive(focus("summary"), () => {
       const user = async.wait(state.user);
       const posts = async.wait(state.posts);
-      return {
-        userName: user.name,
-        postCount: posts.length,
-      };
+      return { name: user.name, postCount: posts.length };
     });
 
     return {
-      fetchUser: userActions.dispatch,
-      fetchPosts: postsActions.dispatch,
+      /* actions */
     };
   },
 });
 ```
 
-**Conditional dependencies:**
+**Use case:** Computing a value from multiple async sources.
 
-```ts
-// Derive with conditional async sources
-async.derive(focus("result"), () => {
-  const type = async.wait(state.type);
+**What Storion does:**
 
-  // Dynamically choose which async state to wait for
-  if (type === "user") {
-    return async.wait(state.userData);
-  } else {
-    return async.wait(state.guestData);
-  }
-});
-```
+1. Runs the derive function and tracks dependencies
+2. If any `async.wait()` throws (pending/error), the derived state mirrors that status
+3. If all sources are ready, computes and stores the result
+4. Re-runs automatically when source states change
 
-**Parallel waiting with `async.all()`:**
+---
 
-```ts
-// Wait for multiple states in parallel (more efficient)
-async.derive(focus("combined"), () => {
-  const [user, posts, comments] = async.all(
-    state.user,
-    state.posts,
-    state.comments
-  );
-  return { user, posts, comments };
-});
-```
+## Using Stores in React
 
-**Stale mode - preserve data during recomputation:**
+### useStore Hook
 
-```ts
-state: {
-  // Stale mode: keeps previous computed value while recomputing
-  summary: async.stale({ userName: "Loading...", postCount: 0 }),
-}
+```tsx
+import { useStore } from "storion/react";
 
-// The derive will preserve stale data during pending/error
-async.derive(focus("summary"), () => {
-  const user = async.wait(state.user);
-  const posts = async.wait(state.posts);
-  return { userName: user.name, postCount: posts.length };
-});
-```
+function Component() {
+  const { count, inc, user } = useStore(({ get, trigger, id }) => {
+    const [counterState, counterActions] = get(counterStore);
+    const [userState, userActions] = get(userStore);
 
-**Key behaviors:**
+    // Trigger on mount (empty deps = once)
+    trigger(userActions.fetchProfile, []);
 
-| Source State       | Derived State                       |
-| ------------------ | ----------------------------------- |
-| Any source pending | `pending` (stale: preserves data)   |
-| Any source error   | `error` (stale: preserves data)     |
-| All sources ready  | `success` with computed value       |
-| Sources change     | Auto-recomputes via effect tracking |
+    // Trigger when id changes (every mount)
+    trigger(userActions.refresh, [id]);
 
-**`async.derive()` vs manual effects:**
-
-```ts
-// ❌ Manual - verbose, error-prone
-effect(() => {
-  if (state.user.status === "pending" || state.posts.status === "pending") {
-    state.summary = asyncState("fresh", "pending");
-    return;
-  }
-  if (state.user.status === "error") {
-    state.summary = asyncState("fresh", "error", state.user.error);
-    return;
-  }
-  if (state.posts.status === "error") {
-    state.summary = asyncState("fresh", "error", state.posts.error);
-    return;
-  }
-  state.summary = asyncState("fresh", "success", {
-    userName: state.user.data.name,
-    postCount: state.posts.data.length,
+    return {
+      count: counterState.count,
+      inc: counterActions.inc,
+      user: userState.profile,
+    };
   });
-});
 
-// ✅ With async.derive - clean and automatic
-async.derive(focus("summary"), () => {
-  const user = async.wait(state.user);
-  const posts = async.wait(state.posts);
-  return { userName: user.name, postCount: posts.length };
-});
+  return <div>...</div>;
+}
 ```
 
-### Dependency Injection
+**Selector context provides:**
 
-**The problem:** Your stores need shared services (API clients, loggers, config) but importing singletons directly causes issues:
+| Property                     | Description                                    |
+| ---------------------------- | ---------------------------------------------- |
+| `get(store)`                 | Get store instance, returns `[state, actions]` |
+| `get(service)`               | Get service instance (cached)                  |
+| `create(service, ...args)`   | Create fresh service instance with args        |
+| `trigger(fn, deps, ...args)` | Call function when deps change                 |
+| `id`                         | Unique ID per component mount                  |
+| `once(fn)`                   | Run function once on mount                     |
 
-- **No lifecycle management** — ES imports are forever; you can't dispose or recreate instances
-- **Testing is painful** — Mocking ES modules requires awkward workarounds
-- **No cleanup** — Resources like connections, intervals, or subscriptions leak between tests
+### Trigger Patterns
 
-**With Storion:** The container is a full DI system that manages the complete lifecycle:
+```tsx
+function Dashboard() {
+  const { data } = useStore(({ get, trigger, id }) => {
+    const [state, actions] = get(dataStore);
 
-- **Automatic caching** — Services are singletons by default, created on first use
-- **Dispose & cleanup** — Call `dispose()` to clean up resources, `delete()` to remove and recreate
-- **Override for testing** — Swap implementations with `set()` without touching module imports
-- **Hierarchical containers** — Create child containers for scoped dependencies
+    // Pattern 1: Fetch once ever (empty deps)
+    trigger(actions.fetchOnce, []);
 
-```ts
-import { container, type Resolver } from "storion";
+    // Pattern 2: Fetch every mount (id changes each mount)
+    trigger(actions.fetchEveryVisit, [id]);
 
-// Define service factory
-interface ApiService {
-  get<T>(url: string): Promise<T>;
-  post<T>(url: string, data: unknown): Promise<T>;
+    // Pattern 3: Fetch when prop changes
+    trigger(actions.fetchByCategory, [categoryId], categoryId);
+
+    return { data: state.data };
+  });
 }
+```
 
-function createApiService(resolver: Resolver): ApiService {
-  const baseUrl = resolver.get(configFactory).apiUrl;
+**What Storion does:**
 
-  return {
-    async get(url) {
-      const res = await fetch(`${baseUrl}${url}`);
-      return res.json();
-    },
-    async post(url, data) {
-      const res = await fetch(`${baseUrl}${url}`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
-      return res.json();
-    },
-  };
-}
+1. `trigger()` compares current deps with previous deps
+2. If deps changed (or first render), calls the function with provided args
+3. Empty deps `[]` means "call once and never again"
+4. `[id]` means "call every time component mounts" (id is unique per mount)
 
-function configFactory(): { apiUrl: string } {
-  return { apiUrl: process.env.API_URL ?? "http://localhost:3000" };
-}
+### Fine-Grained Updates with pick()
 
-// Use in store
-const userStore = store({
-  name: "user",
-  state: { user: null },
-  setup({ get }) {
-    const api = get(createApiService); // Singleton, cached
+```tsx
+import { pick } from "storion";
 
+function UserName() {
+  const { name, fullName } = useStore(({ get }) => {
+    const [state] = get(userStore);
     return {
-      fetchUser: async (id: string) => {
-        return api.get(`/users/${id}`);
-      },
+      // Re-renders ONLY when this specific value changes
+      name: pick(() => state.profile.name),
+
+      // Computed values are tracked the same way
+      fullName: pick(() => `${state.profile.first} ${state.profile.last}`),
     };
-  },
-});
+  });
 
-// Testing - easy to mock without module mocking
-const mockApi: ApiService = {
-  get: async () => ({ id: "1", name: "Test User" }),
-  post: async () => ({}),
-};
-
-const testApp = container();
-testApp.set(createApiService, () => mockApi); // Override with mock
-
-// Now userStore will use mockApi instead of real API
-const { actions } = testApp.get(userStore);
-await actions.fetchUser("1"); // Uses mockApi.get()
-
-// Lifecycle management
-testApp.delete(createApiService); // Remove cached instance
-testApp.clear(); // Clear all cached instances
-testApp.dispose(); // Dispose container and all instances
+  return <span>{fullName}</span>;
+}
 ```
 
-### Parameterized Factories with `create()`
+**Use case:** When you need even more precise control over re-renders.
 
-**The problem:** Some services need configuration at creation time (database connections, loggers with namespaces, API clients with different endpoints). But `get()` only works with parameterless factories since it caches instances.
+**Without pick():** Component re-renders when `state.profile` reference changes (even if `name` didn't change).
 
-**With Storion:** Use `create()` for parameterized factories. Unlike `get()`, `create()` always returns fresh instances and supports additional arguments.
+**With pick():** Component only re-renders when the picked value actually changes.
 
-```ts
-import { store, container, type Resolver } from "storion";
+**pick() equality options:**
 
-// Parameterized factory - receives resolver + custom args
-function createLogger(resolver: Resolver, namespace: string) {
+```tsx
+const result = useStore(({ get }) => {
+  const [state] = get(mapStore);
   return {
-    info: (msg: string) => console.log(`[${namespace}] INFO: ${msg}`),
-    error: (msg: string) => console.error(`[${namespace}] ERROR: ${msg}`),
+    // Default: strict equality (===)
+    x: pick(() => state.coords.x),
+
+    // Shallow: compare object properties one level deep
+    coords: pick(() => state.coords, "shallow"),
+
+    // Deep: recursive comparison
+    settings: pick(() => state.settings, "deep"),
+
+    // Custom: provide your own function
+    ids: pick(
+      () => state.items.map((i) => i.id),
+      (a, b) => a.length === b.length && a.every((v, i) => v === b[i])
+    ),
   };
-}
-
-function createDatabase(
-  resolver: Resolver,
-  config: { host: string; port: number }
-) {
-  return {
-    query: (sql: string) =>
-      fetch(`http://${config.host}:${config.port}/query`, {
-        method: "POST",
-        body: sql,
-      }),
-    close: () => {
-      /* cleanup */
-    },
-  };
-}
-
-// Use in store setup
-const userStore = store({
-  name: "user",
-  state: { users: [] as User[] },
-  setup({ create }) {
-    // Each call creates a fresh instance with specific config
-    const logger = create(createLogger, "user-store");
-    const db = create(createDatabase, { host: "localhost", port: 5432 });
-
-    return {
-      fetchUsers: async () => {
-        logger.info("Fetching users...");
-        await db.query("SELECT * FROM users");
-      },
-    };
-  },
-});
-
-// Also works with container directly
-const app = container();
-const authLogger = app.create(createLogger, "auth");
-const adminDb = app.create(createDatabase, { host: "admin.db", port: 5433 });
-```
-
-**Key differences between `get()` and `create()`:**
-
-| Feature    | `get()`                     | `create()`                                    |
-| ---------- | --------------------------- | --------------------------------------------- |
-| Caching    | Yes (singleton per factory) | No (always fresh)                             |
-| Arguments  | None (parameterless only)   | Supports additional arguments                 |
-| Use case   | Shared services             | Configured instances, child stores            |
-| Middleware | Applied                     | Applied (without args) / Bypassed (with args) |
-
-### Middleware
-
-**The problem:** You need cross-cutting behavior (logging, persistence, devtools) applied to some or all stores, without modifying each store individually.
-
-**With Storion:** Compose middleware and apply it conditionally using patterns like `"user*"` (startsWith), `"*Store"` (endsWith), or custom predicates.
-
-```ts
-import { container, compose, applyFor, applyExcept } from "storion";
-import type { StoreMiddleware } from "storion";
-
-// Logging middleware - ctx.spec is always available
-const loggingMiddleware: StoreMiddleware = (ctx) => {
-  console.log(`Creating store: ${ctx.displayName}`);
-  const instance = ctx.next();
-  console.log(`Created: ${instance.id}`);
-  return instance;
-};
-
-// Persistence middleware
-const persistMiddleware: StoreMiddleware = (ctx) => {
-  const instance = ctx.next();
-  // Access store-specific options directly
-  const isPersistent = ctx.spec.options.meta?.persist === true;
-  if (isPersistent) {
-    // Add persistence logic...
-  }
-  return instance;
-};
-
-const app = container({
-  middleware: compose(
-    // Apply logging to all stores starting with "user"
-    applyFor("user*", loggingMiddleware),
-
-    // Apply persistence except for cache stores
-    applyExcept("*Cache", persistMiddleware),
-
-    // Apply to specific stores
-    applyFor(["authStore", "settingsStore"], loggingMiddleware),
-
-    // Apply based on custom condition
-    applyFor(
-      (ctx) => ctx.spec.options.meta?.persist === true,
-      persistMiddleware
-    )
-  ),
 });
 ```
 
@@ -1342,53 +954,364 @@ const app = container({
 
 ## API Reference
 
-### Core (`storion`)
+### store(options)
 
-| Export                 | Description                                    |
-| ---------------------- | ---------------------------------------------- |
-| `store(options)`       | Create a store specification                   |
-| `container(options?)`  | Create a container for store instances and DI  |
-| `effect(fn, options?)` | Create reactive side effects with cleanup      |
-| `pick(fn, equality?)`  | Fine-grained derived value tracking            |
-| `batch(fn)`            | Batch multiple mutations into one notification |
-| `untrack(fn)`          | Read state without tracking dependencies       |
-
-#### Store Options
+Creates a store specification.
 
 ```ts
-interface StoreOptions<TState, TActions> {
-  name?: string; // Store display name for debugging (becomes spec.displayName)
-  state: TState; // Initial state
-  setup: (ctx: StoreContext) => TActions; // Setup function
-  lifetime?: "singleton" | "autoDispose"; // Instance lifetime
-  equality?: Equality | EqualityMap; // Custom equality for state
-  onDispatch?: (event: DispatchEvent) => void; // Action dispatch callback
-  onError?: (error: unknown) => void; // Error callback
-}
+import { store } from "storion";
+
+const myStore = store({
+  name: "myStore",
+  state: { count: 0 },
+  setup({ state, update, focus, get, create, onDispose }) {
+    return {
+      inc: () => state.count++,
+    };
+  },
+});
 ```
 
-**Per-property equality** — Configure different equality checks for each state property:
+**Options:**
+
+| Option       | Type                           | Description                                 |
+| ------------ | ------------------------------ | ------------------------------------------- |
+| `name`       | `string`                       | Display name for debugging                  |
+| `state`      | `TState`                       | Initial state object                        |
+| `setup`      | `(ctx) => TActions`            | Setup function, returns actions             |
+| `lifetime`   | `"singleton" \| "autoDispose"` | Instance lifecycle (default: `"singleton"`) |
+| `equality`   | `Equality \| EqualityMap`      | Custom equality for state comparisons       |
+| `onDispatch` | `(event) => void`              | Called when any action is dispatched        |
+| `onError`    | `(error) => void`              | Called when an error occurs                 |
+
+**Setup context:**
+
+| Property                   | Description                             |
+| -------------------------- | --------------------------------------- |
+| `state`                    | Reactive state (first-level props only) |
+| `update(fn)`               | Immer-style update for nested state     |
+| `focus(path)`              | Create getter/setter for a path         |
+| `get(spec)`                | Get dependency (store or service)       |
+| `create(factory, ...args)` | Create fresh instance                   |
+| `dirty(prop?)`             | Check if state has changed              |
+| `reset()`                  | Reset to initial state                  |
+| `onDispose(fn)`            | Register cleanup function               |
+
+### container(options?)
+
+Creates a container for managing store and service instances.
 
 ```ts
-const myStore = store({
-  name: "settings",
-  state: {
-    theme: "light",
-    coords: { x: 0, y: 0 },
-    items: [] as string[],
-    config: { nested: { deep: true } },
+import { container } from "storion";
+
+const app = container({
+  middleware: myMiddleware,
+});
+
+// Get store instance
+const { state, actions } = app.get(userStore);
+
+// Get service instance
+const api = app.get(apiService);
+
+// Create with parameters
+const logger = app.create(loggerService, "myNamespace");
+
+// Lifecycle
+app.delete(userStore); // Remove specific instance
+app.clear(); // Clear all instances
+app.dispose(); // Dispose container and cleanup
+```
+
+**Methods:**
+
+| Method                     | Description                           |
+| -------------------------- | ------------------------------------- |
+| `get(spec)`                | Get or create cached instance         |
+| `create(factory, ...args)` | Create fresh instance (not cached)    |
+| `set(spec, factory)`       | Override factory (useful for testing) |
+| `delete(spec)`             | Remove cached instance                |
+| `clear()`                  | Clear all cached instances            |
+| `dispose()`                | Dispose container and all instances   |
+
+### effect(fn, options?)
+
+Creates a reactive effect.
+
+```ts
+import { effect } from "storion";
+
+const cleanup = effect((ctx) => {
+  console.log("Count:", state.count);
+
+  ctx.onCleanup(() => {
+    console.log("Cleaning up...");
+  });
+});
+
+// Later: stop the effect
+cleanup();
+```
+
+**Context properties:**
+
+| Property        | Description                          |
+| --------------- | ------------------------------------ |
+| `onCleanup(fn)` | Register cleanup function            |
+| `safe(promise)` | Wrap promise to ignore stale results |
+| `signal`        | AbortSignal for fetch cancellation   |
+| `refresh()`     | Manually trigger re-run (async only) |
+
+**Options:**
+
+| Option       | Type     | Description         |
+| ------------ | -------- | ------------------- |
+| `debugLabel` | `string` | Label for debugging |
+
+### async(focus, handler, options?)
+
+Creates async state management.
+
+```ts
+import { async } from "storion/async";
+
+const userAsync = async(
+  focus("user"),
+  async (ctx, userId: string) => {
+    const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
+    return res.json();
   },
-  // Per-property equality configuration
+  {
+    retry: { count: 3, delay: 1000 },
+    onSuccess: (data) => console.log("Loaded:", data),
+    onError: (error) => console.error("Failed:", error),
+  }
+);
+
+// Actions
+userAsync.dispatch("123"); // Start async operation
+userAsync.cancel(); // Cancel current operation
+userAsync.refresh(); // Refetch with same args
+userAsync.reset(); // Reset to initial state
+```
+
+**Options:**
+
+| Option        | Type                            | Description              |
+| ------------- | ------------------------------- | ------------------------ |
+| `retry.count` | `number`                        | Number of retry attempts |
+| `retry.delay` | `number \| (attempt) => number` | Delay between retries    |
+| `onSuccess`   | `(data) => void`                | Called on success        |
+| `onError`     | `(error) => void`               | Called on error          |
+
+**Async helpers:**
+
+```ts
+// Initial state creators
+async.fresh<T>(); // Fresh mode: data undefined during loading
+async.stale<T>(initial); // Stale mode: preserves data during loading
+
+// State extractors (Suspense-compatible)
+async.wait(state); // Get data or throw
+async.all(...states); // Wait for all, return tuple
+async.any(...states); // Get first successful
+async.race(states); // Get fastest
+
+// State checks (non-throwing)
+async.hasData(state); // boolean
+async.isLoading(state); // boolean
+async.isError(state); // boolean
+
+// Derived state
+async.derive(focus, () => {
+  const a = async.wait(state.a);
+  const b = async.wait(state.b);
+  return computeResult(a, b);
+});
+```
+
+### pick(fn, equality?)
+
+Fine-grained value tracking.
+
+```ts
+import { pick } from "storion";
+
+// In selector
+const name = pick(() => state.profile.name);
+const coords = pick(() => state.coords, "shallow");
+const config = pick(() => state.config, "deep");
+const custom = pick(
+  () => state.ids,
+  (a, b) => arraysEqual(a, b)
+);
+```
+
+**Equality options:**
+
+| Value               | Description                       |
+| ------------------- | --------------------------------- |
+| (none)              | Strict equality (`===`)           |
+| `"shallow"`         | Compare properties one level deep |
+| `"deep"`            | Recursive comparison              |
+| `(a, b) => boolean` | Custom comparison function        |
+
+### batch(fn)
+
+Batch multiple mutations into one notification.
+
+```ts
+import { batch } from "storion";
+
+batch(() => {
+  state.x = 1;
+  state.y = 2;
+  state.z = 3;
+});
+// Subscribers notified once, not three times
+```
+
+### untrack(fn)
+
+Read state without tracking dependencies.
+
+```ts
+import { untrack } from "storion";
+
+effect(() => {
+  const count = state.count; // Tracked
+
+  const name = untrack(() => state.name); // Not tracked
+
+  console.log(count, name);
+});
+// Effect only re-runs when count changes, not when name changes
+```
+
+---
+
+## Advanced Patterns
+
+### Middleware
+
+Middleware intercepts store creation for cross-cutting concerns.
+
+```ts
+import { container, compose, applyFor, applyExcept } from "storion";
+import type { StoreMiddleware } from "storion";
+
+// Simple middleware
+const loggingMiddleware: StoreMiddleware = (ctx) => {
+  console.log(`Creating: ${ctx.displayName}`);
+  const instance = ctx.next();
+  console.log(`Created: ${instance.id}`);
+  return instance;
+};
+
+// Middleware with store-specific logic
+const persistMiddleware: StoreMiddleware = (ctx) => {
+  const instance = ctx.next();
+
+  if (ctx.spec.options.meta?.persist) {
+    // Add persistence logic
+  }
+
+  return instance;
+};
+
+// Apply conditionally
+const app = container({
+  middleware: compose(
+    // Apply to stores starting with "user"
+    applyFor("user*", loggingMiddleware),
+
+    // Apply except to cache stores
+    applyExcept("*Cache", persistMiddleware),
+
+    // Apply to specific stores
+    applyFor(["authStore", "settingsStore"], loggingMiddleware),
+
+    // Apply based on condition
+    applyFor((ctx) => ctx.spec.options.meta?.debug === true, loggingMiddleware)
+  ),
+});
+```
+
+**Pattern matching:**
+
+| Pattern            | Matches                |
+| ------------------ | ---------------------- |
+| `"user*"`          | Starts with "user"     |
+| `"*Store"`         | Ends with "Store"      |
+| `["a", "b"]`       | Exact match "a" or "b" |
+| `(ctx) => boolean` | Custom predicate       |
+
+### Parameterized Services
+
+For services that need configuration:
+
+```ts
+// Parameterized service factory
+function dbService(resolver, config: { host: string; port: number }) {
+  return {
+    query: (sql: string) =>
+      fetch(`http://${config.host}:${config.port}/query`, {
+        method: "POST",
+        body: sql,
+      }),
+  };
+}
+
+// Use with create() instead of get()
+const myStore = store({
+  name: "data",
+  state: { items: [] },
+  setup({ create }) {
+    // create() always makes a fresh instance and accepts args
+    const db = create(dbService, { host: "localhost", port: 5432 });
+
+    return {
+      fetchItems: async () => {
+        return db.query("SELECT * FROM items");
+      },
+    };
+  },
+});
+```
+
+**get() vs create():**
+
+| Aspect    | `get()`         | `create()`           |
+| --------- | --------------- | -------------------- |
+| Caching   | Yes (singleton) | No (always fresh)    |
+| Arguments | None            | Supports extra args  |
+| Use case  | Shared services | Configured instances |
+
+### Store-Level Equality
+
+Configure how state changes are detected:
+
+```ts
+const mapStore = store({
+  name: "map",
+  state: {
+    coords: { x: 0, y: 0 },
+    markers: [] as Marker[],
+    settings: { zoom: 1, rotation: 0 },
+  },
   equality: {
-    theme: "strict", // Default (===)
-    coords: "shallow", // Compare { x, y } properties
-    items: "shallow", // Compare array elements
-    config: "deep", // Deep recursive comparison
+    // Shallow: only notify if x or y actually changed
+    coords: "shallow",
+    // Deep: recursive comparison for complex objects
+    settings: "deep",
+    // Custom function
+    markers: (a, b) => a.length === b.length,
   },
   setup({ state }) {
     return {
       setCoords: (x: number, y: number) => {
-        // Only triggers subscribers if x or y actually changed (shallow compare)
+        // This creates a new object, but shallow equality
+        // prevents notification if x and y are the same
         state.coords = { x, y };
       },
     };
@@ -1396,179 +1319,75 @@ const myStore = store({
 });
 ```
 
-| Equality            | Description                                     |
-| ------------------- | ----------------------------------------------- |
-| `"strict"`          | Default `===` comparison                        |
-| `"shallow"`         | Compares object/array properties one level deep |
-| `"deep"`            | Recursively compares nested structures          |
-| `(a, b) => boolean` | Custom comparison function                      |
-
-#### StoreContext (in setup)
+### Testing with Mocks
 
 ```ts
-interface StoreContext<TState, TActions> {
-  state: TState; // First-level props only (state.x = y)
-  get<T>(spec: StoreSpec<T>): StoreTuple; // Get dependency store (cached)
-  get<T>(factory: Factory<T>): T; // Get DI service (cached)
-  create<T>(spec: StoreSpec<T>): StoreInstance<T>; // Create child store (fresh)
-  create<T>(factory: Factory<T>): T; // Create service (fresh)
-  create<R, A>(factory: (r, ...a: A) => R, ...a: A): R; // Parameterized factory
-  focus<P extends Path>(path: P): Focus; // Lens-like accessor
-  update(fn: (draft: TState) => void): void; // For nested/array mutations
-  dirty(prop?: keyof TState): boolean; // Check if state changed
-  reset(): void; // Reset to initial state
-  onDispose(fn: VoidFunction): void; // Register cleanup
-}
+import { container } from "storion";
+
+// Production code
+const app = container();
+
+// Test setup
+const testApp = container();
+
+// Override services with mocks
+testApp.set(apiService, () => ({
+  get: async () => ({ id: "1", name: "Test User" }),
+  post: async () => ({}),
+}));
+
+// Now stores will use the mock
+const { actions } = testApp.get(userStore);
+await actions.fetchUser("1"); // Uses mock apiService
 ```
 
-> **Note:** `state` allows direct assignment only for first-level properties. Use `update()` for nested objects, arrays, or batch updates.
+### Child Containers
 
-**`get()` vs `create()` — When to use each:**
-
-| Method     | Caching  | Use case                                               |
-| ---------- | -------- | ------------------------------------------------------ |
-| `get()`    | Cached   | Shared dependencies, singleton services                |
-| `create()` | No cache | Child stores, parameterized factories, fresh instances |
+For scoped dependencies (e.g., per-request in SSR):
 
 ```ts
-setup({ get, create }) {
-  // get() - cached, same instance every time
-  const api = get(apiService); // Singleton
+const rootApp = container();
 
-  // create() - fresh instance each call
-  const childStore = create(childSpec); // New store instance
+// Create child container with overrides
+const requestApp = container({
+  parent: rootApp,
+});
 
-  // create() with arguments - parameterized factory
-  const db = create(createDatabase, { host: 'localhost', port: 5432 });
-  const logger = create(createLogger, 'auth-store');
+// Child inherits from parent but can have its own instances
+requestApp.set(sessionService, () => createSessionForRequest());
 
-  return { /* ... */ };
-}
+// Cleanup after request
+requestApp.dispose();
 ```
 
-### React (`storion/react`)
-
-| Export                     | Description                               |
-| -------------------------- | ----------------------------------------- |
-| `StoreProvider`            | Provides container to React tree          |
-| `useStore(selector)`       | Hook to consume stores with selector      |
-| `useStore(spec)`           | Hook for component-local store            |
-| `useContainer()`           | Access container from context             |
-| `create(options)`          | Create store + hook for single-store apps |
-| `withStore(hook, render?)` | HOC pattern for store consumption         |
-
-#### useStore Selector
+### Store Lifecycle
 
 ```ts
-// Selector receives context with get(), create(), mixin(), once()
-const result = useStore(({ get, create, mixin, once }) => {
-  const [state, actions] = get(myStore);
-  const service = get(myFactory); // Cached
+const myStore = store({
+  name: "myStore",
+  lifetime: "autoDispose", // Dispose when no subscribers
+  state: { ... },
+  setup({ onDispose }) {
+    const interval = setInterval(() => {}, 1000);
 
-  // create() for parameterized factories (fresh instance each render)
-  const logger = create(createLogger, "my-component");
+    // Cleanup when store is disposed
+    onDispose(() => {
+      clearInterval(interval);
+    });
 
-  // Run once on mount
-  once(() => actions.init());
-
-  return { value: state.value, action: actions.doSomething };
+    return { ... };
+  },
 });
 ```
 
-### Async (`storion/async`)
+**Lifetime options:**
 
-| Export                            | Description                                 |
-| --------------------------------- | ------------------------------------------- |
-| `async(focus, handler, options?)` | Create async action                         |
-| `async.fresh<T>()`                | Create fresh mode initial state             |
-| `async.stale<T>(initial)`         | Create stale mode initial state             |
-| `async.wait(state)`               | Extract data or throw (Suspense-compatible) |
-| `async.all(...states)`            | Wait for all states to be ready             |
-| `async.any(...states)`            | Get first ready state                       |
-| `async.race(states)`              | Race between states                         |
-| `async.derive(focus, computeFn)`  | Derive async state from other async states  |
-| `async.hasData(state)`            | Check if state has data                     |
-| `async.isLoading(state)`          | Check if state is loading                   |
-| `async.isError(state)`            | Check if state has error                    |
+| Value           | Behavior                                    |
+| --------------- | ------------------------------------------- |
+| `"singleton"`   | Lives until container is disposed (default) |
+| `"autoDispose"` | Disposed when last subscriber unsubscribes  |
 
-#### AsyncState Types
-
-```ts
-interface AsyncState<T, M extends "fresh" | "stale"> {
-  status: "idle" | "pending" | "success" | "error";
-  mode: M;
-  data: M extends "stale" ? T : T | undefined;
-  error: Error | undefined;
-  timestamp: number | undefined;
-}
-```
-
-### Middleware
-
-| Export        | Description                                        |
-| ------------- | -------------------------------------------------- |
-| `compose`     | Compose multiple StoreMiddleware into one          |
-| `applyFor`    | Apply middleware conditionally (pattern/predicate) |
-| `applyExcept` | Apply middleware except for matching patterns      |
-
-#### Middleware Context (Discriminated Union)
-
-Middleware context uses a discriminated union with `type` field:
-
-```ts
-// For stores (container middleware)
-interface StoreMiddlewareContext {
-  type: "store"; // Discriminant
-  spec: StoreSpec; // Always present for stores
-  factory: Factory;
-  resolver: Resolver;
-  next: () => unknown;
-  displayName: string; // Always present for stores
-}
-
-// For plain factories (resolver middleware)
-interface FactoryMiddlewareContext {
-  type: "factory"; // Discriminant
-  factory: Factory;
-  resolver: Resolver;
-  next: () => unknown;
-  displayName: string | undefined;
-}
-
-type MiddlewareContext = FactoryMiddlewareContext | StoreMiddlewareContext;
-```
-
-**Store-specific middleware** (for containers):
-
-```ts
-// No generics needed - simple and clean
-type StoreMiddleware = (ctx: StoreMiddlewareContext) => StoreInstance;
-
-const loggingMiddleware: StoreMiddleware = (ctx) => {
-  console.log(`Creating: ${ctx.displayName}`);
-  const instance = ctx.next();
-  console.log(`Created: ${instance.id}`);
-  return instance as StoreInstance;
-};
-```
-
-**Generic middleware** (for resolver, works with both stores and factories):
-
-```ts
-type Middleware = (ctx: MiddlewareContext) => unknown;
-
-const loggingMiddleware: Middleware = (ctx) => {
-  // Use type narrowing
-  if (ctx.type === "store") {
-    console.log(`Store: ${ctx.spec.displayName}`);
-  } else {
-    console.log(`Factory: ${ctx.displayName ?? "anonymous"}`);
-  }
-  return ctx.next();
-};
-```
-
-### Devtools (`storion/devtools`)
+### DevTools Integration
 
 ```ts
 import { devtools } from "storion/devtools";
@@ -1576,18 +1395,14 @@ import { devtools } from "storion/devtools";
 const app = container({
   middleware: devtools({
     name: "My App",
-    // Enable in development only
     enabled: process.env.NODE_ENV === "development",
   }),
 });
 ```
 
-### Devtools Panel (`storion/devtools-panel`)
-
 ```tsx
 import { DevtoolsPanel } from "storion/devtools-panel";
 
-// Mount anywhere in your app (dev only)
 function App() {
   return (
     <>
@@ -1600,52 +1415,104 @@ function App() {
 
 ---
 
-## Edge Cases & Best Practices
+## Error Handling
 
-### ❌ Don't directly mutate nested state or arrays
+### Effect Errors
 
-Direct mutation only works for first-level properties. Use `update()` for nested objects and arrays:
+Errors in effects are caught and can be handled:
 
 ```ts
-// ❌ Wrong - nested mutation won't trigger reactivity
-setup({ state }) {
-  return {
-    setName: (name: string) => {
-      state.profile.name = name; // Won't work!
+const myStore = store({
+  name: "myStore",
+  state: { ... },
+  onError: (error) => {
+    console.error("Store error:", error);
+    // Send to error tracking service
+  },
+  setup({ state }) {
+    effect(() => {
+      if (state.invalid) {
+        throw new Error("Invalid state!");
+      }
+    });
+
+    return { ... };
+  },
+});
+```
+
+### Async Errors
+
+```ts
+const userAsync = async(
+  focus("user"),
+  async (ctx) => {
+    const res = await fetch("/api/user", { signal: ctx.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  {
+    onError: (error) => {
+      // Handle or log the error
     },
-    addItem: (item: string) => {
-      state.items.push(item); // Won't work!
+    retry: {
+      count: 3,
+      delay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     },
-  };
+  }
+);
+```
+
+### React Error Boundaries
+
+```tsx
+function App() {
+  return (
+    <ErrorBoundary fallback={<ErrorPage />}>
+      <Suspense fallback={<Spinner />}>
+        <UserProfile />
+      </Suspense>
+    </ErrorBoundary>
+  );
 }
 
-// ✅ Correct - use update() for nested/array mutations
-setup({ state, update }) {
-  return {
-    setName: (name: string) => {
-      update((draft) => {
-        draft.profile.name = name;
-      });
-    },
-    addItem: (item: string) => {
-      update((draft) => {
-        draft.items.push(item);
-      });
-    },
-    // First-level props can be assigned directly
-    setCount: (n: number) => {
-      state.count = n; // This works!
-    },
-  };
+function UserProfile() {
+  const { user } = useStore(({ get }) => {
+    const [state] = get(userStore);
+    // async.wait() throws on error, caught by ErrorBoundary
+    return { user: async.wait(state.currentUser) };
+  });
+
+  return <div>{user.name}</div>;
 }
 ```
 
-### ❌ Don't call `get()` inside actions
+---
 
-`get()` is for declaring dependencies during setup, not runtime:
+## Limitations & Anti-patterns
+
+### ❌ Don't Mutate Nested State Directly
+
+Direct mutation only works for first-level properties:
 
 ```ts
-// ❌ Wrong - calling get() inside action
+// ❌ Wrong - won't trigger reactivity
+state.profile.name = "John";
+state.items.push("new item");
+
+// ✅ Correct - use update()
+update((draft) => {
+  draft.profile.name = "John";
+  draft.items.push("new item");
+});
+```
+
+### ❌ Don't Call get() Inside Actions
+
+`get()` is for setup-time dependencies, not runtime:
+
+```ts
+// ❌ Wrong
 setup({ get }) {
   return {
     doSomething: () => {
@@ -1654,31 +1521,30 @@ setup({ get }) {
   };
 }
 
-// ✅ Correct - declare dependency at setup time
+// ✅ Correct - capture at setup time
 setup({ get }) {
   const [otherState, otherActions] = get(otherStore);
 
   return {
     doSomething: () => {
-      if (otherState.ready) {
-        // Use the reactive state captured during setup
-      }
+      // Use the captured state/actions
+      if (otherState.ready) { ... }
     },
   };
 }
 ```
 
-### ❌ Don't return Promises from effects
+### ❌ Don't Use Async Effects
 
-Effects must be synchronous. Use `ctx.safe()` for async:
+Effects must be synchronous:
 
 ```ts
-// ❌ Wrong - async effect
+// ❌ Wrong
 effect(async (ctx) => {
-  const data = await fetchData(); // Don't do this!
+  const data = await fetchData();
 });
 
-// ✅ Correct - use ctx.safe()
+// ✅ Correct
 effect((ctx) => {
   ctx.safe(fetchData()).then((data) => {
     state.data = data;
@@ -1686,79 +1552,120 @@ effect((ctx) => {
 });
 ```
 
-### ✅ Use `pick()` for computed values from nested state
+### ❌ Don't Pass Anonymous Functions to trigger()
 
-When reading nested state in selectors, use `pick()` for fine-grained reactivity:
+Anonymous functions create new references on every render:
 
 ```ts
-// Re-renders when profile object changes (coarse tracking)
-const name = state.profile.name;
+// ❌ Wrong - anonymous function called every render
+trigger(() => {
+  actions.search(query);
+}, [query]);
 
-// Re-renders only when the actual name value changes (fine tracking)
-const name = pick(() => state.profile.name);
-const fullName = pick(() => `${state.profile.first} ${state.profile.last}`);
+// ✅ Correct - stable function reference
+trigger(actions.search, [query], query);
 ```
 
-### ✅ Use stale mode for SWR patterns
+### ❌ Don't Call refresh() Synchronously
+
+Calling `ctx.refresh()` during effect execution throws an error:
 
 ```ts
-// Fresh mode: data is undefined during loading
-state: {
-  data: async.fresh<Data>(),
-}
-
-// Stale mode: preserves previous data during loading (SWR pattern)
-state: {
-  data: async.stale<Data>(initialData),
-}
-```
-
----
-
-## TypeScript
-
-Storion is written in TypeScript and provides excellent type inference:
-
-```ts
-// State and action types are inferred
-const myStore = store({
-  name: "my-store",
-  state: { count: 0, name: "" },
-  setup({ state }) {
-    return {
-      inc: () => state.count++, // () => void
-      setName: (n: string) => (state.name = n), // (n: string) => string
-    };
-  },
+// ❌ Wrong - throws error
+effect((ctx) => {
+  ctx.refresh(); // Error!
 });
 
-// Using with explicit types when needed (unions, nullable)
-interface MyState {
-  userId: string | null;
-  status: "idle" | "loading" | "ready";
+// ✅ Correct - async or return pattern
+effect((ctx) => {
+  setTimeout(() => ctx.refresh(), 1000);
+  // or
+  return ctx.refresh;
+});
+```
+
+### ❌ Don't Create Stores Inside Components
+
+Store specs should be defined at module level:
+
+```ts
+// ❌ Wrong - creates new spec on every render
+function Component() {
+  const myStore = store({ ... }); // Don't do this!
 }
 
-const typedStore = store({
-  name: "typed",
-  state: {
-    userId: null as string | null,
-    status: "idle" as "idle" | "loading" | "ready",
-  } satisfies MyState,
+// ✅ Correct - define at module level
+const myStore = store({ ... });
+
+function Component() {
+  const { state } = useStore(({ get }) => get(myStore));
+}
+```
+
+### ❌ Don't Forget to Handle All Async States
+
+```tsx
+// ❌ Incomplete - misses error and idle states
+function User() {
+  const { user } = useStore(({ get }) => {
+    const [state] = get(userStore);
+    return { user: state.currentUser };
+  });
+
+  if (user.status === "pending") return <Spinner />;
+  return <div>{user.data.name}</div>; // Crashes if error or idle!
+}
+
+// ✅ Complete handling
+function User() {
+  const { user } = useStore(...);
+
+  if (user.status === "idle") return <button>Load User</button>;
+  if (user.status === "pending") return <Spinner />;
+  if (user.status === "error") return <Error error={user.error} />;
+  return <div>{user.data.name}</div>;
+}
+```
+
+### Limitation: No Deep Property Tracking
+
+Storion tracks first-level property access, not deep paths:
+
+```ts
+// Both track "profile" property, not "profile.name"
+const name1 = state.profile.name;
+const name2 = state.profile.email;
+
+// To get finer tracking, use pick()
+const name = pick(() => state.profile.name);
+```
+
+### Limitation: Equality Check Timing
+
+Store-level equality runs on write, component-level equality runs on read:
+
+```ts
+// Store level - prevents notification
+store({
+  equality: { coords: "shallow" },
   setup({ state }) {
     return {
-      setUser: (id: string | null) => {
-        state.userId = id;
+      setCoords: (x, y) => {
+        // If same x,y, no subscribers are notified
+        state.coords = { x, y };
       },
     };
   },
 });
+
+// Component level - prevents re-render
+const x = pick(() => state.coords.x);
+// Component only re-renders if x specifically changed
 ```
 
 ---
 
 ## Contributing
-
-We welcome contributions! Here's how to get started:
 
 ### Prerequisites
 
@@ -1768,39 +1675,19 @@ We welcome contributions! Here's how to get started:
 ### Setup
 
 ```bash
-# Clone the repo
 git clone https://github.com/linq2js/storion.git
 cd storion
-
-# Install dependencies
 pnpm install
-
-# Build the library
 pnpm --filter storion build
 ```
 
 ### Development
 
 ```bash
-# Watch mode
-pnpm --filter storion dev
-
-# Run tests
-pnpm --filter storion test
-
-# Run tests with UI
-pnpm --filter storion test:ui
-
-# Type check
-pnpm --filter storion build:check
+pnpm --filter storion dev      # Watch mode
+pnpm --filter storion test     # Run tests
+pnpm --filter storion test:ui  # Tests with UI
 ```
-
-### Code Style
-
-- Prefer **type inference** over explicit interfaces (add types only for unions, nullable, discriminated unions)
-- Keep examples **copy/paste runnable**
-- Write tests for new features
-- Follow existing patterns in the codebase
 
 ### Commit Messages
 
@@ -1810,16 +1697,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 feat(core): add new feature
 fix(react): resolve hook issue
 docs: update README
-chore: bump dependencies
 ```
-
-### Pull Requests
-
-1. Fork the repo and create your branch from `main`
-2. Add tests for new functionality
-3. Ensure all tests pass
-4. Update documentation as needed
-5. Submit a PR with a clear description
 
 ---
 
