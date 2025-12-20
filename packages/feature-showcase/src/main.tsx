@@ -29,16 +29,17 @@ const app = container({
       load: (spec) => {
         const key = `storion:${spec.displayName}`;
         const data = localStorage.getItem(key);
-        console.log(`[Persist] Loading ${spec.displayName}:`, data);
         return data ? JSON.parse(data) : null;
       },
       save: (spec, state) => {
         const key = `storion:${spec.displayName}`;
-        console.log(`[Persist] Saving ${spec.displayName}:`, state);
         localStorage.setItem(key, JSON.stringify(state));
       },
       onError: (spec, error, operation) => {
-        console.error(`[Persist] ${operation} error for ${spec.displayName}:`, error);
+        console.error(
+          `[Persist] ${operation} error for ${spec.displayName}:`,
+          error
+        );
       },
     }),
   ],
@@ -51,4 +52,3 @@ createRoot(document.getElementById("root")!).render(
     </StoreProvider>
   </StrictMode>
 );
-

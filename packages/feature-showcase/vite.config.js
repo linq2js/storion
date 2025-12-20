@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Plugin to watch storion source and trigger HMR
 function watchStorion() {
     var storionSrc = path.resolve(__dirname, "../storion/src");
@@ -34,6 +36,10 @@ export default defineConfig({
                 replacement: path.resolve(__dirname, "../storion/src/devtools/index.ts"),
             },
             {
+                find: "storion/persist",
+                replacement: path.resolve(__dirname, "../storion/src/persist/index.ts"),
+            },
+            {
                 find: "storion/async",
                 replacement: path.resolve(__dirname, "../storion/src/async/index.ts"),
             },
@@ -45,7 +51,7 @@ export default defineConfig({
                 find: "storion",
                 replacement: path.resolve(__dirname, "../storion/src/index.ts"),
             },
-            { find: "@", replacement: "/src" },
+            { find: "@", replacement: path.resolve(__dirname, "src") },
         ],
     },
     server: {
@@ -57,7 +63,14 @@ export default defineConfig({
     },
     optimizeDeps: {
         // Exclude storion from pre-bundling so changes are picked up immediately
-        exclude: ["storion"],
+        exclude: [
+            "storion",
+            "storion/react",
+            "storion/async",
+            "storion/devtools",
+            "storion/devtools-panel",
+            "storion/persist",
+        ],
     },
     test: {
         globals: true,

@@ -2,6 +2,9 @@ import { defineConfig } from "vitest/config";
 import type { ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Plugin to watch storion source and trigger HMR
 function watchStorion() {
@@ -62,7 +65,7 @@ export default defineConfig({
         find: "storion",
         replacement: path.resolve(__dirname, "../storion/src/index.ts"),
       },
-      { find: "@", replacement: "/src" },
+      { find: "@", replacement: path.resolve(__dirname, "src") },
     ],
   },
   server: {
@@ -74,7 +77,14 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Exclude storion from pre-bundling so changes are picked up immediately
-    exclude: ["storion"],
+    exclude: [
+      "storion",
+      "storion/react",
+      "storion/async",
+      "storion/devtools",
+      "storion/devtools-panel",
+      "storion/persist",
+    ],
   },
   test: {
     globals: true,

@@ -471,17 +471,22 @@ export function createStoreInstance<
       return { ...currentState };
     },
 
-    hydrate(data: Record<string, unknown>): void {
+    hydrate(
+      data: Record<string, unknown>,
+      hydrateOptions?: { force?: boolean }
+    ): void {
       // Transform data using denormalize option if provided
       const denormalizer = options.denormalize;
       const newState = denormalizer
         ? denormalizer(data)
         : (data as unknown as TState);
 
-      // Apply each property, but skip dirty props to avoid overwriting fresh data
+      const force = hydrateOptions?.force ?? false;
+
+      // Apply each property, but skip dirty props to avoid overwriting fresh data (unless force)
       for (const key of Object.keys(newState) as Array<keyof TState>) {
-        // Skip if prop is dirty (has been modified since initialization)
-        if (currentState[key] !== initialState[key]) {
+        // Skip if prop is dirty (has been modified since initialization) - unless force is true
+        if (!force && currentState[key] !== initialState[key]) {
           continue;
         }
 

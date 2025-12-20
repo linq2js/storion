@@ -911,16 +911,21 @@ export interface StoreInstance<
    * Restore state from persisted data.
    * Uses the `denormalize` option if defined, otherwise applies data directly.
    *
-   * **Important:** Only applies to non-dirty props. If a prop has been modified
+   * **Important:** By default, only applies to non-dirty props. If a prop has been modified
    * since initialization (e.g., by an effect fetching fresh data), it will be
    * skipped to avoid overwriting newer data with stale persisted data.
+   *
+   * Use `{ force: true }` to bypass dirty check and overwrite all props.
    *
    * @example
    * // In persistor
    * const data = JSON.parse(localStorage.getItem(key));
    * instance.hydrate(data);
+   *
+   * // Force hydration (ignores dirty check)
+   * instance.hydrate(data, { force: true });
    */
-  hydrate(data: Record<string, unknown>): void;
+  hydrate(data: Record<string, unknown>, options?: { force?: boolean }): void;
 
   /**
    * @internal Internal subscription for effects - doesn't affect refCount.
