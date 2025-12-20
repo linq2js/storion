@@ -1634,7 +1634,7 @@ const myStore = store({
 
 ### DevTools Integration
 
-![img](./img/image.png)
+![Storion DevTools](https://raw.githubusercontent.com/linq2js/storion/main/packages/storion/img/image.png)
 
 ```ts
 import { devtools } from "storion/devtools";
