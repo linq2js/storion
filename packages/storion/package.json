@@ -1,6 +1,6 @@
 {
   "name": "storion",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Reactive stores for modern apps. Type-safe. Auto-tracked. Effortlessly composable",
   "type": "module",
   "main": "./dist/storion.js",
@@ -46,9 +46,9 @@
     "version:minor": "npm version minor -m \"chore: bump version to %s\"",
     "version:major": "npm version major -m \"chore: bump version to %s\"",
     "prepublishOnly": "pnpm run build",
-    "release:patch": "git status --porcelain | grep -q . && echo 'Error: uncommitted changes' && exit 1; git pull --rebase && pnpm version:patch && git add -A && git commit --amend --no-edit && git pull --rebase && git push && git push --tags && npm publish",
-    "release:minor": "git status --porcelain | grep -q . && echo 'Error: uncommitted changes' && exit 1; git pull --rebase && pnpm version:minor && git add -A && git commit --amend --no-edit && git pull --rebase && git push && git push --tags && npm publish",
-    "release:major": "git status --porcelain | grep -q . && echo 'Error: uncommitted changes' && exit 1; git pull --rebase && pnpm version:major && git add -A && git commit --amend --no-edit && git pull --rebase && git push && git push --tags && npm publish",
+    "release:patch": "git status --porcelain | grep -q . && echo 'Error: uncommitted changes' && exit 1; pnpm version:patch && git add -A && git commit --amend --no-edit && npm publish",
+    "release:minor": "git status --porcelain | grep -q . && echo 'Error: uncommitted changes' && exit 1; pnpm version:minor && git add -A && git commit --amend --no-edit && npm publish",
+    "release:major": "git status --porcelain | grep -q . && echo 'Error: uncommitted changes' && exit 1; pnpm version:major && git add -A && git commit --amend --no-edit && npm publish",
     "publish:dry": "npm publish --dry-run"
   },
   "keywords": [
