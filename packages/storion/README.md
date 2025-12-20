@@ -986,6 +986,42 @@ function Dashboard({ categoryId }: { categoryId: string }) {
 3. Empty deps `[]` means "call once and never again"
 4. `[id]` means "call every time component mounts" (id is unique per mount)
 
+**Comparison with React Query / Apollo:**
+
+| Storion                                    | React Query                               | Apollo                                           | Behavior                      |
+| ------------------------------------------ | ----------------------------------------- | ------------------------------------------------ | ----------------------------- |
+| `trigger(fetch, [])`                       | `useQuery()`                              | `useQuery()`                                     | Auto-fetch on mount           |
+| `trigger(fetch, [id])`                     | `useQuery({ refetchOnMount: 'always' })`  | `useQuery({ fetchPolicy: 'network-only' })`      | Fetch every mount             |
+| `trigger(fetch, [categoryId], categoryId)` | `useQuery({ variables: { categoryId } })` | `useQuery(QUERY, { variables: { categoryId } })` | Refetch when variable changes |
+| Manual `dispatch()`                        | `useLazyQuery()`                          | `useLazyQuery()`                                 | Fetch on user action          |
+
+```tsx
+// Auto-fetch (like useQuery in React Query / Apollo)
+function UserProfile() {
+  const { user } = useStore(({ get }) => {
+    const [state, actions] = get(userStore);
+    trigger(actions.fetchUser, []); // Fetches automatically on mount
+    return { user: state.user };
+  });
+}
+
+// Lazy fetch (like useLazyQuery in React Query / Apollo)
+function SearchResults() {
+  const { results, search } = useStore(({ get }) => {
+    const [state, actions] = get(searchStore);
+    // No trigger - user controls when to fetch
+    return { results: state.results, search: actions.search };
+  });
+
+  return (
+    <div>
+      <button onClick={() => search("query")}>Search</button>
+      {/* results shown after user clicks */}
+    </div>
+  );
+}
+```
+
 ### Fine-Grained Updates with pick()
 
 ```tsx
@@ -1170,8 +1206,8 @@ const userAsync = async(
   },
   {
     retry: { count: 3, delay: 1000 },
-    onSuccess: (data) => console.log("Loaded:", data),
     onError: (error) => console.error("Failed:", error),
+    autoCancel: true, // Cancel previous request on new dispatch (default)
   }
 );
 
@@ -1184,12 +1220,13 @@ userAsync.reset(); // Reset to initial state
 
 **Options:**
 
-| Option        | Type                            | Description              |
-| ------------- | ------------------------------- | ------------------------ |
-| `retry.count` | `number`                        | Number of retry attempts |
-| `retry.delay` | `number \| (attempt) => number` | Delay between retries    |
-| `onSuccess`   | `(data) => void`                | Called on success        |
-| `onError`     | `(error) => void`               | Called on error          |
+| Option        | Type                            | Description                                               |
+| ------------- | ------------------------------- | --------------------------------------------------------- |
+| `retry`       | `number \| AsyncRetryOptions`   | Retry configuration                                       |
+| `retry.count` | `number`                        | Number of retry attempts                                  |
+| `retry.delay` | `number \| (attempt) => number` | Delay between retries (ms)                                |
+| `onError`     | `(error) => void`               | Called on error                                           |
+| `autoCancel`  | `boolean`                       | Cancel previous request on new dispatch (default: `true`) |
 
 **Async helpers:**
 
@@ -1215,6 +1252,43 @@ async.derive(focus, () => {
   const b = async.wait(state.b);
   return computeResult(a, b);
 });
+```
+
+**How `async.wait()` handles each state:**
+
+| Status    | Fresh Mode                     | Stale Mode            |
+| --------- | ------------------------------ | --------------------- |
+| `idle`    | ❌ Throws `AsyncNotReadyError` | ✅ Returns stale data |
+| `pending` | ❌ Throws promise (Suspense)   | ✅ Returns stale data |
+| `success` | ✅ Returns data                | ✅ Returns data       |
+| `error`   | ❌ Throws error                | ✅ Returns stale data |
+
+**Key insight:** In **stale mode**, `async.wait()` always returns the stale data (even during idle/pending/error), so your UI can show previous data while loading. In **fresh mode**, it throws until data is ready.
+
+```tsx
+// Fresh mode - throws on idle, must trigger fetch first
+const freshState = async.fresh<User>();
+async.wait(freshState); // ❌ Throws "Cannot wait: state is idle"
+
+// Stale mode - returns initial data immediately
+const staleState = async.stale<User[]>([]);
+async.wait(staleState); // ✅ Returns [] (the initial data)
+```
+
+**`async.all()` follows the same rules** — it calls `async.wait()` on each state:
+
+```tsx
+// All stale mode - returns immediately with stale data
+const [users, posts] = async.all(
+  async.stale<User[]>([]), // Returns []
+  async.stale<Post[]>([]) // Returns []
+);
+
+// Mixed mode - throws if any fresh state is not ready
+const [user, posts] = async.all(
+  async.fresh<User>(), // ❌ Throws - idle fresh state
+  async.stale<Post[]>([])
+);
 ```
 
 ### pick(fn, equality?)
@@ -1306,9 +1380,14 @@ const persistMiddleware: StoreMiddleware = (ctx) => {
   return instance;
 };
 
-// Apply conditionally
+// Apply single middleware
 const app = container({
-  middleware: compose(
+  middleware: loggingMiddleware,
+});
+
+// Apply multiple middlewares (array)
+const app = container({
+  middleware: [
     // Apply to stores starting with "user"
     applyFor("user*", loggingMiddleware),
 
@@ -1319,8 +1398,8 @@ const app = container({
     applyFor(["authStore", "settingsStore"], loggingMiddleware),
 
     // Apply based on condition
-    applyFor((ctx) => ctx.spec.options.meta?.debug === true, loggingMiddleware)
-  ),
+    applyFor((ctx) => ctx.spec.options.meta?.debug === true, loggingMiddleware),
+  ],
 });
 ```
 
@@ -1374,9 +1453,21 @@ const myStore = store({
 | Arguments | None            | Supports extra args  |
 | Use case  | Shared services | Configured instances |
 
-### Store-Level Equality
+### Equality Strategies
 
-Configure how state changes are detected:
+Storion supports equality checks at **two levels**, giving you fine-grained control over when updates happen.
+
+**Comparison with other libraries:**
+
+| Library     | Store-level equality | Selector-level equality                |
+| ----------- | -------------------- | -------------------------------------- |
+| **Redux**   | ❌ No                | ✅ `useSelector(selector, equalityFn)` |
+| **Zustand** | ❌ No                | ✅ `useStore(selector, shallow)`       |
+| **Jotai**   | ✅ Per-atom          | ❌ No                                  |
+| **MobX**    | ✅ Deep by default   | ❌ No (computed)                       |
+| **Storion** | ✅ Per-property      | ✅ `pick(fn, equality)`                |
+
+**Store-level equality** — Prevents notifications when state "changes" to an equivalent value:
 
 ```ts
 const mapStore = store({
@@ -1404,6 +1495,73 @@ const mapStore = store({
     };
   },
 });
+```
+
+**Selector-level equality** — Prevents re-renders when selected value hasn't changed:
+
+```tsx
+function MapView() {
+  const { x, coords, markers } = useStore(({ get }) => {
+    const [state] = get(mapStore);
+    return {
+      // Only re-render if x specifically changed
+      x: pick(() => state.coords.x),
+
+      // Only re-render if coords object is shallow-different
+      coords: pick(() => state.coords, "shallow"),
+
+      // Custom comparison at selector level
+      markers: pick(
+        () => state.markers.map((m) => m.id),
+        (a, b) => a.join() === b.join()
+      ),
+    };
+  });
+}
+```
+
+**When to use each:**
+
+| Level              | When it runs          | Use case                                             |
+| ------------------ | --------------------- | ---------------------------------------------------- |
+| **Store-level**    | On every state write  | Prevent unnecessary notifications to ALL subscribers |
+| **Selector-level** | On every selector run | Prevent re-renders for THIS component only           |
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  state.coords = { x: 1, y: 2 }                                      │
+│         │                                                           │
+│         ▼                                                           │
+│  Store-level equality: coords: "shallow"                            │
+│  Same x and y values? → Skip notifying ALL subscribers              │
+│         │                                                           │
+│         ▼ (if changed)                                              │
+│  ┌─────────────────────┐    ┌─────────────────────┐                 │
+│  │ Component A         │    │ Component B         │                 │
+│  │ pick(() => coords.x)│    │ pick(() => coords)  │                 │
+│  │      │              │    │      │              │                 │
+│  │      ▼              │    │      ▼              │                 │
+│  │ Re-render if x      │    │ Re-render if x OR y │                 │
+│  │ changed             │    │ changed             │                 │
+│  └─────────────────────┘    └─────────────────────┘                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Why Storion's approach is powerful:**
+
+```tsx
+// Redux/Zustand - must remember to add equality every time
+const coords = useSelector((state) => state.coords, shallowEqual);
+const coords = useStore((state) => state.coords, shallow);
+
+// Storion - store-level handles common cases, pick() for fine-tuning
+const mapStore = store({
+  equality: { coords: "shallow" }, // Set once, applies everywhere
+  // ...
+});
+
+// Components can add extra precision with pick()
+const x = pick(() => state.coords.x); // Even finer control
 ```
 
 ### Testing with Mocks
@@ -1476,6 +1634,8 @@ const myStore = store({
 
 ### DevTools Integration
 
+![img](./img/image.png)
+
 ```ts
 import { devtools } from "storion/devtools";
 
@@ -1527,6 +1687,25 @@ const myStore = store({
   },
 });
 ```
+
+**Important:** Even if an effect throws an error, it **still re-runs** when its tracked states change. The effect keeps its dependency tracking from before the error occurred.
+
+```ts
+effect(() => {
+  console.log("Effect running, count:", state.count); // Tracks `count`
+
+  if (state.count > 5) {
+    throw new Error("Count too high!");
+  }
+});
+
+// Later...
+state.count = 10; // Effect re-runs, throws error, calls onError
+state.count = 3; // Effect re-runs again, no error this time
+state.count = 8; // Effect re-runs, throws error again
+```
+
+This behavior ensures that effects can recover when state returns to a valid condition.
 
 ### Async Errors
 
