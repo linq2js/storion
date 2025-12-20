@@ -793,10 +793,12 @@ export namespace async {
       }
     }
 
-    throw new AsyncNotReadyError(
-      `Cannot wait: state is ${state.status}`,
-      state.status
-    );
+    const message =
+      state.status === "idle"
+        ? `Cannot wait: state is idle. Call dispatch() or use trigger() to start the async operation before calling async.wait().`
+        : `Cannot wait: state is ${state.status}`;
+
+    throw new AsyncNotReadyError(message, state.status);
   }
 
   /**
