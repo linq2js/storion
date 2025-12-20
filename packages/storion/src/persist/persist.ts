@@ -58,6 +58,18 @@ export interface PersistOptions {
     error: unknown,
     operation: "load" | "save"
   ) => void;
+
+  /**
+   * Force hydration to overwrite dirty (modified) state properties.
+   *
+   * By default (false), hydrate() skips properties that have been modified
+   * since initialization to avoid overwriting fresh data with stale persisted data.
+   *
+   * Set to true to always apply persisted data regardless of dirty state.
+   *
+   * @default false
+   */
+  force?: boolean;
 }
 
 /**
@@ -112,7 +124,7 @@ function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
  * ```
  */
 export function persistMiddleware(options: PersistOptions): Middleware {
-  const { filter, load, save, onError } = options;
+  const { filter, load, save, onError, force = false } = options;
 
   return (ctx) => {
     // Call next() to create the instance
@@ -136,7 +148,7 @@ export function persistMiddleware(options: PersistOptions): Middleware {
     ) => {
       if (state != null) {
         try {
-          instance.hydrate(state);
+          instance.hydrate(state, { force });
         } catch (error) {
           onError?.(spec, error, "load");
         }

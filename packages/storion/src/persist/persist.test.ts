@@ -461,4 +461,110 @@ describe("persistMiddleware", () => {
       expect(instance.state.count).toBe(1);
     });
   });
+
+  describe("force option", () => {
+    it("should not overwrite dirty properties by default (force: false)", async () => {
+      let resolveLoad: (value: Record<string, unknown>) => void;
+      const loadPromise = new Promise<Record<string, unknown>>((resolve) => {
+        resolveLoad = resolve;
+      });
+
+      const load = vi.fn().mockReturnValue(loadPromise);
+      const save = vi.fn();
+
+      const myStore = store({
+        name: "test",
+        state: { count: 0, name: "initial" },
+        setup: ({ state }) => ({
+          setCount: (n: number) => {
+            state.count = n;
+          },
+        }),
+      });
+
+      const app = container({
+        middleware: [persistMiddleware({ load, save })],
+      });
+
+      const instance = app.get(myStore);
+
+      // Modify count before load completes (makes it "dirty")
+      instance.actions.setCount(999);
+
+      // Resolve load with different values
+      resolveLoad!({ count: 100, name: "loaded" });
+      await vi.runAllTimersAsync();
+
+      // count was dirty, so it should NOT be overwritten
+      expect(instance.state.count).toBe(999);
+      // name was not dirty, so it SHOULD be updated
+      expect(instance.state.name).toBe("loaded");
+    });
+
+    it("should overwrite dirty properties when force: true", async () => {
+      let resolveLoad: (value: Record<string, unknown>) => void;
+      const loadPromise = new Promise<Record<string, unknown>>((resolve) => {
+        resolveLoad = resolve;
+      });
+
+      const load = vi.fn().mockReturnValue(loadPromise);
+      const save = vi.fn();
+
+      const myStore = store({
+        name: "test",
+        state: { count: 0, name: "initial" },
+        setup: ({ state }) => ({
+          setCount: (n: number) => {
+            state.count = n;
+          },
+        }),
+      });
+
+      const app = container({
+        middleware: [persistMiddleware({ load, save, force: true })],
+      });
+
+      const instance = app.get(myStore);
+
+      // Modify count before load completes (makes it "dirty")
+      instance.actions.setCount(999);
+
+      // Resolve load with different values
+      resolveLoad!({ count: 100, name: "loaded" });
+      await vi.runAllTimersAsync();
+
+      // With force: true, both should be overwritten
+      expect(instance.state.count).toBe(100);
+      expect(instance.state.name).toBe("loaded");
+    });
+
+    it("should work with sync load and force: true", () => {
+      const myStore = store({
+        name: "test",
+        state: { count: 0, name: "initial" },
+        setup: ({ state }) => ({
+          setCount: (n: number) => {
+            state.count = n;
+          },
+        }),
+      });
+
+      // Pre-create a container to simulate dirty state scenario
+      // In sync scenario, the state is hydrated immediately after store creation
+      // so dirty check doesn't apply (nothing modified yet)
+
+      const load = vi.fn().mockReturnValue({ count: 42, name: "loaded" });
+      const save = vi.fn();
+
+      const app = container({
+        middleware: [persistMiddleware({ load, save, force: true })],
+      });
+
+      const instance = app.get(myStore);
+
+      // Sync load applies immediately, so values should be from persisted state
+      expect(instance.state.count).toBe(42);
+      expect(instance.state.name).toBe("loaded");
+    });
+  });
 });
