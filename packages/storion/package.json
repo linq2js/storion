@@ -26,6 +26,10 @@
     "./async": {
       "types": "./dist/async/index.d.ts",
       "default": "./dist/async/index.js"
+    },
+    "./persist": {
+      "types": "./dist/persist/index.d.ts",
+      "default": "./dist/persist/index.js"
     }
   },
   "files": [

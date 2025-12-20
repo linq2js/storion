@@ -47,6 +47,10 @@ export default defineConfig({
         ),
       },
       {
+        find: "storion/persist",
+        replacement: path.resolve(__dirname, "../storion/src/persist/index.ts"),
+      },
+      {
         find: "storion/async",
         replacement: path.resolve(__dirname, "../storion/src/async/index.ts"),
       },

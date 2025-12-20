@@ -4,6 +4,7 @@ import { container } from "storion";
 import { StoreProvider } from "storion/react";
 import { devtoolsMiddleware } from "storion/devtools";
 import { mountDevtoolsPanel } from "storion/devtools-panel";
+import { persistMiddleware } from "storion/persist";
 import { App } from "./App";
 import "./index.css";
 
@@ -19,8 +20,29 @@ if (import.meta.env.DEV) {
   });
 }
 
-// Create container - automatically includes devtools in dev
-const app = container();
+// Create container with persist middleware
+const app = container({
+  middleware: [
+    persistMiddleware({
+      // Only persist counter store for demo
+      filter: (spec) => spec.displayName === "counter",
+      load: (spec) => {
+        const key = `storion:${spec.displayName}`;
+        const data = localStorage.getItem(key);
+        console.log(`[Persist] Loading ${spec.displayName}:`, data);
+        return data ? JSON.parse(data) : null;
+      },
+      save: (spec, state) => {
+        const key = `storion:${spec.displayName}`;
+        console.log(`[Persist] Saving ${spec.displayName}:`, state);
+        localStorage.setItem(key, JSON.stringify(state));
+      },
+      onError: (spec, error, operation) => {
+        console.error(`[Persist] ${operation} error for ${spec.displayName}:`, error);
+      },
+    }),
+  ],
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -27,6 +27,7 @@ export default defineConfig({
           "src/devtools-panel/index.ts"
         ),
         "async/index": resolve(__dirname, "src/async/index.ts"),
+        "persist/index": resolve(__dirname, "src/persist/index.ts"),
       },
       formats: ["es"],
     },
