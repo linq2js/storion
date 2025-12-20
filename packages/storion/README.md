@@ -756,11 +756,13 @@ function UserProfile() {
 ### Async State with Suspense
 
 ```tsx
+import { trigger } from "storion";
 import { async } from "storion/async";
+import { useStore } from "storion/react";
 import { Suspense } from "react";
 
 function UserProfile() {
-  const { user } = useStore(({ get, trigger }) => {
+  const { user } = useStore(({ get }) => {
     const [state, actions] = get(userStore);
 
     // Trigger fetch on mount
@@ -806,7 +808,13 @@ const dashboardStore = store({
   setup({ state, focus }) {
     // ... async actions for user and posts ...
 
-    // Derive summary from user + posts
+    // Option 1: Using async.all() - simpler for multiple sources
+    async.derive(focus("summary"), () => {
+      const [user, posts] = async.all(state.user, state.posts);
+      return { name: user.name, postCount: posts.length };
+    });
+
+    // Option 2: Using async.wait() - more control for conditional logic
     async.derive(focus("summary"), () => {
       const user = async.wait(state.user);
       const posts = async.wait(state.posts);
@@ -825,9 +833,16 @@ const dashboardStore = store({
 **What Storion does:**
 
 1. Runs the derive function and tracks dependencies
-2. If any `async.wait()` throws (pending/error), the derived state mirrors that status
+2. If any source is pending/error, the derived state mirrors that status
 3. If all sources are ready, computes and stores the result
 4. Re-runs automatically when source states change
+
+**When to use each approach:**
+
+| Approach       | Best for                                              |
+| -------------- | ----------------------------------------------------- |
+| `async.all()`  | Waiting for multiple sources at once (cleaner syntax) |
+| `async.wait()` | Conditional logic where you may not need all sources  |
 
 ---
 
@@ -837,16 +852,17 @@ const dashboardStore = store({
 
 ```tsx
 import { useStore } from "storion/react";
+import { trigger } from "storion";
 
 function Component() {
-  const { count, inc, user } = useStore(({ get, trigger, id }) => {
+  const { count, inc, user } = useStore(({ get, id }) => {
     const [counterState, counterActions] = get(counterStore);
     const [userState, userActions] = get(userStore);
 
-    // Trigger on mount (empty deps = once)
-    trigger(userActions.fetchProfile, []);
+    // Trigger immediately (empty deps = once)
+    trigger(userActions.fetchProfile, []); // OR trigger(userActions.fetchProfile);
 
-    // Trigger when id changes (every mount)
+    // Trigger on each component mount (id is unique per mount)
     trigger(userActions.refresh, [id]);
 
     return {
@@ -862,20 +878,91 @@ function Component() {
 
 **Selector context provides:**
 
-| Property                     | Description                                    |
-| ---------------------------- | ---------------------------------------------- |
-| `get(store)`                 | Get store instance, returns `[state, actions]` |
-| `get(service)`               | Get service instance (cached)                  |
-| `create(service, ...args)`   | Create fresh service instance with args        |
-| `trigger(fn, deps, ...args)` | Call function when deps change                 |
-| `id`                         | Unique ID per component mount                  |
-| `once(fn)`                   | Run function once on mount                     |
+| Property                   | Description                                    |
+| -------------------------- | ---------------------------------------------- |
+| `get(store)`               | Get store instance, returns `[state, actions]` |
+| `get(service)`             | Get service instance (cached)                  |
+| `create(service, ...args)` | Create fresh service instance with args        |
+| `id`                       | Unique ID per component mount                  |
+| `once(fn)`                 | Run function once on mount                     |
+
+**Global function `trigger()`** — Call a function when dependencies change (import from `"storion"`).
+
+### Stable Function Wrapping
+
+Functions returned from `useStore` are automatically wrapped with stable references. This means:
+
+- The function reference never changes between renders
+- The function always accesses the latest props and state
+- Safe to pass to child components without causing re-renders
+
+```tsx
+import { useStore } from "storion/react";
+
+function SearchForm({ userId }: { userId: string }) {
+  const [query, setQuery] = useState("");
+
+  const { search, results } = useStore(({ get }) => {
+    const [state, actions] = get(searchStore);
+
+    return {
+      results: state.results,
+      // This function is auto-wrapped with stable reference
+      search: () => {
+        // Always has access to current query and userId
+        actions.performSearch(query, userId);
+      },
+    };
+  });
+
+  return (
+    <div>
+      <input value={query} onChange={(e) => setQuery(e.target.value)} />
+      {/* search reference is stable - won't cause Button to re-render */}
+      <Button onClick={search}>Search</Button>
+      <Results items={results} />
+    </div>
+  );
+}
+
+// Button only re-renders when its own props change
+const Button = memo(({ onClick, children }) => (
+  <button onClick={onClick}>{children}</button>
+));
+```
+
+**Use case:** Creating callbacks that depend on component state/props but need stable references for `memo`, `useCallback` dependencies, or child component optimization.
+
+**What Storion does:**
+
+1. Detects functions in the selector's return value
+2. Wraps each function with a stable reference (created once)
+3. When the wrapped function is called, it executes the latest version from the selector
+4. Component state (`query`) and props (`userId`) are always current when the function runs
+
+**Why this matters:**
+
+```tsx
+// ❌ Without stable wrapping - new reference every render
+const search = () => actions.search(query); // Changes every render!
+
+// ❌ Manual useCallback - verbose and easy to forget deps
+const search = useCallback(() => actions.search(query), [query, actions]);
+
+// ✅ With useStore - stable reference, always current values
+const { search } = useStore(({ get }) => ({
+  search: () => actions.search(query), // Stable reference!
+}));
+```
 
 ### Trigger Patterns
 
 ```tsx
-function Dashboard() {
-  const { data } = useStore(({ get, trigger, id }) => {
+import { trigger } from "storion";
+import { useStore } from "storion/react";
+
+function Dashboard({ categoryId }: { categoryId: string }) {
+  const { data } = useStore(({ get, id }) => {
     const [state, actions] = get(dataStore);
 
     // Pattern 1: Fetch once ever (empty deps)
