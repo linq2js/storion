@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # Storion - AI Coding Rules
 
 This project uses **Storion**, a reactive state management library for React.
@@ -14,7 +18,15 @@ For detailed documentation, see `packages/storion/README.md` and `packages/stori
 **For React apps** - import everything from `storion/react` (it re-exports from `storion`):
 
 ```ts
-import { store, container, effect, pick, trigger, useStore, StoreProvider } from "storion/react";
+import {
+  store,
+  container,
+  effect,
+  pick,
+  trigger,
+  useStore,
+  StoreProvider,
+} from "storion/react";
 import { async } from "storion/async";
 ```
 
@@ -37,7 +49,9 @@ state.count = 10;
 state.profile.name = "John";
 
 // ✅ CORRECT - use update() for nested
-update((draft) => { draft.profile.name = "John"; });
+update((draft) => {
+  draft.profile.name = "John";
+});
 ```
 
 ### 2. get() is Setup-Time Only
@@ -63,11 +77,15 @@ setup({ get }) {
 
 ```ts
 // ❌ WRONG
-effect(async (ctx) => { await fetchData(); });
+effect(async (ctx) => {
+  await fetchData();
+});
 
 // ✅ CORRECT
 effect((ctx) => {
-  ctx.safe(fetchData()).then((data) => { state.data = data; });
+  ctx.safe(fetchData()).then((data) => {
+    state.data = data;
+  });
 });
 ```
 
@@ -85,12 +103,12 @@ trigger(() => actions.fetch(userId), [userId]);
 
 ### 5. async.wait() Behavior
 
-| Status    | Fresh Mode                     | Stale Mode            |
-| --------- | ------------------------------ | --------------------- |
-| `idle`    | ❌ Throws AsyncNotReadyError   | ✅ Returns stale data |
-| `pending` | ❌ Throws promise (Suspense)   | ✅ Returns stale data |
-| `success` | ✅ Returns data                | ✅ Returns data       |
-| `error`   | ❌ Throws error                | ✅ Returns stale data |
+| Status    | Fresh Mode                   | Stale Mode            |
+| --------- | ---------------------------- | --------------------- |
+| `idle`    | ❌ Throws AsyncNotReadyError | ✅ Returns stale data |
+| `pending` | ❌ Throws promise (Suspense) | ✅ Returns stale data |
+| `success` | ✅ Returns data              | ✅ Returns data       |
+| `error`   | ❌ Throws error              | ✅ Returns stale data |
 
 ### 6. Store Lifetime
 
@@ -113,7 +131,9 @@ const userStore = store({
   state: { name: "", age: 0 },
   setup({ state, update }) {
     return {
-      setName: (name: string) => { state.name = name; },
+      setName: (name: string) => {
+        state.name = name;
+      },
     };
   },
 });
@@ -137,7 +157,7 @@ function Component() {
 const userStore = store({
   name: "user",
   state: {
-    user: async.fresh<User>(),      // undefined during loading
+    user: async.fresh<User>(), // undefined during loading
     users: async.stale<User[]>([]), // keeps previous data
   },
   setup({ focus }) {
@@ -168,15 +188,14 @@ function UserProfile({ userId }: { userId: string }) {
 
 ## Common Errors
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `Cannot wait: state is idle` | async.wait() on fresh idle | Call trigger/dispatch first |
-| `Setup phase has ended` | get/mixin/focus in action | Move to setup phase |
-| `Effect must be synchronous` | async effect | Use ctx.safe() |
-| `lifetime mismatch` | keepAlive → autoDispose dep | Fix dependency direction |
+| Error                        | Cause                       | Solution                    |
+| ---------------------------- | --------------------------- | --------------------------- |
+| `Cannot wait: state is idle` | async.wait() on fresh idle  | Call trigger/dispatch first |
+| `Setup phase has ended`      | get/mixin/focus in action   | Move to setup phase         |
+| `Effect must be synchronous` | async effect                | Use ctx.safe()              |
+| `lifetime mismatch`          | keepAlive → autoDispose dep | Fix dependency direction    |
 
 ## Testing
 
 - Use `jest` with `it()` (not `test()`)
 - Write tests first, then code, then run and fix
-
