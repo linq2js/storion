@@ -17,6 +17,7 @@ import {
   type Focus,
   type FocusOptions,
   type Equality,
+  FocusContext,
 } from "../types";
 
 import { resolveEquality } from "./equality";
@@ -27,18 +28,6 @@ import { SetupPhaseError, LifetimeMismatchError } from "../errors";
 // =============================================================================
 // Types
 // =============================================================================
-
-/**
- * Internal focus context for creating focus instances.
- */
-export interface FocusContext<TState extends StateBase> {
-  /** Get current state */
-  getState: () => TState;
-  /** Update state with immer-style updater */
-  update: (updater: (draft: TState) => void) => void;
-  /** Subscribe to state changes */
-  subscribe: (listener: () => void) => VoidFunction;
-}
 
 /**
  * Options for creating store context.
@@ -90,16 +79,23 @@ function getAtPath<T>(obj: T, segments: string[]): unknown {
 /**
  * Create a focus for a nested state path.
  *
- * @param focusCtx - Focus context with state access
+ * @param context - Focus context with state access
  * @param path - Dot-notation path to focus on
  * @param options - Focus options (fallback, equality)
  */
-export function createFocus<TState extends StateBase, TValue>(
-  focusCtx: FocusContext<TState>,
-  path: string,
+export function createFocus<TValue>(
+  context: FocusContext,
+  segments: string[],
+  isSetupPhase: () => boolean,
   options?: FocusOptions<TValue>
 ): Focus<TValue> {
-  const segments = path.split(".");
+  if (!isSetupPhase()) {
+    throw new SetupPhaseError(
+      "createFocus",
+      "Focus can only be called during setup phase."
+    );
+  }
+
   const { fallback, equality: equalityOption } = options ?? {};
   const equalityFn = resolveEquality(equalityOption as Equality | undefined);
 
@@ -107,7 +103,7 @@ export function createFocus<TState extends StateBase, TValue>(
    * Get the value at the focused path, applying fallback if nullish.
    */
   const getter = (): TValue => {
-    const state = focusCtx.getState();
+    const state = context.get();
     const value = getAtPath(state, segments) as TValue;
 
     // Apply fallback if value is nullish and fallback is provided
@@ -129,7 +125,7 @@ export function createFocus<TState extends StateBase, TValue>(
   const setter = (
     valueOrReducerOrProduce: TValue | ((prev: TValue) => TValue | void)
   ): void => {
-    focusCtx.update((draft: TState) => {
+    context.update((draft: StateBase) => {
       // Navigate to parent, auto-creating objects along the way
       let current: unknown = draft;
       for (let i = 0; i < segments.length - 1; i++) {
@@ -181,7 +177,7 @@ export function createFocus<TState extends StateBase, TValue>(
     let prevValue = getter();
 
     // Subscribe to store changes
-    return focusCtx.subscribe(() => {
+    return context.subscribe(() => {
       const nextValue = getter();
 
       // Check if value changed using equality function
@@ -200,20 +196,23 @@ export function createFocus<TState extends StateBase, TValue>(
     relativePath: string,
     childOptions?: FocusOptions<TChild>
   ): Focus<TChild> => {
-    const combinedPath = `${path}.${relativePath}`;
-    return createFocus(focusCtx, combinedPath, childOptions);
+    return createFocus(
+      context,
+      [...segments, ...relativePath.split(".")],
+      isSetupPhase,
+      childOptions
+    );
   };
 
   // Create tuple with on() and to() methods
   const focus = [getter, setter] as Focus<TValue>;
-  const focusObj = focus as unknown as {
-    [STORION_TYPE]: "focus";
-    on: typeof on;
-    to: typeof to;
-  };
-  focusObj[STORION_TYPE] = "focus";
-  focusObj.on = on;
-  focusObj.to = to;
+  Object.assign(focus, {
+    [STORION_TYPE]: "focus",
+    on,
+    to,
+    context,
+    segments,
+  });
 
   return focus;
 }
@@ -406,23 +405,16 @@ export function createStoreContext<
     },
 
     focus(path: string, options?: FocusOptions<any>): any {
-      if (!isSetupPhase()) {
-        throw new SetupPhaseError(
-          "focus",
-          "Use the .to() method on an existing focus for dynamic sub-paths."
-        );
-      }
-
       // Create focus context
-      const focusCtx: FocusContext<TState> = {
-        getState: getMutableState,
+      const focusCtx: FocusContext = {
+        get: getMutableState,
         update: (updater) => {
           ctx.update(updater);
         },
         subscribe,
       };
 
-      return createFocus(focusCtx, path, options);
+      return createFocus(focusCtx, path.split("."), isSetupPhase, options);
     },
   };
 

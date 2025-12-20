@@ -156,6 +156,18 @@ export interface FocusOptions<T> {
 }
 
 /**
+ * Internal focus context for creating focus instances.
+ */
+export interface FocusContext {
+  /** Get current state */
+  get: () => StateBase;
+  /** Update state with immer-style updater */
+  update: (updater: (draft: StateBase) => void) => void;
+  /** Subscribe to state changes */
+  subscribe: (listener: VoidFunction) => VoidFunction;
+}
+
+/**
  * Focus tuple: [getter, setter] with an on() method for subscribing to changes.
  *
  * @example
@@ -191,6 +203,11 @@ export type Focus<TValue> = [
     valueOrReducerOrProduce: TValue | ((prev: TValue) => TValue | void)
   ) => void
 ] & {
+  /** The context of the focus */
+  readonly context: FocusContext;
+  /** The segments of the focused path */
+  readonly segments: string[];
+  /** The type of the focus */
   readonly [STORION_TYPE]: "focus";
   /**
    * Subscribe to changes at the focused path.

@@ -243,8 +243,9 @@ describe("focus()", () => {
           return {
             get,
             set,
-            subscribe: (listener: (event: { next: number; prev: number }) => void) =>
-              focus.on(listener),
+            subscribe: (
+              listener: (event: { next: number; prev: number }) => void
+            ) => focus.on(listener),
           };
         },
       });
@@ -265,8 +266,9 @@ describe("focus()", () => {
             setValue: (v: number) => {
               ctx.state.value = v;
             },
-            subscribe: (listener: (event: { next: number; prev: number }) => void) =>
-              focus.on(listener),
+            subscribe: (
+              listener: (event: { next: number; prev: number }) => void
+            ) => focus.on(listener),
           };
         },
       });
@@ -292,8 +294,9 @@ describe("focus()", () => {
             setValue: (v: number) => {
               ctx.state.value = v;
             },
-            subscribe: (listener: (event: { next: number; prev: number }) => void) =>
-              focus.on(listener),
+            subscribe: (
+              listener: (event: { next: number; prev: number }) => void
+            ) => focus.on(listener),
           };
         },
       });
@@ -318,8 +321,9 @@ describe("focus()", () => {
             setValue: (v: number) => {
               ctx.state.value = v;
             },
-            subscribe: (listener: (event: { next: number; prev: number }) => void) =>
-              focus.on(listener),
+            subscribe: (
+              listener: (event: { next: number; prev: number }) => void
+            ) => focus.on(listener),
           };
         },
       });
@@ -353,8 +357,9 @@ describe("focus()", () => {
                 address: { ...ctx.state.profile.address, city },
               };
             },
-            subscribe: (listener: (event: { next: string; prev: string }) => void) =>
-              focus.on(listener),
+            subscribe: (
+              listener: (event: { next: string; prev: string }) => void
+            ) => focus.on(listener),
           };
         },
       });
@@ -386,8 +391,9 @@ describe("focus()", () => {
             setItems: (items: number[]) => {
               ctx.state.items = items;
             },
-            subscribe: (listener: (event: { next: number[]; prev: number[] }) => void) =>
-              focus.on(listener),
+            subscribe: (
+              listener: (event: { next: number[]; prev: number[] }) => void
+            ) => focus.on(listener),
           };
         },
       });
@@ -419,7 +425,10 @@ describe("focus()", () => {
               ctx.state.obj = obj;
             },
             subscribe: (
-              listener: (event: { next: { a: number; b: number }; prev: { a: number; b: number } }) => void
+              listener: (event: {
+                next: { a: number; b: number };
+                prev: { a: number; b: number };
+              }) => void
             ) => focus.on(listener),
           };
         },
@@ -530,12 +539,12 @@ describe("focus()", () => {
 
       // Calling focus inside an action should throw
       expect(() => instance.actions.createFocusOutsideSetup()).toThrow(
-        /focus\(\) can only be called during setup phase/
+        /createFocus\(\) can only be called during setup phase/
       );
 
       // Using captured context outside setup should also throw
       expect(() => capturedCtx.focus("value")).toThrow(
-        /focus\(\) can only be called during setup phase/
+        /createFocus\(\) can only be called during setup phase/
       );
     });
   });
