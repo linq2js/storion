@@ -1453,6 +1453,126 @@ const myStore = store({
 | Arguments | None            | Supports extra args  |
 | Use case  | Shared services | Configured instances |
 
+### Mixins (Reusable Logic)
+
+Mixins let you compose reusable logic across stores and selectors.
+
+**Store Mixin — reusable actions:**
+
+```ts
+import { store, type StoreContext } from "storion";
+
+// Define a reusable mixin
+const counterMixin = (ctx: StoreContext<{ count: number }>) => ({
+  increment: () => ctx.state.count++,
+  decrement: () => ctx.state.count--,
+  reset: () => ctx.reset(),
+});
+
+// Use in multiple stores
+const store1 = store({
+  name: "counter1",
+  state: { count: 0, label: "Counter 1" },
+  setup: (ctx) => ({
+    ...ctx.mixin(counterMixin),
+    setLabel: (label: string) => (ctx.state.label = label),
+  }),
+});
+
+const store2 = store({
+  name: "counter2",
+  state: { count: 100 },
+  setup: (ctx) => ctx.mixin(counterMixin),
+});
+```
+
+**Selector Mixin — reusable selector logic:**
+
+```tsx
+import { useStore, type SelectorContext } from "storion/react";
+
+// Define a reusable selector mixin
+const sumMixin = (
+  ctx: SelectorContext,
+  stores: StoreSpec<{ value: number }>[]
+) => {
+  return stores.reduce((sum, spec) => {
+    const [state] = ctx.get(spec);
+    return sum + state.value;
+  }, 0);
+};
+
+function Dashboard() {
+  const { total } = useStore((ctx) => ({
+    total: ctx.mixin(sumMixin, [store1, store2, store3]),
+  }));
+
+  return <div>Total: {total}</div>;
+}
+```
+
+**Important: Mixins are NOT singletons**
+
+Each call to `mixin()` creates a fresh instance. If you need singleton behavior **within the same store/selector scope**, wrap with memoize:
+
+```ts
+import memoize from "lodash/memoize";
+import { store, type StoreContext } from "storion";
+
+// Shared mixin - memoized to be singleton within same store setup
+const sharedLogicMixin = memoize((ctx: StoreContext<any>) => {
+  console.log("sharedLogicMixin created"); // Only logs once per store!
+  return {
+    doSomething: () => console.log("shared logic"),
+  };
+});
+
+// Feature A mixin - uses sharedLogicMixin
+const featureAMixin = (ctx: StoreContext<any>) => {
+  const shared = ctx.mixin(sharedLogicMixin); // Gets cached instance
+  return {
+    featureA: () => shared.doSomething(),
+  };
+};
+
+// Feature B mixin - also uses sharedLogicMixin
+const featureBMixin = (ctx: StoreContext<any>) => {
+  const shared = ctx.mixin(sharedLogicMixin); // Gets SAME cached instance
+  return {
+    featureB: () => shared.doSomething(),
+  };
+};
+
+// Main store - composes both features
+const myStore = store({
+  name: "myStore",
+  state: { value: 0 },
+  setup: (ctx) => {
+    const featureA = ctx.mixin(featureAMixin);
+    const featureB = ctx.mixin(featureBMixin);
+
+    // Both features share the same sharedLogicMixin instance!
+    // featureA.featureA and featureB.featureB call the same shared.doSomething
+
+    return { ...featureA, ...featureB };
+  },
+});
+```
+
+**What happens:**
+
+1. `featureAMixin` calls `mixin(sharedLogicMixin)` → creates instance, memoize caches it
+2. `featureBMixin` calls `mixin(sharedLogicMixin)` → returns cached instance
+3. Both features share the same `sharedLogicMixin` instance within this store
+
+**When to use mixin vs service:**
+
+| Pattern              | Caching                   | Access to context      | Use case                            |
+| -------------------- | ------------------------- | ---------------------- | ----------------------------------- |
+| `get(service)`       | ✅ Global singleton       | ❌ No StoreContext     | Shared utilities, API clients       |
+| `mixin(fn)`          | ❌ Fresh each call        | ✅ Full context access | Reusable actions, computed values   |
+| `mixin(memoize(fn))` | ✅ Singleton (same scope) | ✅ Full context access | Shared logic across multiple mixins |
+
 ### Equality Strategies
 
 Storion supports equality checks at **two levels**, giving you fine-grained control over when updates happen.
