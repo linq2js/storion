@@ -218,7 +218,8 @@ export type WithStoreRenderWithRef<TOutput extends object, TRef = unknown> = (
  */
 export interface WithStoreTestUtils<
   TInput extends object,
-  TOutput extends object
+  TOutput extends object,
+  TContext = SelectorContext
 > {
   /**
    * The hook function for testing.
@@ -230,7 +231,7 @@ export interface WithStoreTestUtils<
    * expect(result.name).toBe('John');
    * ```
    */
-  use: WithStoreHook<TInput, TOutput>;
+  use: (context: TContext, props: TInput) => TOutput;
 
   /**
    * The render function for testing.
@@ -251,7 +252,8 @@ export interface WithStoreTestUtils<
  */
 export interface WithStoreHOCTestUtils<
   TInput extends object,
-  TOutput extends object
+  TOutput extends object,
+  TContext = SelectorContext
 > {
   /**
    * The hook function for testing.
@@ -263,7 +265,7 @@ export interface WithStoreHOCTestUtils<
    * expect(result.name).toBe('John');
    * ```
    */
-  use: WithStoreHook<TInput, TOutput>;
+  use: (context: TContext, props: TInput) => TOutput;
 }
 
 // =============================================================================
@@ -275,8 +277,9 @@ export interface WithStoreHOCTestUtils<
  */
 export type WithStoreComponent<
   TInput extends object,
-  TOutput extends object
-> = FC<TInput> & WithStoreTestUtils<TInput, TOutput>;
+  TOutput extends object,
+  TContext = SelectorContext
+> = FC<TInput> & WithStoreTestUtils<TInput, TOutput, TContext>;
 
 /**
  * Component type with testing utilities (with ref)
@@ -284,22 +287,265 @@ export type WithStoreComponent<
 export type WithStoreComponentWithRef<
   TInput extends object,
   TOutput extends object,
-  TRef = unknown
+  TRef = unknown,
+  TContext = SelectorContext
 > = ForwardRefExoticComponent<TInput & RefAttributes<TRef>> &
-  WithStoreTestUtils<TInput, TOutput>;
+  WithStoreTestUtils<TInput, TOutput, TContext>;
 
 /**
  * HOC type with testing utilities
  */
-export type WithStoreHOC<TInput extends object, TOutput extends object> = {
+export type WithStoreHOC<
+  TInput extends object,
+  TOutput extends object,
+  TContext = SelectorContext
+> = {
   (component: FC<TOutput>): FC<TInput>;
   <TRef = unknown>(
     component: ForwardRefRenderFunction<TRef, TOutput>
   ): ForwardRefExoticComponent<TInput & RefAttributes<TRef>>;
-} & WithStoreHOCTestUtils<TInput, TOutput>;
+} & WithStoreHOCTestUtils<TInput, TOutput, TContext>;
 
 // =============================================================================
-// Overloads
+// Generic WithStore type for createWithStore
+// =============================================================================
+
+/**
+ * Generic hook type for createWithStore
+ */
+export type GenericWithStoreHook<
+  TContext,
+  TInput extends object,
+  TOutput extends object
+> = (context: TContext, props: TInput) => TOutput;
+
+/**
+ * WithStore function type bound to a specific context type.
+ */
+export interface BoundWithStore<TContext> {
+  /**
+   * Direct mode: Create component with hook and render function (no ref).
+   */
+  <TInput extends object, TOutput extends object>(
+    hook: GenericWithStoreHook<TContext, TInput, TOutput>,
+    render: WithStoreRender<TOutput>,
+    options?: WithStoreOptions<TOutput>
+  ): WithStoreComponent<TInput, TOutput, TContext>;
+
+  /**
+   * Direct mode: Create component with hook and render function (with ref).
+   */
+  <TInput extends object, TOutput extends object, TRef = unknown>(
+    hook: GenericWithStoreHook<TContext, TInput, TOutput>,
+    render: WithStoreRenderWithRef<TOutput, TRef>,
+    options?: WithStoreOptions<TOutput>
+  ): WithStoreComponentWithRef<TInput, TOutput, TRef, TContext>;
+
+  /**
+   * HOC mode: Create HOC that transforms props using hook.
+   */
+  <TInput extends object, TOutput extends object>(
+    hook: GenericWithStoreHook<TContext, TInput, TOutput>,
+    options?: WithStoreOptions<TOutput>
+  ): WithStoreHOC<TInput, TOutput, TContext>;
+}
+
+// =============================================================================
+// createWithStore - Core factory
+// =============================================================================
+
+/**
+ * A reactive hook that accepts a selector and returns the selected value.
+ * Similar to useStore's signature.
+ */
+export type UseContextHook<TContext> = <T extends object>(
+  selector: (ctx: TContext) => T
+) => T;
+
+/**
+ * Create a withStore function bound to a custom reactive hook.
+ *
+ * This is the core building block for creating withStore-like patterns with custom contexts.
+ * Useful for single-store apps or custom store patterns.
+ *
+ * @example
+ * ```tsx
+ * // For single-store apps with create()
+ * const [counter, useCounter] = create({
+ *   state: { count: 0 },
+ *   setup({ state }) {
+ *     return { increment: () => state.count++ };
+ *   }
+ * });
+ *
+ * // Create withStore bound to this store's hook
+ * const withCounter = createWithStore(useCounter);
+ *
+ * // Direct mode - hook receives (state, actions) instead of SelectorContext
+ * const Display = withCounter(
+ *   (state, actions, props: { multiplier: number }) => ({
+ *     count: state.count * props.multiplier,
+ *     increment: actions.increment,
+ *   }),
+ *   ({ count, increment }) => <button onClick={increment}>{count}</button>
+ * );
+ *
+ * // HOC mode
+ * const withData = withCounter((state) => ({
+ *   value: state.count,
+ * }));
+ * const ValueDisplay = withData(({ value }) => <div>{value}</div>);
+ * ```
+ *
+ * @param useContextHook - A reactive hook that accepts a selector (like useStore or useCreatedStore)
+ * @returns A withStore function bound to the custom context
+ */
+export function createWithStore<TContext>(
+  useContextHook: UseContextHook<TContext>
+): BoundWithStore<TContext> {
+  return function boundWithStore<TInput extends object, TOutput extends object>(
+    hook: GenericWithStoreHook<TContext, TInput, TOutput>,
+    renderOrOptions?:
+      | ((props: TOutput, ref?: any) => ReactNode)
+      | WithStoreOptions<TOutput>,
+    maybeOptions?: WithStoreOptions<TOutput>
+  ): any {
+    const render =
+      typeof renderOrOptions === "function" ? renderOrOptions : undefined;
+    const options = render
+      ? maybeOptions
+      : (renderOrOptions as WithStoreOptions<TOutput> | undefined);
+
+    const equalityFn = options?.equality
+      ? resolveEquality(options.equality)
+      : undefined;
+    const customDisplayName = options?.displayName;
+
+    // Direct mode: hook + render provided
+    if (render) {
+      // Auto-detect ref support based on function arity
+      if (render.length >= 2) {
+        // Render function expects ref (2nd parameter)
+        const WrappedComponent = forwardRef(((props: TInput, ref: any) => {
+          // Run hook INSIDE the reactive context for proper tracking
+          const output = useContextHook((ctx) => hook(ctx, props));
+          return render(output, ref);
+        }) as any);
+
+        const MemoizedComponent = equalityFn
+          ? (memo(WrappedComponent as any, (prev: any, next: any) =>
+              equalityFn(prev, next)
+            ) as any)
+          : (memo(WrappedComponent as any) as any);
+
+        if (customDisplayName) {
+          MemoizedComponent.displayName = customDisplayName;
+        }
+
+        MemoizedComponent.use = hook;
+        MemoizedComponent.render = (props: TOutput) =>
+          render(props, null as any);
+
+        return MemoizedComponent;
+      }
+
+      // Normal component (no ref)
+      const MemoizedRender = equalityFn
+        ? (memo(render as WithStoreRender<TOutput>, (prev: any, next: any) =>
+            equalityFn(prev, next)
+          ) as any)
+        : (memo(render as WithStoreRender<TOutput>) as any);
+
+      const WrappedComponent: FC<TInput> = (props: TInput) => {
+        // Run hook INSIDE the reactive context for proper tracking
+        const output = useContextHook((ctx) => hook(ctx, props));
+        return <MemoizedRender {...output} />;
+      };
+
+      if (customDisplayName) {
+        WrappedComponent.displayName = customDisplayName;
+      }
+
+      (WrappedComponent as any).use = hook;
+      (WrappedComponent as any).render = render as (
+        props: TOutput
+      ) => ReactNode;
+
+      return WrappedComponent;
+    }
+
+    // HOC mode: only hook provided
+    const hoc = ((Component: any) => {
+      const isForwardRef =
+        Component.$$typeof === Symbol.for("react.forward_ref");
+      const componentDisplayName = Component.displayName || Component.name;
+      const finalDisplayName =
+        customDisplayName ||
+        (componentDisplayName
+          ? `withStore(${componentDisplayName})`
+          : undefined);
+
+      if (isForwardRef || Component.length >= 2) {
+        // Component expects ref
+        const WrappedComponent = forwardRef(((props: TInput, ref: any) => {
+          // Run hook INSIDE the reactive context for proper tracking
+          const output = useContextHook((ctx) => hook(ctx, props));
+          return isForwardRef ? (
+            <Component {...output} ref={ref} />
+          ) : (
+            Component(output, ref)
+          );
+        }) as any);
+
+        const MemoizedComponent = equalityFn
+          ? (memo(WrappedComponent as any, (prev: any, next: any) =>
+              equalityFn(prev, next)
+            ) as any)
+          : (memo(WrappedComponent as any) as any);
+
+        if (finalDisplayName) {
+          MemoizedComponent.displayName = finalDisplayName;
+        }
+
+        return MemoizedComponent;
+      }
+
+      // Normal component (no ref)
+      const MemoizedComponent = equalityFn
+        ? (memo(Component as FC<TOutput>, (prev: any, next: any) =>
+            equalityFn(prev, next)
+          ) as any)
+        : (memo(Component as FC<TOutput>) as any);
+
+      const WrappedComponent = (props: TInput) => {
+        // Run hook INSIDE the reactive context for proper tracking
+        const output = useContextHook((ctx) => hook(ctx, props));
+        return <MemoizedComponent {...output} />;
+      };
+
+      if (finalDisplayName) {
+        WrappedComponent.displayName = finalDisplayName;
+      }
+
+      return WrappedComponent;
+    }) as WithStoreHOC<TInput, TOutput, TContext>;
+
+    hoc.use = hook;
+
+    return hoc;
+  };
+}
+
+// =============================================================================
+// withStore - Built on createWithStore
+// =============================================================================
+
+// Create the standard withStore bound to SelectorContext via useStore
+// useStore already has the signature: <T>(selector: (ctx: SelectorContext) => T) => T
+const boundWithStore = createWithStore<SelectorContext>(useStore);
+
+// =============================================================================
+// Overloads for withStore (keep existing signatures for backwards compatibility)
 // =============================================================================
 
 /**
@@ -337,7 +583,7 @@ export function withStore<TInput extends object, TOutput extends object>(
 ): WithStoreHOC<TInput, TOutput>;
 
 // =============================================================================
-// Implementation
+// Implementation - delegate to boundWithStore
 // =============================================================================
 
 export function withStore<TInput extends object, TOutput extends object>(
@@ -347,130 +593,5 @@ export function withStore<TInput extends object, TOutput extends object>(
     | WithStoreOptions<TOutput>,
   maybeOptions?: WithStoreOptions<TOutput>
 ): any {
-  // Determine if it's direct mode (render function) or HOC mode (options or nothing)
-  const render =
-    typeof renderOrOptions === "function" ? renderOrOptions : undefined;
-  const options = render
-    ? maybeOptions
-    : (renderOrOptions as WithStoreOptions<TOutput> | undefined);
-
-  const equalityFn = options?.equality
-    ? resolveEquality(options.equality)
-    : undefined;
-  const customDisplayName = options?.displayName;
-
-  // Direct mode: hook + render provided
-  if (render) {
-    // Auto-detect ref support based on function arity
-    if (render.length >= 2) {
-      // Render function expects ref (2nd parameter)
-      // Create a single forwardRef component that handles both hook and render
-      const WrappedComponent = forwardRef(((props: TInput, ref: any) => {
-        const output = useStore((ctx) => hook(ctx, props)) as any;
-        // Call render directly with output and ref
-        return render(output, ref);
-      }) as any);
-
-      // Wrap with memo for performance (comparing hook output)
-      const MemoizedComponent = equalityFn
-        ? (memo(WrappedComponent as any, (prev: any, next: any) =>
-            equalityFn(prev, next)
-          ) as any)
-        : (memo(WrappedComponent as any) as any);
-
-      if (customDisplayName) {
-        MemoizedComponent.displayName = customDisplayName;
-      }
-
-      // Attach testing utilities
-      MemoizedComponent.use = hook;
-      MemoizedComponent.render = (props: TOutput) => render(props, null as any);
-
-      return MemoizedComponent;
-    }
-
-    // Normal component (no ref)
-    const MemoizedRender = equalityFn
-      ? (memo(render as WithStoreRender<TOutput>, (prev: any, next: any) =>
-          equalityFn(prev, next)
-        ) as any)
-      : (memo(render as WithStoreRender<TOutput>) as any);
-
-    const WrappedComponent: FC<TInput> & WithStoreTestUtils<TInput, TOutput> = (
-      props: TInput
-    ) => {
-      const output = useStore((ctx) => hook(ctx, props)) as any;
-      return <MemoizedRender {...output} />;
-    };
-
-    if (customDisplayName) {
-      WrappedComponent.displayName = customDisplayName;
-    }
-
-    // Attach testing utilities
-    WrappedComponent.use = hook;
-    WrappedComponent.render = render as (props: TOutput) => ReactNode;
-
-    return WrappedComponent;
-  }
-
-  // HOC mode: only hook provided, return function that accepts component
-  const hoc = ((Component: any) => {
-    // Auto-detect if Component is a forwardRef component
-    // Check if it's already a forwardRef (has $$typeof)
-    const isForwardRef = Component.$$typeof === Symbol.for("react.forward_ref");
-    const componentDisplayName = Component.displayName || Component.name;
-    const finalDisplayName =
-      customDisplayName ||
-      (componentDisplayName ? `withStore(${componentDisplayName})` : undefined);
-
-    if (isForwardRef || Component.length >= 2) {
-      // Component expects ref - create single forwardRef wrapper
-      const WrappedComponent = forwardRef(((props: TInput, ref: any) => {
-        const output = useStore((ctx) => hook(ctx, props)) as any;
-        // Call Component directly with output and ref
-        return isForwardRef ? (
-          <Component {...output} ref={ref} />
-        ) : (
-          Component(output, ref)
-        );
-      }) as any);
-
-      // Wrap with memo for performance
-      const MemoizedComponent = equalityFn
-        ? (memo(WrappedComponent as any, (prev: any, next: any) =>
-            equalityFn(prev, next)
-          ) as any)
-        : (memo(WrappedComponent as any) as any);
-
-      if (finalDisplayName) {
-        MemoizedComponent.displayName = finalDisplayName;
-      }
-
-      return MemoizedComponent;
-    }
-
-    // Normal component (no ref)
-    const MemoizedComponent = equalityFn
-      ? (memo(Component as FC<TOutput>, (prev: any, next: any) =>
-          equalityFn(prev, next)
-        ) as any)
-      : (memo(Component as FC<TOutput>) as any);
-
-    const WrappedComponent = (props: TInput) => {
-      const output = useStore((ctx) => hook(ctx, props)) as any;
-      return <MemoizedComponent {...output} />;
-    };
-
-    if (finalDisplayName) {
-      WrappedComponent.displayName = finalDisplayName;
-    }
-
-    return WrappedComponent;
-  }) as WithStoreHOC<TInput, TOutput>;
-
-  // Attach testing utilities to HOC
-  hoc.use = hook;
-
-  return hoc;
+  return (boundWithStore as any)(hook, renderOrOptions, maybeOptions);
 }

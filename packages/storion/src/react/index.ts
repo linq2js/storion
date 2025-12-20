@@ -12,10 +12,14 @@ export { useStore } from "./useStore";
 export { type LocalStoreResult } from "./useLocalStore";
 export {
   withStore,
+  createWithStore,
   type WithStoreHook,
   type WithStoreRender,
   type WithStoreRenderWithRef,
   type WithStoreOptions,
+  type BoundWithStore,
+  type GenericWithStoreHook,
+  type UseContextHook,
 } from "./withStore";
 
 // Shorthand
@@ -24,6 +28,8 @@ export {
   type CreateSelector,
   type UseCreatedStore,
   type CreateResult,
+  type CreatedStoreContext,
+  type WithCreatedStore,
 } from "./create";
 
 // Re-export core functions for convenience
