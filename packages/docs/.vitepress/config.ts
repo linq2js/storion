@@ -8,7 +8,6 @@ export default defineConfig({
   
   ignoreDeadLinks: [
     // Ignore these until pages are created
-    /\/examples\/(todo|async-data|form)/,
     /\/guide\/(actions|dependency-injection|middleware|devtools|meta)/,
     /\/guide\/react\/(use-local-store|with-store|provider)/,
   ],
