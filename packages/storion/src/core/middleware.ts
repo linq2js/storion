@@ -9,6 +9,7 @@ import type {
   Middleware,
   MiddlewareContext,
   StoreMiddleware,
+  StoreMiddlewareContext,
 } from "../types";
 
 /** Pattern type for matching displayName */
@@ -106,6 +107,9 @@ function compose(...middlewares: Middleware[]): Middleware {
   };
 }
 
+/** Mapping of patterns to middleware */
+export type MiddlewareMap = Record<string, StoreMiddleware | StoreMiddleware[]>;
+
 /**
  * Conditionally apply middleware based on a predicate or pattern(s).
  *
@@ -116,6 +120,9 @@ function compose(...middlewares: Middleware[]): Middleware {
  * @overload Apply middleware for matching pattern(s)
  * @param patterns - Pattern or array of patterns to match displayName
  * @param middleware - Middleware or array of middleware to apply
+ *
+ * @overload Apply different middleware for different patterns (object form)
+ * @param middlewareMap - Object mapping patterns to middleware
  *
  * Pattern types:
  * - `"userStore"` - exact match
@@ -148,6 +155,13 @@ function compose(...middlewares: Middleware[]): Middleware {
  *
  * // Multiple middleware
  * applyFor("counterStore", [loggingMiddleware, devtoolsMiddleware]);
+ *
+ * // Object form - map patterns to middleware
+ * applyFor({
+ *   "userStore": loggingMiddleware,
+ *   "auth*": [authMiddleware, securityMiddleware],
+ *   "*Cache": cacheMiddleware,
+ * });
  * ```
  */
 export function applyFor(
@@ -158,23 +172,52 @@ export function applyFor(
   patterns: SpecPattern | SpecPattern[],
   middleware: StoreMiddleware | StoreMiddleware[]
 ): Middleware;
+export function applyFor(middlewareMap: MiddlewareMap): Middleware;
 export function applyFor(
-  predicateOrPatterns:
+  predicateOrPatternsOrMap:
     | ((ctx: MiddlewareContext) => boolean)
     | SpecPattern
-    | SpecPattern[],
-  middleware: AnyFunc | AnyFunc[]
+    | SpecPattern[]
+    | MiddlewareMap,
+  middleware?: AnyFunc | AnyFunc[]
 ): Middleware {
+  // Object form: { pattern: middleware }
+  if (
+    typeof predicateOrPatternsOrMap === "object" &&
+    !Array.isArray(predicateOrPatternsOrMap) &&
+    !(predicateOrPatternsOrMap instanceof RegExp)
+  ) {
+    const entries = Object.entries(predicateOrPatternsOrMap);
+
+    // Build predicate-middleware pairs
+    const pairs = entries.map(([pattern, mw]) => ({
+      predicate: patternsToPredicate(pattern),
+      middleware: Array.isArray(mw) ? compose(...(mw as Middleware[])) : mw,
+    }));
+
+    return (ctx: MiddlewareContext): unknown => {
+      // Find first matching pattern
+      for (const { predicate, middleware } of pairs) {
+        if (predicate(ctx)) {
+          return middleware(ctx as StoreMiddlewareContext);
+        }
+      }
+      // No match, pass through
+      return ctx.next();
+    };
+  }
+
+  // Original two-argument forms
   // Normalize predicate
   const predicate: (ctx: MiddlewareContext) => boolean =
-    typeof predicateOrPatterns === "function"
-      ? predicateOrPatterns
-      : patternsToPredicate(predicateOrPatterns);
+    typeof predicateOrPatternsOrMap === "function"
+      ? predicateOrPatternsOrMap
+      : patternsToPredicate(predicateOrPatternsOrMap);
 
   // Normalize middleware to single function
   const composedMiddleware = Array.isArray(middleware)
     ? compose(...middleware)
-    : middleware;
+    : middleware!;
 
   // Return conditional middleware
   return (ctx: MiddlewareContext): unknown => {

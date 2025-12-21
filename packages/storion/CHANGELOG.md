@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     save: (ctx, state) => sessionStorage.setItem(ctx.displayName, JSON.stringify(state)),
   })
   ```
+- `applyFor` now supports object form to map patterns to different middleware
+  ```ts
+  applyFor({
+    "userStore": loggingMiddleware,
+    "auth*": [authMiddleware, securityMiddleware],
+    "*Cache": cacheMiddleware,
+  })
+  ```
 
 ---
 

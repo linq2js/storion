@@ -91,6 +91,7 @@ export {
   applyExcept,
   forStores,
   type SpecPattern,
+  type MiddlewareMap,
 } from "./core/middleware";
 
 // Equality utilities
