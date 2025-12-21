@@ -123,30 +123,41 @@ const longLived = store({
 
 ### 7. Meta: Store-Level vs Field-Level
 
-Use `meta()` to create a meta type, then:
-- `myMeta()` for store-level meta
-- `myMeta.for("field")` for single field
+**Meta overloads:**
+- `meta()` → `myMeta()` returns `boolean` (true)
+- `meta<TValue>()` → `myMeta(value: TValue)` returns `TValue`
+- `meta(builder)` → custom transformation
+
+**Usage:**
+- `myMeta()` or `myMeta(value)` for store-level meta
+- `myMeta.for("field")` or `myMeta.for("field", value)` for single field
 - `myMeta.for(["f1", "f2"])` for multiple fields
 
 ```ts
 import { meta } from "storion";
 
-// Create meta type
+// Boolean flag meta - myMeta() returns true
 const persist = meta();
+
+// Typed value meta - myMeta(value) returns the value
+const priority = meta<number>();
+
+// Custom builder meta
 const validate = meta((rule: string) => rule);
 
 const userStore = store({
   name: "user",
   state: { name: "", password: "", token: "" },
   meta: [
-    persist(),                                  // ✅ store-level
-    persist.for("name"),                        // ✅ single field
-    persist.for(["password", "token"]),         // ✅ multiple fields
+    persist(),                                    // ✅ store-level (value: true)
+    priority(1),                                  // ✅ store-level (value: 1)
+    persist.for("name"),                          // ✅ single field (value: true)
+    persist.for(["password", "token"]),           // ✅ multiple fields (value: true)
     validate.for(["email", "phone"], "required"), // ✅ multiple fields with value
   ],
 });
 
-// ❌ WRONG - don't pass field name as argument
+// ❌ WRONG - don't pass field name as argument to flag meta
 meta: [persist("password")]  // This passes "password" as VALUE, not field!
 ```
 

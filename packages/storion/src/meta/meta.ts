@@ -1,16 +1,38 @@
-import type { MetaType, MetaEntry } from "../types";
+import type { MetaType, MetaEntry, AnyFunc } from "../types";
 
 /**
  * Create a metadata builder for decorating stores with custom metadata.
  *
  * Meta allows libraries and users to attach arbitrary typed metadata to:
- * - Store level: `myMeta(value)` - applies to the entire store
- * - Field level: `myMeta.for("fieldName", value)` - applies to specific state field
+ * - Store level: `myMeta()` or `myMeta(value)` - applies to the entire store
+ * - Field level: `myMeta.for("fieldName")` or `myMeta.for("fieldName", value)` - applies to specific field
  *
- * Retrieve meta via `ctx.meta(type)` which returns first value (default),
- * or use `ctx.meta.all(type)` for all values.
+ * ## Overloads
  *
- * @example Store-level meta (boolean flag)
+ * ### 1. `meta()` - Boolean flag meta
+ * Creates a meta type where calling `myMeta()` returns `MetaEntry<any, true>`
+ * ```ts
+ * const persist = meta();
+ * persist()              // MetaEntry with value: true
+ * persist.for("field")   // MetaEntry with value: true for field
+ * ```
+ *
+ * ### 2. `meta<TValue>()` - Typed value meta (requires value argument)
+ * Creates a meta type where calling `myMeta(value)` returns `MetaEntry<any, TValue>`
+ * ```ts
+ * const priority = meta<number>();
+ * priority(1)              // MetaEntry with value: 1
+ * priority.for("field", 5) // MetaEntry with value: 5 for field
+ * ```
+ *
+ * ### 3. `meta(builder)` - Custom builder meta
+ * Creates a meta type with custom value transformation
+ * ```ts
+ * const config = meta((name: string, value: number) => ({ name, value }));
+ * config("timeout", 5000)  // MetaEntry with value: { name: "timeout", value: 5000 }
+ * ```
+ *
+ * @example Boolean flag meta
  * ```ts
  * const persist = meta();
  *
@@ -19,26 +41,24 @@ import type { MetaType, MetaEntry } from "../types";
  *   meta: [persist()],
  * });
  *
- * ctx.meta(persist).store;           // true (first value)
- * ctx.meta.all(persist).store;       // [true] (all values)
+ * ctx.meta(persist).store;  // true
  * ```
  *
- * @example Store-level meta (with value)
+ * @example Typed value meta
  * ```ts
- * const priority = meta((level: number) => level);
+ * const priority = meta<number>();
  *
  * const criticalStore = store({
  *   state: { data: null },
- *   meta: [priority(1), priority(2)],
+ *   meta: [priority(1)],
  * });
  *
- * ctx.meta(priority).store;           // 1 (first)
- * ctx.meta.all(priority).store;       // [1, 2] (all)
+ * ctx.meta(priority).store;  // 1
  * ```
  *
  * @example Field-level meta
  * ```ts
- * const validate = meta((rule: string) => rule);
+ * const validate = meta<string>();
  *
  * const formStore = store({
  *   state: { email: "", age: 0 },
@@ -52,27 +72,23 @@ import type { MetaType, MetaEntry } from "../types";
  * formStore.meta(validate).fields.age;    // "positive-number"
  * ```
  *
- * @example Check meta existence
- * ```ts
- * const persist = meta();
- * const sync = meta();
- *
- * userStore.meta.any(persist);        // true
- * userStore.meta.any(sync);           // false
- * userStore.meta.any(persist, sync);  // true (has at least one)
- * ```
- *
  * @param builder - Optional function to transform arguments into meta value.
- *                  If omitted, meta value defaults to `true`.
+ *                  If omitted with no type param, meta value is `true`.
+ *                  If omitted with type param, first argument is returned as value.
  * @returns A MetaType that creates MetaEntry objects
  */
 export function meta(): MetaType<any, [], true>;
+export function meta<TValue>(): MetaType<any, [value: TValue], TValue>;
 export function meta<TValue, TArgs extends any[]>(
   builder: (...args: TArgs) => TValue
 ): MetaType<any, TArgs, TValue>;
 export function meta<TValue, TArgs extends any[]>(
   builder?: (...args: TArgs) => TValue
 ): MetaType<any, TArgs, TValue> {
+  if (!builder) {
+    builder = ((...args: any[]) => (args.length ? args[0] : true)) as AnyFunc;
+  }
+
   // Create the MetaType first so we can reference it in entries
   const metaType: MetaType<any, TArgs, TValue> = Object.assign(
     // Store-level meta: myMeta(...args)
