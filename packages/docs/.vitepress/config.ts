@@ -29,6 +29,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'API', link: '/api/store' },
       { text: 'Examples', link: '/examples/' },
+      { text: 'Demos', link: '/demos' },
       {
         text: 'v0.8.0',
         items: [

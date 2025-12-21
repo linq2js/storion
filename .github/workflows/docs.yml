@@ -6,9 +6,13 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/docs/**'
-      - 'packages/storion/CHANGELOG.md'
-      - '.github/workflows/docs.yml'
+      - "packages/docs/**"
+      - "packages/storion/**"
+      - "packages/feature-showcase/**"
+      - "packages/pokemon/**"
+      - "packages/chat/**"
+      - "packages/expense-manager/**"
+      - ".github/workflows/docs.yml"
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -59,10 +63,30 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install --filter storion-docs...
+        run: pnpm install
+
+      - name: Build storion library
+        run: pnpm --filter storion build
 
       - name: Build docs
         run: pnpm --filter storion-docs build
+
+      - name: Build demo apps
+        env:
+          VITE_BASE_PATH: /storion/demos/
+        run: |
+          pnpm --filter feature-showcase build --base /storion/demos/showcase/
+          pnpm --filter pokemon build --base /storion/demos/pokemon/
+          pnpm --filter chat build --base /storion/demos/chat/
+          pnpm --filter expense-manager build --base /storion/demos/expense/
+
+      - name: Copy demo apps to docs
+        run: |
+          mkdir -p packages/docs/.vitepress/dist/demos
+          cp -r packages/feature-showcase/dist packages/docs/.vitepress/dist/demos/showcase
+          cp -r packages/pokemon/dist packages/docs/.vitepress/dist/demos/pokemon
+          cp -r packages/chat/dist packages/docs/.vitepress/dist/demos/chat
+          cp -r packages/expense-manager/dist packages/docs/.vitepress/dist/demos/expense
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -83,4 +107,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

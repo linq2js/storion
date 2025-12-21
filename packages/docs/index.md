@@ -13,7 +13,10 @@ hero:
       text: Get Started
       link: /guide/getting-started
     - theme: alt
-      text: View on GitHub
+      text: Live Demos
+      link: /demos
+    - theme: alt
+      text: GitHub
       link: https://github.com/linq2js/storion
 
 features:
