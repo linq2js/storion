@@ -13,7 +13,7 @@ describe("meta", () => {
       const entry = persist();
 
       expect(entry.value).toBe(true);
-      expect(entry.field).toBeUndefined();
+      expect(entry.fields).toBeUndefined();
       expect(entry.type).toBe(persist); // type references the builder for filtering
     });
 
@@ -23,7 +23,7 @@ describe("meta", () => {
       const entry = priority(5);
 
       expect(entry.value).toBe(5);
-      expect(entry.field).toBeUndefined();
+      expect(entry.fields).toBeUndefined();
       expect(entry.type).toBe(priority);
     });
 
@@ -33,7 +33,7 @@ describe("meta", () => {
       const entry = validate.for("email", "email-format");
 
       expect(entry.value).toBe("email-format");
-      expect(entry.field).toBe("email");
+      expect(entry.fields).toEqual(["email"]);
       expect(entry.type).toBe(validate);
     });
 
@@ -43,7 +43,25 @@ describe("meta", () => {
       const entry = required.for("name");
 
       expect(entry.value).toBe(true);
-      expect(entry.field).toBe("name");
+      expect(entry.fields).toEqual(["name"]);
+    });
+
+    it("should create field-level meta for multiple fields at once", () => {
+      const notPersisted = meta();
+
+      const entry = notPersisted.for(["password", "token", "secret"]);
+
+      expect(entry.value).toBe(true);
+      expect(entry.fields).toEqual(["password", "token", "secret"]);
+    });
+
+    it("should create parameterized meta for multiple fields", () => {
+      const validate = meta((rule: string) => rule);
+
+      const entry = validate.for(["email", "phone"], "required");
+
+      expect(entry.value).toBe("required");
+      expect(entry.fields).toEqual(["email", "phone"]);
     });
 
     it("should support complex value types", () => {
@@ -110,6 +128,19 @@ describe("meta", () => {
       expect(result.store).toBe("store-rule");
       expect(result.fields.email).toBe("email-format"); // first value
       expect(result.fields.age).toBe("positive-number");
+    });
+
+    it("should handle multi-field entries", () => {
+      const notPersisted = meta();
+      const entries = [notPersisted.for(["password", "token", "secret"])];
+      const query = createMetaQuery(entries);
+
+      const result = query(notPersisted);
+
+      expect(result.store).toBeUndefined();
+      expect(result.fields.password).toBe(true);
+      expect(result.fields.token).toBe(true);
+      expect(result.fields.secret).toBe(true);
     });
 
     it("should handle empty meta", () => {

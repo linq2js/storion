@@ -8,6 +8,7 @@
 
 export {
   persistMiddleware,
+  notPersisted,
   type PersistOptions,
   type PersistLoadResult,
 } from "./persist";

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { store, container, forStores } from "../index";
-import { persistMiddleware } from "./persist";
+import { persistMiddleware, notPersisted } from "./persist";
 
 describe("persistMiddleware", () => {
   beforeEach(() => {
@@ -573,6 +573,270 @@ describe("persistMiddleware", () => {
       // Sync load applies immediately, so values should be from persisted state
       expect(instance.state.count).toBe(42);
       expect(instance.state.name).toBe("loaded");
+    });
+  });
+
+  describe("notPersisted meta", () => {
+    describe("store-level exclusion", () => {
+      it("should skip entire store when marked with notPersisted()", () => {
+        const load = vi.fn().mockReturnValue({ count: 42 });
+        const save = vi.fn();
+
+        const tempStore = store({
+          name: "temp",
+          state: { count: 0 },
+          setup: ({ state }) => ({
+            increment: () => {
+              state.count++;
+            },
+          }),
+          meta: [notPersisted()],
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ load, save })]),
+        });
+
+        const instance = app.get(tempStore);
+
+        // Load should not be called for this store
+        expect(load).not.toHaveBeenCalled();
+
+        // State should remain at initial value
+        expect(instance.state.count).toBe(0);
+
+        // Changes should not trigger save
+        instance.actions.increment();
+        expect(save).not.toHaveBeenCalled();
+      });
+
+      it("should persist stores without notPersisted meta", () => {
+        const load = vi.fn().mockReturnValue({ count: 42 });
+        const save = vi.fn();
+
+        const persistedStore = store({
+          name: "persisted",
+          state: { count: 0 },
+          setup: ({ state }) => ({
+            increment: () => {
+              state.count++;
+            },
+          }),
+        });
+
+        const notPersistedStore = store({
+          name: "notPersisted",
+          state: { count: 0 },
+          setup: ({ state }) => ({
+            increment: () => {
+              state.count++;
+            },
+          }),
+          meta: [notPersisted()],
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ load, save })]),
+        });
+
+        const persistedInstance = app.get(persistedStore);
+        const notPersistedInstance = app.get(notPersistedStore);
+
+        // Only persisted store should be loaded
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(load).toHaveBeenCalledWith(persistedStore);
+
+        // Persisted store should have hydrated value
+        expect(persistedInstance.state.count).toBe(42);
+        // Not persisted store should have initial value
+        expect(notPersistedInstance.state.count).toBe(0);
+
+        // Only persisted store changes should trigger save
+        persistedInstance.actions.increment();
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(save).toHaveBeenCalledWith(persistedStore, { count: 43 });
+
+        notPersistedInstance.actions.increment();
+        expect(save).toHaveBeenCalledTimes(1); // Still 1
+      });
+    });
+
+    describe("field-level exclusion", () => {
+      it("should exclude fields marked with notPersisted from save", () => {
+        const load = vi.fn().mockReturnValue(null);
+        const save = vi.fn();
+
+        const userStore = store({
+          name: "user",
+          state: { name: "Alice", password: "secret123", token: "abc" },
+          setup: ({ state }) => ({
+            setPassword: (pw: string) => {
+              state.password = pw;
+            },
+            setName: (n: string) => {
+              state.name = n;
+            },
+          }),
+          meta: [notPersisted.for(["password", "token"])],
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ load, save })]),
+        });
+
+        const instance = app.get(userStore);
+
+        // Trigger save
+        instance.actions.setName("Bob");
+
+        // Save should be called without password and token
+        expect(save).toHaveBeenCalledWith(userStore, { name: "Bob" });
+      });
+
+      it("should exclude fields marked with notPersisted from load/hydrate", () => {
+        const load = vi.fn().mockReturnValue({
+          name: "Loaded",
+          password: "should-not-apply",
+          token: "should-not-apply",
+        });
+        const save = vi.fn();
+
+        const userStore = store({
+          name: "user",
+          state: { name: "Initial", password: "initial-pw", token: "init-tok" },
+          setup: () => ({}),
+          meta: [notPersisted.for(["password", "token"])],
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ load, save })]),
+        });
+
+        const instance = app.get(userStore);
+
+        // name should be hydrated
+        expect(instance.state.name).toBe("Loaded");
+        // password and token should NOT be hydrated (kept initial)
+        expect(instance.state.password).toBe("initial-pw");
+        expect(instance.state.token).toBe("init-tok");
+      });
+
+      it("should work with mixed persisted and non-persisted fields", () => {
+        const load = vi.fn().mockReturnValue({ count: 100, total: 500 });
+        const save = vi.fn();
+
+        const statsStore = store({
+          name: "stats",
+          state: { count: 0, sessionCount: 0, total: 0 },
+          setup: ({ state }) => ({
+            increment: () => {
+              state.count++;
+              state.sessionCount++;
+              state.total++;
+            },
+          }),
+          meta: [notPersisted.for("sessionCount")], // Only sessionCount is not persisted
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ load, save })]),
+        });
+
+        const instance = app.get(statsStore);
+
+        // count and total should be hydrated
+        expect(instance.state.count).toBe(100);
+        expect(instance.state.total).toBe(500);
+        // sessionCount should keep initial value
+        expect(instance.state.sessionCount).toBe(0);
+
+        // After increment
+        instance.actions.increment();
+
+        // Save should exclude sessionCount
+        expect(save).toHaveBeenCalledWith(statsStore, {
+          count: 101,
+          total: 501,
+        });
+      });
+
+      it("should handle multiple excluded fields", () => {
+        const save = vi.fn();
+
+        const formStore = store({
+          name: "form",
+          state: {
+            username: "",
+            password: "",
+            confirmPassword: "",
+            rememberMe: false,
+          },
+          setup: ({ state }) => ({
+            setUsername: (v: string) => {
+              state.username = v;
+            },
+          }),
+          meta: [notPersisted.for(["password", "confirmPassword"])],
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ save })]),
+        });
+
+        const instance = app.get(formStore);
+
+        instance.actions.setUsername("john");
+
+        // Only username and rememberMe should be saved
+        expect(save).toHaveBeenCalledWith(formStore, {
+          username: "john",
+          rememberMe: false,
+        });
+      });
+    });
+
+    describe("combined with filter option", () => {
+      it("should respect both filter and notPersisted meta", () => {
+        const load = vi.fn().mockReturnValue({ count: 42 });
+        const save = vi.fn();
+
+        const storeA = store({
+          name: "storeA",
+          state: { count: 0 },
+          setup: () => ({}),
+        });
+
+        const storeB = store({
+          name: "storeB",
+          state: { count: 0 },
+          setup: () => ({}),
+          meta: [notPersisted()],
+        });
+
+        const storeC = store({
+          name: "storeC",
+          state: { count: 0 },
+          setup: () => ({}),
+        });
+
+        const app = container({
+          middleware: forStores([
+            persistMiddleware({
+              load,
+              save,
+              filter: (spec) => spec.displayName !== "storeC", // Exclude storeC via filter
+            }),
+          ]),
+        });
+
+        app.get(storeA);
+        app.get(storeB);
+        app.get(storeC);
+
+        // Only storeA should be loaded (storeB has notPersisted, storeC filtered out)
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(load).toHaveBeenCalledWith(storeA);
+      });
     });
   });
 });

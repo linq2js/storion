@@ -76,18 +76,24 @@ export function meta<TValue, TArgs extends any[]>(
   // Create the MetaType first so we can reference it in entries
   const metaType: MetaType<any, TArgs, TValue> = Object.assign(
     // Store-level meta: myMeta(...args)
-    <TField>(...args: TArgs): MetaEntry<TField, TValue> => {
+    (...args: TArgs): MetaEntry<undefined, TValue> => {
       return {
-        field: undefined,
+        fields: undefined,
         value: builder?.(...args) ?? (true as TValue),
         type: metaType, // reference the MetaType itself
       };
     },
     {
-      // Field-level meta: myMeta.for("fieldName", ...args)
-      for<TField>(field: TField, ...args: TArgs): MetaEntry<TField, TValue> {
+      // Field-level meta: myMeta.for("fieldName", ...args) or myMeta.for(["f1", "f2"], ...args)
+      for<TField>(
+        fieldOrFields: TField | TField[],
+        ...args: TArgs
+      ): MetaEntry<TField, TValue> {
+        const fields = Array.isArray(fieldOrFields)
+          ? fieldOrFields
+          : [fieldOrFields];
         return {
-          field,
+          fields,
           value: builder?.(...args) ?? (true as TValue),
           type: metaType, // reference the MetaType itself
         };

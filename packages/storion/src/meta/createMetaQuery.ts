@@ -24,13 +24,17 @@ export function createMetaQuery(
     for (const entry of entryArray) {
       if (entry.type !== type) continue;
 
-      if (entry.field) {
-        const fieldKey = entry.field as string;
-        // Only set if not already set (first wins)
-        if (!(fieldKey in result.fields)) {
-          result.fields[fieldKey] = entry.value as TValue;
+      if (entry.fields && entry.fields.length > 0) {
+        // Field-level: iterate over all fields in the entry
+        for (const field of entry.fields) {
+          const fieldKey = field as string;
+          // Only set if not already set (first wins)
+          if (!(fieldKey in result.fields)) {
+            result.fields[fieldKey] = entry.value as TValue;
+          }
         }
       } else {
+        // Store-level: fields is undefined or empty
         // Only set if not already set (first wins)
         if (result.store === undefined) {
           result.store = entry.value as TValue;
@@ -51,15 +55,19 @@ export function createMetaQuery(
     for (const entry of entryArray) {
       if (entry.type !== type) continue;
 
-      if (entry.field) {
-        const fieldKey = entry.field as string;
-        let arr = result.fields[fieldKey];
-        if (!arr) {
-          arr = [];
-          result.fields[fieldKey] = arr;
+      if (entry.fields && entry.fields.length > 0) {
+        // Field-level: iterate over all fields in the entry
+        for (const field of entry.fields) {
+          const fieldKey = field as string;
+          let arr = result.fields[fieldKey];
+          if (!arr) {
+            arr = [];
+            result.fields[fieldKey] = arr;
+          }
+          arr.push(entry.value as TValue);
         }
-        arr.push(entry.value as TValue);
       } else {
+        // Store-level
         result.store.push(entry.value as TValue);
       }
     }

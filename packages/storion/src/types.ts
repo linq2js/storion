@@ -1424,10 +1424,12 @@ export interface Disposable {
 }
 
 /**
- * A single metadata entry attached to a store or field.
+ * A single metadata entry attached to a store or fields.
+ * - `fields: undefined` → store-level meta
+ * - `fields: ["name", "email"]` → applies to multiple fields
  */
 export type MetaEntry<TField = unknown, TValue = unknown> = {
-  field?: TField;
+  fields?: TField[];
   value: TValue;
   type: AnyFunc;
 };
@@ -1462,10 +1464,11 @@ export type MetaEntry<TField = unknown, TValue = unknown> = {
  * ```
  */
 export type MetaType<TField, TArgs extends any[], TValue> = {
-  /** Attach meta to a specific field */
+  /** Attach meta to a specific field or multiple fields */
   for(field: TField, ...args: TArgs): MetaEntry<TField, TValue>;
-  /** Attach meta to the store itself */
-  (...args: TArgs): MetaEntry<TField, TValue>;
+  for(fields: TField[], ...args: TArgs): MetaEntry<TField, TValue>;
+  /** Attach meta to the store itself, we must use any for TField otherwise it cannot passed to spec.meta */
+  (...args: TArgs): MetaEntry<any, TValue>;
 };
 
 // =============================================================================

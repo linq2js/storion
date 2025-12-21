@@ -5,7 +5,43 @@
  */
 
 import type { StoreSpec, StoreMiddleware } from "../types";
+import { meta } from "../meta/meta";
 import { isPromiseLike } from "../utils/isPromiseLike";
+
+/**
+ * Mark stores or fields as not persisted.
+ *
+ * When called without arguments, marks the entire store as not persisted.
+ * When called with a field name, marks that specific field as not persisted.
+ *
+ * @example Store-level exclusion
+ * ```ts
+ * import { notPersisted } from 'storion/persist';
+ *
+ * const tempStore = store({
+ *   name: 'temp',
+ *   state: { sessionData: {} },
+ *   setup: () => ({}),
+ *   meta: [notPersisted()],  // entire store skipped
+ * });
+ * ```
+ *
+ * @example Field-level exclusion
+ * ```ts
+ * import { notPersisted } from 'storion/persist';
+ *
+ * const userStore = store({
+ *   name: 'user',
+ *   state: { name: '', password: '', token: '' },
+ *   setup: () => ({}),
+ *   meta: [
+ *     notPersisted('password'),
+ *     notPersisted('token'),
+ *   ],
+ * });
+ * ```
+ */
+export const notPersisted = meta();
 
 /**
  * Result from load function - can be sync or async
@@ -114,7 +150,7 @@ export interface PersistOptions {
 export function persistMiddleware(options: PersistOptions): StoreMiddleware {
   const { filter, load, save, onError, force = false } = options;
 
-  return ({ spec, next }) => {
+  return ({ spec, next, meta }) => {
     // Call next() to create the instance
     const instance = next();
 
@@ -123,13 +159,47 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
       return instance;
     }
 
+    // Check meta for notPersisted
+    // Note: spec.meta is raw MetaEntry[] from store options
+    const notPersistedInfo = meta(notPersisted);
+
+    // Skip entire store if marked as notPersisted at store level
+    if (notPersistedInfo.store === true) {
+      return instance;
+    }
+
+    // Get fields to exclude from persistence
+    const excludedFields = new Set(
+      Object.keys(notPersistedInfo.fields).filter(
+        (field) => notPersistedInfo.fields[field] === true
+      )
+    );
+
+    // Filter out excluded fields from state
+    const filterState = (
+      state: Record<string, unknown>
+    ): Record<string, unknown> => {
+      if (excludedFields.size === 0) return state;
+
+      const filtered: Record<string, unknown> = {};
+
+      for (const key in state) {
+        if (!excludedFields.has(key)) {
+          filtered[key] = state[key];
+        }
+      }
+
+      return filtered;
+    };
+
     // Hydrate with loaded state
     const hydrateWithState = (
       state: Record<string, unknown> | null | undefined
     ) => {
       if (state != null) {
         try {
-          instance.hydrate(state, { force });
+          // Filter out excluded fields before hydrating
+          instance.hydrate(filterState(state), { force });
         } catch (error) {
           onError?.(spec, error, "load");
         }
@@ -161,7 +231,13 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
       instance.subscribe(() => {
         try {
           const state = instance.dehydrate();
-          save(spec, state);
+          // Filter out excluded fields before saving.
+          // Note: If all fields are excluded, filterState returns {}.
+          // We still call save({}) to let consumers decide how to handle:
+          // - Save empty object to storage
+          // - Skip saving entirely (just return)
+          // - Delete from storage (e.g., localStorage.removeItem)
+          save(spec, filterState(state));
         } catch (error) {
           onError?.(spec, error, "save");
         }
