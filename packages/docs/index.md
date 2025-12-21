@@ -64,9 +64,10 @@ features:
 ## Quick Example
 
 ```tsx
-import { store, useStore } from 'storion/react';
+import { create } from 'storion/react';
 
-const counterStore = store({
+// create() returns [storeInstance, useStore] - no Provider needed!
+const [counter, useCounter] = create({
   name: 'counter',
   state: { count: 0 },
   setup({ state }) {
@@ -78,10 +79,10 @@ const counterStore = store({
 });
 
 function Counter() {
-  const { count, increment } = useStore(({ get }) => {
-    const [state, actions] = get(counterStore);
-    return { count: state.count, increment: actions.increment };
-  });
+  const { count, increment } = useCounter((state, actions) => ({
+    count: state.count,
+    increment: actions.increment,
+  }));
 
   return <button onClick={increment}>{count}</button>;
 }
