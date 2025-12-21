@@ -4,7 +4,7 @@
  * Provides automatic state persistence and hydration for stores.
  */
 
-import type { StoreSpec, StoreMiddleware } from "../types";
+import type { StoreMiddleware, StoreMiddlewareContext } from "../types";
 import { meta } from "../meta/meta";
 import { isPromiseLike } from "../utils/isPromiseLike";
 
@@ -60,37 +60,40 @@ export interface PersistOptions {
    * Filter which stores should be persisted.
    * If not provided, all stores are persisted.
    *
-   * @param spec - The store specification
+   * @param context - The middleware context
    * @returns true to persist, false to skip
    */
-  filter?: (spec: StoreSpec) => boolean;
+  filter?: (context: StoreMiddlewareContext) => boolean;
 
   /**
    * Load persisted state for a store.
    * Can return sync or async result.
    *
-   * @param spec - The store specification
+   * @param context - The middleware context
    * @returns The persisted state, null/undefined if not found, or a Promise
    */
-  load?: (spec: StoreSpec) => PersistLoadResult;
+  load?: (context: StoreMiddlewareContext) => PersistLoadResult;
 
   /**
    * Save state to persistent storage.
    *
-   * @param spec - The store specification
+   * @param context - The middleware context
    * @param state - The dehydrated state to save
    */
-  save?: (spec: StoreSpec, state: Record<string, unknown>) => void;
+  save?: (
+    context: StoreMiddlewareContext,
+    state: Record<string, unknown>
+  ) => void;
 
   /**
    * Called when an error occurs during load or save.
    *
-   * @param spec - The store specification
+   * @param context - The middleware context
    * @param error - The error that occurred
    * @param operation - Whether the error occurred during 'load' or 'save'
    */
   onError?: (
-    spec: StoreSpec,
+    context: StoreMiddlewareContext,
     error: unknown,
     operation: "load" | "save"
   ) => void;
@@ -117,32 +120,53 @@ export interface PersistOptions {
  * import { persistMiddleware } from "storion/persist";
  *
  * const app = container({
- *   middleware: persistMiddleware({
- *     load: (spec) => {
- *       const key = `storion:${spec.displayName}`;
+ *   middleware: [persistMiddleware({
+ *     load: (ctx) => {
+ *       const key = `storion:${ctx.spec.displayName}`;
  *       const data = localStorage.getItem(key);
  *       return data ? JSON.parse(data) : null;
  *     },
- *     save: (spec, state) => {
- *       const key = `storion:${spec.displayName}`;
+ *     save: (ctx, state) => {
+ *       const key = `storion:${ctx.spec.displayName}`;
  *       localStorage.setItem(key, JSON.stringify(state));
  *     },
- *     onError: (spec, error, op) => {
- *       console.error(`Persist ${op} error for ${spec.displayName}:`, error);
+ *     onError: (ctx, error, op) => {
+ *       console.error(`Persist ${op} error for ${ctx.spec.displayName}:`, error);
  *     },
- *   }),
+ *   })],
  * });
  * ```
  *
  * @example Async load (e.g., IndexedDB)
  * ```ts
  * persistMiddleware({
- *   load: async (spec) => {
+ *   load: async (ctx) => {
  *     const db = await openDB();
- *     return db.get('stores', spec.displayName);
+ *     return db.get('stores', ctx.spec.displayName);
  *   },
- *   save: (spec, state) => {
- *     openDB().then(db => db.put('stores', state, spec.displayName));
+ *   save: (ctx, state) => {
+ *     openDB().then(db => db.put('stores', state, ctx.spec.displayName));
+ *   },
+ * });
+ * ```
+ *
+ * @example Using meta in callbacks
+ * ```ts
+ * import { meta } from "storion";
+ *
+ * const persistKey = meta<string>();
+ *
+ * persistMiddleware({
+ *   load: (ctx) => {
+ *     // Use custom key from meta, fallback to displayName
+ *     const customKey = ctx.meta(persistKey).store;
+ *     const key = customKey ?? ctx.spec.displayName;
+ *     return JSON.parse(localStorage.getItem(key) || 'null');
+ *   },
+ *   save: (ctx, state) => {
+ *     const customKey = ctx.meta(persistKey).store;
+ *     const key = customKey ?? ctx.spec.displayName;
+ *     localStorage.setItem(key, JSON.stringify(state));
  *   },
  * });
  * ```
@@ -150,12 +174,13 @@ export interface PersistOptions {
 export function persistMiddleware(options: PersistOptions): StoreMiddleware {
   const { filter, load, save, onError, force = false } = options;
 
-  return ({ spec, next, meta }) => {
+  return (context) => {
+    const { next, meta } = context;
     // Call next() to create the instance
     const instance = next();
 
     // Skip if filter returns false
-    if (filter && !filter(spec)) {
+    if (filter && !filter(context)) {
       return instance;
     }
 
@@ -201,21 +226,21 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
           // Filter out excluded fields before hydrating
           instance.hydrate(filterState(state), { force });
         } catch (error) {
-          onError?.(spec, error, "load");
+          onError?.(context, error, "load");
         }
       }
     };
 
     // Load persisted state
     try {
-      const loadResult = load?.(spec);
+      const loadResult = load?.(context);
 
       if (loadResult) {
         if (isPromiseLike(loadResult)) {
           // Async: hydrate when promise resolves
           loadResult.then(
             (state) => hydrateWithState(state),
-            (error) => onError?.(spec, error, "load")
+            (error) => onError?.(context, error, "load")
           );
         } else {
           // Sync: hydrate immediately
@@ -223,7 +248,7 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
         }
       }
     } catch (error) {
-      onError?.(spec, error, "load");
+      onError?.(context, error, "load");
     }
 
     // Setup save subscription immediately so state changes during loading are saved
@@ -237,9 +262,9 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
           // - Save empty object to storage
           // - Skip saving entirely (just return)
           // - Delete from storage (e.g., localStorage.removeItem)
-          save(spec, filterState(state));
+          save(context, filterState(state));
         } catch (error) {
-          onError?.(spec, error, "save");
+          onError?.(context, error, "save");
         }
       });
     }

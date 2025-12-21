@@ -26,18 +26,18 @@ const app = container({
     applyFor(
       "counter",
       persistMiddleware({
-        load: (spec) => {
-          const key = `storion:${spec.displayName}`;
+        load: (ctx) => {
+          const key = `storion:${ctx.spec.displayName}`;
           const data = localStorage.getItem(key);
           return data ? JSON.parse(data) : null;
         },
-        save: (spec, state) => {
-          const key = `storion:${spec.displayName}`;
+        save: (ctx, state) => {
+          const key = `storion:${ctx.spec.displayName}`;
           localStorage.setItem(key, JSON.stringify(state));
         },
-        onError: (spec, error, operation) => {
+        onError: (ctx, error, operation) => {
           console.error(
-            `[Persist] ${operation} error for ${spec.displayName}:`,
+            `[Persist] ${operation} error for ${ctx.spec.displayName}:`,
             error
           );
         },

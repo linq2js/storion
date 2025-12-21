@@ -29,7 +29,8 @@ describe("persistMiddleware", () => {
       app.get(myStore);
 
       expect(load).toHaveBeenCalledTimes(1);
-      expect(load).toHaveBeenCalledWith(myStore);
+      // Context is passed, which has spec property
+      expect(load.mock.calls[0][0].spec).toBe(myStore);
     });
 
     it("should hydrate store with sync load result", () => {
@@ -101,7 +102,8 @@ describe("persistMiddleware", () => {
 
       // Save should be called immediately (subscription is set up before loading)
       expect(save).toHaveBeenCalledTimes(1);
-      expect(save).toHaveBeenCalledWith(myStore, { count: 1, name: "initial" });
+      expect(save.mock.calls[0][0].spec).toBe(myStore);
+      expect(save.mock.calls[0][1]).toEqual({ count: 1, name: "initial" });
 
       // Wait for async load to complete
       await vi.runAllTimersAsync();
@@ -113,18 +115,14 @@ describe("persistMiddleware", () => {
 
       // Hydrating the name triggered another save
       expect(save).toHaveBeenCalledTimes(2);
-      expect(save).toHaveBeenNthCalledWith(2, myStore, {
-        count: 1,
-        name: "loaded",
-      });
+      expect(save.mock.calls[1][0].spec).toBe(myStore);
+      expect(save.mock.calls[1][1]).toEqual({ count: 1, name: "loaded" });
 
       // State change after hydration should also be saved
       instance.actions.increment();
       expect(save).toHaveBeenCalledTimes(3);
-      expect(save).toHaveBeenLastCalledWith(myStore, {
-        count: 2,
-        name: "loaded",
-      });
+      expect(save.mock.calls[2][0].spec).toBe(myStore);
+      expect(save.mock.calls[2][1]).toEqual({ count: 2, name: "loaded" });
     });
 
     it("should not hydrate when load returns null", () => {
@@ -190,7 +188,8 @@ describe("persistMiddleware", () => {
       instance.actions.increment();
 
       expect(save).toHaveBeenCalledTimes(1);
-      expect(save).toHaveBeenCalledWith(myStore, { count: 1 });
+      expect(save.mock.calls[0][0].spec).toBe(myStore);
+      expect(save.mock.calls[0][1]).toEqual({ count: 1 });
     });
 
     it("should call save with dehydrated state", () => {
@@ -215,7 +214,8 @@ describe("persistMiddleware", () => {
 
       instance.actions.setCount(10);
 
-      expect(save).toHaveBeenCalledWith(myStore, { count: 10, name: "test" });
+      expect(save.mock.calls[0][0].spec).toBe(myStore);
+      expect(save.mock.calls[0][1]).toEqual({ count: 10, name: "test" });
     });
   });
 
@@ -242,7 +242,7 @@ describe("persistMiddleware", () => {
             persistMiddleware({
               load,
               save,
-              filter: (spec) => spec.displayName === "persisted",
+              filter: (ctx) => ctx.spec.displayName === "persisted",
             })
           ),
         ],
@@ -259,7 +259,7 @@ describe("persistMiddleware", () => {
 
       // Load should only be called for persisted store
       expect(load).toHaveBeenCalledTimes(1);
-      expect(load).toHaveBeenCalledWith(persistedStore);
+      expect(load.mock.calls[0][0].spec).toBe(persistedStore);
     });
   });
 
@@ -288,7 +288,8 @@ describe("persistMiddleware", () => {
 
       // Save should still work
       instance.actions.increment();
-      expect(save).toHaveBeenCalledWith(myStore, { count: 1 });
+      expect(save.mock.calls[0][0].spec).toBe(myStore);
+      expect(save.mock.calls[0][1]).toEqual({ count: 1 });
     });
 
     it("should work without save option (load only)", () => {
@@ -340,7 +341,9 @@ describe("persistMiddleware", () => {
 
       app.get(myStore);
 
-      expect(onError).toHaveBeenCalledWith(myStore, error, "load");
+      expect(onError.mock.calls[0][0].spec).toBe(myStore);
+      expect(onError.mock.calls[0][1]).toBe(error);
+      expect(onError.mock.calls[0][2]).toBe("load");
     });
 
     it("should call onError when async load rejects", async () => {
@@ -363,7 +366,9 @@ describe("persistMiddleware", () => {
 
       await vi.runAllTimersAsync();
 
-      expect(onError).toHaveBeenCalledWith(myStore, error, "load");
+      expect(onError.mock.calls[0][0].spec).toBe(myStore);
+      expect(onError.mock.calls[0][1]).toBe(error);
+      expect(onError.mock.calls[0][2]).toBe("load");
     });
 
     it("should call onError when save throws", () => {
@@ -392,7 +397,9 @@ describe("persistMiddleware", () => {
 
       instance.actions.increment();
 
-      expect(onError).toHaveBeenCalledWith(myStore, error, "save");
+      expect(onError.mock.calls[0][0].spec).toBe(myStore);
+      expect(onError.mock.calls[0][1]).toBe(error);
+      expect(onError.mock.calls[0][2]).toBe("save");
     });
 
     it("should still setup save subscription even if load fails", () => {
@@ -421,7 +428,8 @@ describe("persistMiddleware", () => {
       // State change should still trigger save
       instance.actions.increment();
 
-      expect(save).toHaveBeenCalledWith(myStore, { count: 1 });
+      expect(save.mock.calls[0][0].spec).toBe(myStore);
+      expect(save.mock.calls[0][1]).toEqual({ count: 1 });
     });
   });
 
@@ -644,7 +652,7 @@ describe("persistMiddleware", () => {
 
         // Only persisted store should be loaded
         expect(load).toHaveBeenCalledTimes(1);
-        expect(load).toHaveBeenCalledWith(persistedStore);
+        expect(load.mock.calls[0][0].spec).toBe(persistedStore);
 
         // Persisted store should have hydrated value
         expect(persistedInstance.state.count).toBe(42);
@@ -654,7 +662,8 @@ describe("persistMiddleware", () => {
         // Only persisted store changes should trigger save
         persistedInstance.actions.increment();
         expect(save).toHaveBeenCalledTimes(1);
-        expect(save).toHaveBeenCalledWith(persistedStore, { count: 43 });
+        expect(save.mock.calls[0][0].spec).toBe(persistedStore);
+        expect(save.mock.calls[0][1]).toEqual({ count: 43 });
 
         notPersistedInstance.actions.increment();
         expect(save).toHaveBeenCalledTimes(1); // Still 1
@@ -690,7 +699,8 @@ describe("persistMiddleware", () => {
         instance.actions.setName("Bob");
 
         // Save should be called without password and token
-        expect(save).toHaveBeenCalledWith(userStore, { name: "Bob" });
+        expect(save.mock.calls[0][0].spec).toBe(userStore);
+        expect(save.mock.calls[0][1]).toEqual({ name: "Bob" });
       });
 
       it("should exclude fields marked with notPersisted from load/hydrate", () => {
@@ -754,10 +764,10 @@ describe("persistMiddleware", () => {
         instance.actions.increment();
 
         // Save should exclude sessionCount
-        expect(save).toHaveBeenCalledWith(statsStore, {
-          count: 101,
-          total: 501,
-        });
+        // First call was from hydration, second is from increment
+        const lastCall = save.mock.calls[save.mock.calls.length - 1];
+        expect(lastCall[0].spec).toBe(statsStore);
+        expect(lastCall[1]).toEqual({ count: 101, total: 501 });
       });
 
       it("should handle multiple excluded fields", () => {
@@ -788,7 +798,8 @@ describe("persistMiddleware", () => {
         instance.actions.setUsername("john");
 
         // Only username and rememberMe should be saved
-        expect(save).toHaveBeenCalledWith(formStore, {
+        expect(save.mock.calls[0][0].spec).toBe(formStore);
+        expect(save.mock.calls[0][1]).toEqual({
           username: "john",
           rememberMe: false,
         });
@@ -824,7 +835,7 @@ describe("persistMiddleware", () => {
             persistMiddleware({
               load,
               save,
-              filter: (spec) => spec.displayName !== "storeC", // Exclude storeC via filter
+              filter: (ctx) => ctx.spec.displayName !== "storeC", // Exclude storeC via filter
             }),
           ]),
         });
@@ -835,7 +846,7 @@ describe("persistMiddleware", () => {
 
         // Only storeA should be loaded (storeB has notPersisted, storeC filtered out)
         expect(load).toHaveBeenCalledTimes(1);
-        expect(load).toHaveBeenCalledWith(storeA);
+        expect(load.mock.calls[0][0].spec).toBe(storeA);
       });
     });
   });
