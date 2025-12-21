@@ -12,6 +12,13 @@ For detailed documentation, see `packages/storion/README.md` and `packages/stori
 - Store specs: `xxxStore` (e.g., `userStore`, `cartStore`)
 - Service factories: `xxxService` (e.g., `apiService`, `loggerService`)
 - Mixins: `xxxMixin` (e.g., `counterMixin`)
+- Meta types:
+  - Boolean flags: adjectives/past participles (`persisted`, `deprecated`, `hidden`)
+  - Exclusions: `not` + adjective (`notPersisted`, `notLogged`)
+  - Storage targets: noun + `Store` (`sessionStore`, `localStore`)
+  - Validation: verb/noun (`validate`, `minLength`, `pattern`)
+  - Config values: noun (`priority`, `debounce`, `ttl`)
+  - Features: `with` + feature or `-able` suffix (`withDevtools`, `loggable`)
 
 ## Imports
 

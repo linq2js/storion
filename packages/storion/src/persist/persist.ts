@@ -66,6 +66,15 @@ export interface PersistOptions {
   filter?: (context: StoreMiddlewareContext) => boolean;
 
   /**
+   * Filter which fields should be persisted.
+   * If not provided, all fields are persisted.
+   *
+   * @param context - The middleware context
+   * @returns the fields to persist
+   */
+  fields?: (context: StoreMiddlewareContext) => string[];
+
+  /**
    * Load persisted state for a store.
    * Can return sync or async result.
    *
@@ -172,7 +181,7 @@ export interface PersistOptions {
  * ```
  */
 export function persistMiddleware(options: PersistOptions): StoreMiddleware {
-  const { filter, load, save, onError, force = false } = options;
+  const { filter, fields, load, save, onError, force = false } = options;
 
   return (context) => {
     const { next, meta } = context;
@@ -200,10 +209,16 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
       )
     );
 
+    const stateFields = fields?.(context) ?? (context.spec.fields as string[]);
+
+    // Skip if no fields to persist
+    if (stateFields.length === 0) {
+      return instance;
+    }
+
     // Check if all state fields are excluded - if so, skip persistence entirely
     // This is effectively the same as store-level notPersisted()
     if (excludedFields.size > 0) {
-      const stateFields = context.spec.fields as string[];
       const allExcluded =
         stateFields.length > 0 &&
         stateFields.every((field) => excludedFields.has(field));
@@ -213,16 +228,18 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
       }
     }
 
-    // Filter out excluded fields from state
+    // Convert stateFields to a Set for efficient lookup
+    const includedFields = new Set(stateFields);
+
+    // Filter state to only include specified fields, excluding notPersisted fields
     const filterState = (
       state: Record<string, unknown>
     ): Record<string, unknown> => {
-      if (excludedFields.size === 0) return state;
-
       const filtered: Record<string, unknown> = {};
 
       for (const key in state) {
-        if (!excludedFields.has(key)) {
+        // Only include if field is in includedFields AND not in excludedFields
+        if (includedFields.has(key) && !excludedFields.has(key)) {
           filtered[key] = state[key];
         }
       }

@@ -285,6 +285,80 @@ describe("meta", () => {
     });
   });
 
+  describe("createMetaQuery.fields()", () => {
+    it("should return field names with the specified meta type", () => {
+      const persist = meta();
+      const entries = [
+        persist.for("name"),
+        persist.for("email"),
+        persist.for("token"),
+      ];
+      const query = createMetaQuery(entries);
+
+      expect(query.fields(persist)).toEqual(["name", "email", "token"]);
+    });
+
+    it("should return all fields from a single entry with multiple fields", () => {
+      const notPersisted = meta();
+      const entries = [notPersisted.for(["password", "confirmPassword"])];
+      const query = createMetaQuery(entries);
+
+      expect(query.fields(notPersisted)).toEqual([
+        "password",
+        "confirmPassword",
+      ]);
+    });
+
+    it("should not include store-level meta", () => {
+      const persist = meta();
+      const entries = [persist(), persist.for("name")];
+      const query = createMetaQuery(entries);
+
+      expect(query.fields(persist)).toEqual(["name"]);
+    });
+
+    it("should filter by predicate", () => {
+      const priority = meta((level: number) => level);
+      const entries = [
+        priority.for("name", 1),
+        priority.for("email", 3),
+        priority.for("token", 2),
+      ];
+      const query = createMetaQuery(entries);
+
+      // Only fields with priority > 1
+      expect(query.fields(priority, (v) => v > 1)).toEqual(["email", "token"]);
+    });
+
+    it("should return empty array when no fields have the meta type", () => {
+      const persist = meta();
+      const other = meta();
+      const entries = [persist()];
+      const query = createMetaQuery(entries);
+
+      expect(query.fields(other)).toEqual([]);
+    });
+
+    it("should deduplicate fields from multiple entries", () => {
+      const tag = meta((t: string) => t);
+      const entries = [
+        tag.for("name", "required"),
+        tag.for("name", "validated"),
+        tag.for("email", "email-format"),
+      ];
+      const query = createMetaQuery(entries);
+
+      expect(query.fields(tag)).toEqual(["name", "email"]);
+    });
+
+    it("should return empty array when meta is empty", () => {
+      const persist = meta();
+      const query = createMetaQuery([]);
+
+      expect(query.fields(persist)).toEqual([]);
+    });
+  });
+
   describe("store spec meta", () => {
     it("should store meta entries as array on spec", () => {
       const persist = meta();
@@ -301,23 +375,13 @@ describe("meta", () => {
       expect(myStore.meta![0].value).toBe(true);
       expect(myStore.meta![1].value).toBe(1);
     });
-
-    it("should have empty array when no meta", () => {
-      const myStore = store({
-        name: "test",
-        state: { count: 0 },
-        setup: () => ({}),
-      });
-
-      expect(myStore.meta).toEqual([]);
-    });
   });
 
   describe("withMeta", () => {
     it("should attach meta to a factory function", () => {
       const persist = meta();
       const myService = withMeta(
-        (resolver) => ({ doSomething: () => {} }),
+        (_resolver) => ({ doSomething: () => {} }),
         [persist()]
       );
 

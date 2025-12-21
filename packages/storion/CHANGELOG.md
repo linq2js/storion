@@ -12,6 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```ts
   meta: [notPersisted.for(["password", "token"])]
   ```
+- `MetaQuery.fields(type, predicate?)` method to get field names with a specific meta type
+  ```ts
+  const sessionFields = ctx.meta.fields(sessionStore);  // ['token', 'userId']
+  const highPriority = ctx.meta.fields(priority, v => v > 5);
+  ```
+- `persistMiddleware` `fields` option for multi-storage patterns
+  ```ts
+  // Split fields between session and local storage
+  persistMiddleware({
+    filter: ({ meta }) => meta.any(sessionStore),
+    fields: ({ meta }) => meta.fields(sessionStore),
+    save: (ctx, state) => sessionStorage.setItem(ctx.displayName, JSON.stringify(state)),
+  })
+  ```
 
 ---
 

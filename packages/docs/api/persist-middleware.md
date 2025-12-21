@@ -13,21 +13,29 @@ function persistMiddleware(options: PersistOptions): StoreMiddleware
 ```ts
 interface PersistOptions {
   // Filter which stores to persist
-  filter?: (spec: StoreSpec) => boolean;
+  filter?: (context: StoreMiddlewareContext) => boolean;
+  
+  // Filter which fields to persist (for multi-storage patterns)
+  fields?: (context: StoreMiddlewareContext) => string[];
   
   // Load persisted state (sync or async)
-  load?: (spec: StoreSpec) => unknown | Promise<unknown>;
+  load?: (context: StoreMiddlewareContext) => unknown | Promise<unknown>;
   
   // Save state changes
-  save?: (spec: StoreSpec, state: unknown) => void | Promise<void>;
+  save?: (context: StoreMiddlewareContext, state: unknown) => void | Promise<void>;
   
   // Handle errors
-  onError?: (spec: StoreSpec, error: unknown, operation: 'load' | 'save') => void;
+  onError?: (context: StoreMiddlewareContext, error: unknown, operation: 'load' | 'save') => void;
   
   // Force overwrite dirty state during hydration
   force?: boolean;
 }
 ```
+
+The `StoreMiddlewareContext` provides access to:
+- `spec` - The store specification
+- `meta` - MetaQuery for querying store metadata
+- `displayName` - The store's display name
 
 ## Basic Example
 
@@ -38,13 +46,13 @@ import { persistMiddleware } from 'storion/persist';
 const app = container({
   middleware: [
     persistMiddleware({
-      load: (spec) => {
-        const key = `app:${spec.displayName}`;
+      load: (ctx) => {
+        const key = `app:${ctx.spec.displayName}`;
         const data = localStorage.getItem(key);
         return data ? JSON.parse(data) : null;
       },
-      save: (spec, state) => {
-        const key = `app:${spec.displayName}`;
+      save: (ctx, state) => {
+        const key = `app:${ctx.spec.displayName}`;
         localStorage.setItem(key, JSON.stringify(state));
       },
     }),
@@ -58,24 +66,25 @@ Only persist specific stores:
 
 ```ts
 persistMiddleware({
-  filter: (spec) => spec.displayName === 'user' || spec.displayName === 'settings',
-  load: (spec) => /* ... */,
-  save: (spec, state) => /* ... */,
+  filter: (ctx) => ctx.displayName === 'user' || ctx.displayName === 'settings',
+  load: (ctx) => /* ... */,
+  save: (ctx, state) => /* ... */,
 })
 ```
 
-Or use the `applyFor` helper:
+Or use the `forStores` helper:
 
 ```ts
-import { applyFor } from 'storion';
+import { forStores } from 'storion';
 
 container({
-  middleware: [
-    applyFor('user', 'settings', persistMiddleware({
+  middleware: forStores([
+    persistMiddleware({
+      filter: (ctx) => ctx.displayName === 'user',
       load: /* ... */,
       save: /* ... */,
-    })),
-  ],
+    }),
+  ]),
 });
 ```
 
@@ -83,13 +92,13 @@ container({
 
 ```ts
 persistMiddleware({
-  load: async (spec) => {
+  load: async (ctx) => {
     const db = await openDB('app-storage');
-    return db.get('stores', spec.displayName);
+    return db.get('stores', ctx.spec.displayName);
   },
-  save: async (spec, state) => {
+  save: async (ctx, state) => {
     const db = await openDB('app-storage');
-    await db.put('stores', state, spec.displayName);
+    await db.put('stores', state, ctx.spec.displayName);
   },
 })
 ```
@@ -131,14 +140,14 @@ const userStore = store({
 
 ```ts
 persistMiddleware({
-  load: (spec) => /* ... */,
-  save: (spec, state) => /* ... */,
-  onError: (spec, error, operation) => {
-    console.error(`Persist ${operation} failed for ${spec.displayName}:`, error);
+  load: (ctx) => /* ... */,
+  save: (ctx, state) => /* ... */,
+  onError: (ctx, error, operation) => {
+    console.error(`Persist ${operation} failed for ${ctx.displayName}:`, error);
     
     if (operation === 'load') {
       // Maybe clear corrupted data
-      localStorage.removeItem(`app:${spec.displayName}`);
+      localStorage.removeItem(`app:${ctx.displayName}`);
     }
   },
 })
@@ -150,8 +159,8 @@ By default, hydration skips "dirty" properties (modified since initialization). 
 
 ```ts
 persistMiddleware({
-  load: (spec) => /* ... */,
-  save: (spec, state) => /* ... */,
+  load: (ctx) => /* ... */,
+  save: (ctx, state) => /* ... */,
   force: true,  // Always use persisted values
 })
 ```
@@ -166,14 +175,14 @@ import { debounce } from 'lodash-es';
 const debouncedSaves = new Map<string, (state: unknown) => void>();
 
 persistMiddleware({
-  load: (spec) => /* ... */,
-  save: (spec, state) => {
-    let save = debouncedSaves.get(spec.displayName);
+  load: (ctx) => /* ... */,
+  save: (ctx, state) => {
+    let save = debouncedSaves.get(ctx.displayName);
     if (!save) {
       save = debounce((s: unknown) => {
-        localStorage.setItem(`app:${spec.displayName}`, JSON.stringify(s));
+        localStorage.setItem(`app:${ctx.displayName}`, JSON.stringify(s));
       }, 300);
-      debouncedSaves.set(spec.displayName, save);
+      debouncedSaves.set(ctx.displayName, save);
     }
     save(state);
   },
@@ -192,15 +201,108 @@ const dbPromise = openDB('app-db', 1, {
 });
 
 persistMiddleware({
-  load: async (spec) => {
+  load: async (ctx) => {
     const db = await dbPromise;
-    return db.get('stores', spec.displayName);
+    return db.get('stores', ctx.spec.displayName);
   },
-  save: async (spec, state) => {
+  save: async (ctx, state) => {
     const db = await dbPromise;
-    await db.put('stores', state, spec.displayName);
+    await db.put('stores', state, ctx.spec.displayName);
   },
 })
+```
+
+## Multi-Storage Patterns
+
+Use the `fields` option combined with custom meta types to split store state across different storage backends:
+
+```ts
+import { store, container, forStores, meta } from 'storion';
+import { persistMiddleware } from 'storion/persist';
+
+// Define meta types for different storage targets
+const sessionStore = meta();  // Fields for sessionStorage
+const localStore = meta();    // Fields for localStorage
+
+// Store with fields split between storage types
+const authStore = store({
+  name: 'auth',
+  state: {
+    accessToken: '',    // Expires with browser session
+    refreshToken: '',   // Persists across sessions
+    userId: '',         // Persists across sessions
+    lastActivity: 0,    // Track for this session only
+  },
+  setup: ({ state }) => ({
+    setTokens: (access: string, refresh: string) => {
+      state.accessToken = access;
+      state.refreshToken = refresh;
+    },
+    setUserId: (id: string) => { state.userId = id; },
+    updateActivity: () => { state.lastActivity = Date.now(); },
+  }),
+  meta: [
+    // Mark which fields go where
+    sessionStore.for(['accessToken', 'lastActivity']),
+    localStore.for(['refreshToken', 'userId']),
+  ],
+});
+
+// Session storage middleware - clears when browser closes
+const sessionMiddleware = persistMiddleware({
+  filter: ({ meta }) => meta.any(sessionStore),
+  fields: ({ meta }) => meta.fields(sessionStore),
+  load: (ctx) => {
+    const data = sessionStorage.getItem(`session:${ctx.displayName}`);
+    return data ? JSON.parse(data) : null;
+  },
+  save: (ctx, state) => {
+    sessionStorage.setItem(`session:${ctx.displayName}`, JSON.stringify(state));
+  },
+});
+
+// Local storage middleware - persists across sessions
+const localMiddleware = persistMiddleware({
+  filter: ({ meta }) => meta.any(localStore),
+  fields: ({ meta }) => meta.fields(localStore),
+  load: (ctx) => {
+    const data = localStorage.getItem(`local:${ctx.displayName}`);
+    return data ? JSON.parse(data) : null;
+  },
+  save: (ctx, state) => {
+    localStorage.setItem(`local:${ctx.displayName}`, JSON.stringify(state));
+  },
+});
+
+// Apply both middlewares
+const app = container({
+  middleware: forStores([sessionMiddleware, localMiddleware]),
+});
+```
+
+This pattern enables:
+- **Security**: Store sensitive tokens in sessionStorage (cleared on browser close)
+- **User experience**: Keep refresh tokens in localStorage for seamless re-authentication
+- **Flexibility**: Each middleware only handles its designated fields
+- **Composability**: Same store can have fields persisted to different backends
+
+### Combining with notPersisted
+
+The `fields` option works alongside `notPersisted` meta. Fields marked as `notPersisted` are excluded even if they match the `fields` filter:
+
+```ts
+const mixedStore = store({
+  name: 'mixed',
+  state: {
+    publicData: '',
+    sensitiveData: '',
+  },
+  meta: [
+    sessionStore.for(['publicData', 'sensitiveData']),
+    notPersisted.for('sensitiveData'),  // Excluded despite being in sessionStore
+  ],
+});
+// Only publicData will be persisted
 ```
 
 ## See Also

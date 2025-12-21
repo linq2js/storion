@@ -131,19 +131,67 @@ interface MetaType<TValue> {
 
 ## MetaQuery API
 
+The `MetaQuery` interface provides methods to query metadata:
+
 ```ts
-interface MetaQuery<TValue> {
-  // Get store-level value
-  store: TValue | undefined;
+interface MetaQuery {
+  // Default: returns first matching value (same as single())
+  <TValue>(type: MetaType<TValue>): MetaInfo<TValue>;
   
-  // Get all field values
-  fields: Record<string, TValue>;
+  // Get first matching value
+  single<TValue>(type: MetaType<TValue>): MetaInfo<TValue>;
   
-  // Query methods
-  single(field: string): TValue | undefined;
-  all(): Record<string, TValue>;
-  any(): boolean;
+  // Get all matching values as arrays
+  all<TValue>(type: MetaType<TValue>): AllMetaInfo<TValue>;
+  
+  // Check if any of the types exist
+  any(...types: MetaType<any>[]): boolean;
+  
+  // Get field names with a specific meta type
+  fields<TValue>(
+    type: MetaType<TValue>,
+    predicate?: (value: TValue) => boolean
+  ): string[];
 }
+
+interface MetaInfo<TValue> {
+  store: TValue | undefined;              // Store-level value
+  fields: Record<string, TValue>;         // Field-level values
+}
+
+interface AllMetaInfo<TValue> {
+  store: TValue[];                        // All store-level values
+  fields: Record<string, TValue[]>;       // All field-level values
+}
+```
+
+### fields() Method
+
+Get all field names that have a specific meta type. Useful for multi-storage patterns:
+
+```ts
+const sessionStore = meta();
+const localStore = meta();
+
+const authStore = store({
+  name: 'auth',
+  state: { token: '', refreshToken: '', userId: '' },
+  meta: [
+    sessionStore.for(['token']),
+    localStore.for(['refreshToken', 'userId']),
+  ],
+});
+
+// In middleware
+const sessionFields = ctx.meta.fields(sessionStore);
+// Returns: ['token']
+
+const localFields = ctx.meta.fields(localStore);
+// Returns: ['refreshToken', 'userId']
+
+// With predicate filter
+const priority = meta<number>();
+const highPriorityFields = ctx.meta.fields(priority, (v) => v > 5);
 ```
 
 ## Real-World Examples

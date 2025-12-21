@@ -67,19 +67,18 @@ export function store<
     );
   } as StoreSpec<TState, TActions>;
 
-  const metaEntries = Array.isArray(options.meta)
-    ? options.meta
-    : options.meta
-    ? [options.meta]
-    : [];
-
   // Assign properties to make it a valid StoreSpec
   // Note: we use displayName instead of name since name is a reserved function property
   Object.defineProperties(spec, {
     [STORION_TYPE]: { value: "store.spec", enumerable: false },
     displayName: { value: displayName, enumerable: true, writable: false },
     options: { value: options, enumerable: true, writable: false },
-    meta: { value: metaEntries, enumerable: true, writable: false },
+    meta: { value: options.meta, enumerable: true, writable: false },
+    fields: {
+      value: Object.keys(options.state as object),
+      enumerable: true,
+      writable: false,
+    },
   });
 
   return spec;

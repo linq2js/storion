@@ -336,7 +336,9 @@ export interface StoreSpec<
   /** Store options (state, setup, lifetime, etc.) */
   readonly options: StoreOptions<TState, TActions>;
 
-  meta?: MetaEntry<keyof TState, any>[];
+  readonly fields: string[];
+
+  readonly meta?: MetaEntry<keyof TState, any> | MetaEntry<keyof TState, any>[];
 
   /**
    * Factory function - creates a new store instance.
@@ -1547,4 +1549,13 @@ export type MetaQuery = {
    * Returns true if at least one meta type is found.
    */
   any(...types: MetaType<any, any[], any>[]): boolean;
+
+  /**
+   * Get all fields that have the specified meta type.
+   * Returns an array of field names.
+   */
+  fields<TValue>(
+    type: MetaType<any, any[], TValue>,
+    predicate?: (value: TValue) => boolean
+  ): string[];
 };

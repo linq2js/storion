@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { store, container, forStores } from "../index";
+import { store, container, forStores, meta } from "../index";
 import { persistMiddleware, notPersisted } from "./persist";
 
 describe("persistMiddleware", () => {
@@ -917,6 +917,166 @@ describe("persistMiddleware", () => {
         expect(save.mock.calls[save.mock.calls.length - 1][1]).toEqual({
           name: "updated",
         });
+      });
+    });
+
+    describe("fields option for multi-storage patterns", () => {
+      it("should support multiple persist middleware with different storage targets", () => {
+        // Meta types to mark fields for different storage
+        const sessionStore = meta();
+        const localStore = meta();
+
+        const sessionSave = vi.fn();
+        const localSave = vi.fn();
+
+        // Store with fields split between session and local storage
+        const authStore = store({
+          name: "auth",
+          state: {
+            accessToken: "", // session storage - expires with browser
+            refreshToken: "", // local storage - persists
+            userId: "", // local storage - persists
+            lastActivity: 0, // session storage - track for this session
+          },
+          setup: ({ state }) => ({
+            setTokens: (access: string, refresh: string) => {
+              state.accessToken = access;
+              state.refreshToken = refresh;
+            },
+            setUserId: (id: string) => {
+              state.userId = id;
+            },
+            updateActivity: () => {
+              state.lastActivity = Date.now();
+            },
+          }),
+          meta: [
+            sessionStore.for(["accessToken", "lastActivity"]),
+            localStore.for(["refreshToken", "userId"]),
+          ],
+        });
+
+        // Session storage middleware
+        const sessionMiddleware = persistMiddleware({
+          filter: ({ meta }) => meta.any(sessionStore),
+          fields: ({ meta }) => meta.fields(sessionStore),
+          save: sessionSave,
+        });
+
+        // Local storage middleware
+        const localMiddleware = persistMiddleware({
+          filter: ({ meta }) => meta.any(localStore),
+          fields: ({ meta }) => meta.fields(localStore),
+          save: localSave,
+        });
+
+        const app = container({
+          middleware: forStores([sessionMiddleware, localMiddleware]),
+        });
+
+        const instance = app.get(authStore);
+
+        // Set all values
+        instance.actions.setTokens("access123", "refresh456");
+        instance.actions.setUserId("user1");
+
+        // Session storage should only save accessToken and lastActivity
+        const sessionCalls = sessionSave.mock.calls;
+        expect(sessionCalls.length).toBeGreaterThan(0);
+        const lastSessionCall = sessionCalls[sessionCalls.length - 1][1];
+        expect(Object.keys(lastSessionCall).sort()).toEqual([
+          "accessToken",
+          "lastActivity",
+        ]);
+        expect(lastSessionCall.accessToken).toBe("access123");
+
+        // Local storage should only save refreshToken and userId
+        const localCalls = localSave.mock.calls;
+        expect(localCalls.length).toBeGreaterThan(0);
+        const lastLocalCall = localCalls[localCalls.length - 1][1];
+        expect(Object.keys(lastLocalCall).sort()).toEqual([
+          "refreshToken",
+          "userId",
+        ]);
+        expect(lastLocalCall.refreshToken).toBe("refresh456");
+        expect(lastLocalCall.userId).toBe("user1");
+      });
+
+      it("should skip middleware if fields option returns empty array", () => {
+        const sessionStore = meta();
+        const save = vi.fn();
+
+        // Store without sessionStore meta
+        const regularStore = store({
+          name: "regular",
+          state: { count: 0 },
+          setup: ({ state }) => ({
+            increment: () => {
+              state.count++;
+            },
+          }),
+        });
+
+        const sessionMiddleware = persistMiddleware({
+          filter: ({ meta }) => meta.any(sessionStore),
+          fields: ({ meta }) => meta.fields(sessionStore),
+          save,
+        });
+
+        const app = container({
+          middleware: forStores([sessionMiddleware]),
+        });
+
+        const instance = app.get(regularStore);
+        instance.actions.increment();
+
+        // Filter should skip this store entirely (no sessionStore meta)
+        expect(save).not.toHaveBeenCalled();
+      });
+
+      it("should combine fields option with notPersisted meta", () => {
+        const sessionStore = meta();
+        const save = vi.fn();
+
+        const mixedStore = store({
+          name: "mixed",
+          state: {
+            publicData: "",
+            sensitiveData: "",
+            tempData: "",
+          },
+          setup: ({ state }) => ({
+            setPublic: (v: string) => {
+              state.publicData = v;
+            },
+            setSensitive: (v: string) => {
+              state.sensitiveData = v;
+            },
+          }),
+          meta: [
+            sessionStore.for(["publicData", "sensitiveData"]),
+            notPersisted.for("sensitiveData"), // Also marked as notPersisted
+          ],
+        });
+
+        const sessionMiddleware = persistMiddleware({
+          filter: ({ meta }) => meta.any(sessionStore),
+          fields: ({ meta }) => meta.fields(sessionStore),
+          save,
+        });
+
+        const app = container({
+          middleware: forStores([sessionMiddleware]),
+        });
+
+        const instance = app.get(mixedStore);
+        instance.actions.setPublic("hello");
+        instance.actions.setSensitive("secret");
+
+        // Only publicData should be saved
+        // sensitiveData is in sessionStore but also in notPersisted
+        const lastCall = save.mock.calls[save.mock.calls.length - 1][1];
+        expect(lastCall).toEqual({ publicData: "hello" });
       });
     });
   });

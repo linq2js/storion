@@ -75,6 +75,33 @@ export function createMetaQuery(
     return result as unknown as AllMetaInfo<any, TValue>;
   };
 
+  /**
+   * Get all field names that have the specified meta type.
+   * Optionally filter by a predicate on the meta value.
+   *
+   * @param type - The meta type to query
+   * @param predicate - Optional filter function for the meta value
+   * @returns Array of field names that have the meta type
+   */
+  const fields = <TValue>(
+    type: AnyFunc,
+    predicate?: (value: TValue) => boolean
+  ): string[] => {
+    const result = new Set<string>();
+    for (const entry of entryArray) {
+      if (entry.type !== type) continue;
+      if (entry.fields && entry.fields.length > 0) {
+        if (!predicate || predicate(entry.value as TValue)) {
+          // Add all fields from the entry, not just the first one
+          for (const field of entry.fields) {
+            result.add(field as string);
+          }
+        }
+      }
+    }
+    return Array.from(result);
+  };
+
   // Any check: returns true if any type matches
   const any = (...types: AnyFunc[]): boolean => {
     return entryArray.some((entry) => types.includes(entry.type));
@@ -85,7 +112,7 @@ export function createMetaQuery(
   const query = Object.assign(
     <TValue>(type: AnyFunc): MetaInfo<any, TValue> =>
       single(type) as MetaInfo<any, TValue>,
-    { single, all, any }
+    { single, all, any, fields }
   );
 
   return query;
