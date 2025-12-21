@@ -70,12 +70,7 @@ export { container } from "./core/container";
 export { batch, untrack } from "./core/tracking";
 
 // Resolver (factory-based DI)
-export {
-  createResolver,
-  when,
-  createLoggingMiddleware,
-  createValidationMiddleware,
-} from "./core/createResolver";
+export { createResolver } from "./core/createResolver";
 
 // Fine-grained reactivity
 export { pick } from "./core/pick";

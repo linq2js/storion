@@ -1,12 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  createResolver,
-  Factory,
-  Middleware,
-  when,
-  createLoggingMiddleware,
-  createValidationMiddleware,
-} from "./createResolver";
+import { createResolver } from "./createResolver";
+import type { Factory, Middleware, Resolver } from "../types";
 
 describe("createResolver", () => {
   describe("get", () => {
@@ -74,34 +68,6 @@ describe("createResolver", () => {
 
       expect(cached.id).toBe(2);
       expect(stillCached).toBe(cached);
-    });
-
-    it("should support parameterized factories with additional arguments", () => {
-      const createLogger = (
-        _resolver: Resolver,
-        namespace: string,
-        level: number
-      ) => ({
-        namespace,
-        level,
-        log: (msg: string) => `[${namespace}:${level}] ${msg}`,
-      });
-
-      const resolver = createResolver();
-
-      const logger1 = resolver.create(createLogger, "auth", 1);
-      const logger2 = resolver.create(createLogger, "api", 2);
-
-      expect(logger1.namespace).toBe("auth");
-      expect(logger1.level).toBe(1);
-      expect(logger1.log("test")).toBe("[auth:1] test");
-
-      expect(logger2.namespace).toBe("api");
-      expect(logger2.level).toBe(2);
-      expect(logger2.log("test")).toBe("[api:2] test");
-
-      // Each call creates a fresh instance
-      expect(logger1).not.toBe(logger2);
     });
 
     it("should pass resolver as first argument to parameterized factory", () => {
@@ -458,86 +424,6 @@ describe("createResolver", () => {
       resolver.create(factory);
 
       expect(calls).toEqual(["middleware", "middleware"]);
-    });
-  });
-
-  describe("when helper", () => {
-    it("should apply middleware only when predicate matches", () => {
-      const calls: string[] = [];
-
-      // Use named function declarations
-      function namedFactory() {
-        return "named";
-      }
-      function anonFactory() {
-        return "anon";
-      }
-
-      const middleware = when(
-        (factory) => factory.name === "namedFactory",
-        (ctx) => {
-          calls.push("applied");
-          return ctx.next();
-        }
-      );
-
-      const resolver = createResolver({ middleware: [middleware] });
-
-      resolver.get(namedFactory);
-      resolver.get(anonFactory);
-
-      expect(calls).toEqual(["applied"]); // Only called for namedFactory
-    });
-  });
-
-  describe("createLoggingMiddleware", () => {
-    it("should log factory creation", () => {
-      const logs: string[] = [];
-      const originalLog = console.log;
-      console.log = (...args) => logs.push(args.join(" "));
-
-      const middleware = createLoggingMiddleware("Test");
-      const resolver = createResolver({ middleware: [middleware] });
-
-      // Use a named function instead of assigning to .name
-      function myFactory() {
-        return 42;
-      }
-
-      resolver.get(myFactory);
-
-      console.log = originalLog;
-
-      expect(logs[0]).toContain("[Test] Creating: myFactory");
-      expect(logs[1]).toContain("[Test] Created: myFactory");
-    });
-  });
-
-  describe("createValidationMiddleware", () => {
-    it("should validate factory result", () => {
-      const middleware = createValidationMiddleware((result) => {
-        if (result === null) {
-          throw new Error("Result cannot be null");
-        }
-      });
-
-      const resolver = createResolver({ middleware: [middleware] });
-      const nullFactory: Factory<null> = () => null;
-
-      expect(() => resolver.get(nullFactory)).toThrow("Result cannot be null");
-    });
-
-    it("should pass valid results through", () => {
-      const middleware = createValidationMiddleware((result) => {
-        if (typeof result !== "number") {
-          throw new Error("Must be number");
-        }
-      });
-
-      const resolver = createResolver({ middleware: [middleware] });
-      const factory: Factory<number> = () => 42;
-
-      expect(resolver.get(factory)).toBe(42);
     });
   });
 

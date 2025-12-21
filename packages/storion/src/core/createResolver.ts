@@ -30,7 +30,6 @@
 import type {
   Factory,
   FactoryMiddlewareContext,
-  Middleware,
   Resolver,
   ResolverOptions,
   StoreInstance,
@@ -40,15 +39,6 @@ import type {
 import { isSpec } from "../is";
 import { tryDispose } from "./disposable";
 import { createMetaQuery } from "../meta/createMetaQuery";
-
-// Re-export types for convenience
-export type {
-  Factory,
-  Middleware,
-  MiddlewareContext,
-  Resolver,
-  ResolverOptions,
-} from "../types";
 
 /**
  * Extract displayName from a factory function.
@@ -247,78 +237,4 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
   };
 
   return resolver;
-}
-
-// =============================================================================
-// Built-in Middleware Helpers
-// =============================================================================
-
-/**
- * Create a middleware that only applies to factories matching a predicate.
- *
- * @example
- * ```ts
- * const storeOnlyMiddleware = when(
- *   (factory) => is(factory, "store.spec"),
- *   (ctx) => {
- *     console.log("Creating store:", ctx.factory.name);
- *     return ctx.next();
- *   }
- * );
- * ```
- */
-export function when(
-  predicate: (factory: Factory) => boolean,
-  middleware: Middleware
-): Middleware {
-  return (ctx) => {
-    if (predicate(ctx.factory)) {
-      return middleware(ctx);
-    }
-    return ctx.next();
-  };
-}
-
-/**
- * Create a logging middleware for debugging.
- *
- * @example
- * ```ts
- * const app = createResolver({
- *   middleware: [createLoggingMiddleware("App")],
- * });
- * ```
- */
-export function createLoggingMiddleware(prefix = "Resolver"): Middleware {
-  return (ctx) => {
-    const name = ctx.factory.name || "anonymous";
-    console.log(`[${prefix}] Creating: ${name}`);
-    const start = performance.now();
-    const result = ctx.next();
-    const duration = (performance.now() - start).toFixed(2);
-    console.log(`[${prefix}] Created: ${name} (${duration}ms)`);
-    return result;
-  };
-}
-
-/**
- * Create a middleware that validates factory results.
- *
- * @example
- * ```ts
- * const validateMiddleware = createValidationMiddleware((result) => {
- *   if (result === null || result === undefined) {
- *     throw new Error("Factory returned null/undefined");
- *   }
- * });
- * ```
- */
-export function createValidationMiddleware(
-  validate: (result: unknown, factory: Factory) => void
-): Middleware {
-  return (ctx) => {
-    const result = ctx.next();
-    validate(result, ctx.factory);
-    return result;
-  };
 }
