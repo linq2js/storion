@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import type { ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Plugin to watch storion source and trigger HMR
 function watchStorion() {
