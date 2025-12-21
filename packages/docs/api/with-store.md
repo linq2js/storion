@@ -207,5 +207,4 @@ function TodoList() {
 ## See Also
 
 - [useStore()](/api/use-store) - Hook alternative
-- [createWithStore()](/api/create-with-store) - Custom `withStore` factory
 
