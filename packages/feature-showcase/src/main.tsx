@@ -17,25 +17,22 @@ window.addEventListener("popstate", () => {
   }
 });
 
-// Set default middleware for all containers (in development)
-if (import.meta.env.DEV) {
-  container.defaults({
-    pre: [devtoolsMiddleware({ maxHistory: 50 })],
-  });
+// Always show devtools panel in this demo (even in production)
+// This demonstrates the devtools capabilities to users
+mountDevtoolsPanel({
+  position: "left",
+  size: 360,
+});
 
-  mountDevtoolsPanel({
-    position: "left",
-    size: 360,
-  });
-}
-
-// Create container with persist middleware
+// Create container with middleware
 const app = container({
   middleware: [
+    // DevTools middleware for state inspection
+    devtoolsMiddleware({ maxHistory: 50 }),
+    // Persist middleware for counter store
     applyFor(
       "counter",
       persistMiddleware({
-        // Only persist counter store for demo
         load: (spec) => {
           const key = `storion:${spec.displayName}`;
           const data = localStorage.getItem(key);
