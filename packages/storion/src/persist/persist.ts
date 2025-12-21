@@ -203,8 +203,10 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
     // Check if all state fields are excluded - if so, skip persistence entirely
     // This is effectively the same as store-level notPersisted()
     if (excludedFields.size > 0) {
-      const stateKeys = Object.keys(instance.dehydrate());
-      const allExcluded = stateKeys.every((key) => excludedFields.has(key));
+      const stateFields = context.spec.fields as string[];
+      const allExcluded =
+        stateFields.length > 0 &&
+        stateFields.every((field) => excludedFields.has(field));
       if (allExcluded) {
         // All fields are excluded, nothing to persist
         return instance;
