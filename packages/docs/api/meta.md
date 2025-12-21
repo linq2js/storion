@@ -67,6 +67,35 @@ meta: [
 ]
 ```
 
+## Naming Conventions
+
+Follow these conventions for clear, consistent meta type names:
+
+| Category | Pattern | Examples |
+|----------|---------|----------|
+| Boolean flags | Adjective/past participle | `persisted`, `deprecated`, `hidden`, `cached` |
+| Exclusions | `not` + adjective | `notPersisted`, `notLogged`, `notCached` |
+| Storage targets | noun + `Store` | `sessionStore`, `localStore`, `cloudStore` |
+| Validation | verb/noun | `validate`, `minLength`, `pattern`, `sanitize` |
+| Config values | noun | `priority`, `debounce`, `throttle`, `ttl` |
+| Features | `with` + feature or `-able` | `withDevtools`, `withHistory`, `loggable` |
+
+```ts
+// ✅ Good naming
+const persisted = meta();           // Boolean flag
+const notPersisted = meta();        // Exclusion
+const sessionStore = meta();        // Storage target
+const localStore = meta();          // Storage target
+const validate = meta<string>();    // Validation rule
+const priority = meta<number>();    // Config value
+const withDevtools = meta();        // Feature flag
+
+// ❌ Avoid unclear names
+const p = meta();                   // Too short
+const persistMeta = meta();         // Redundant "Meta" suffix
+const PERSIST = meta();             // Not camelCase
+```
+
 ## Querying Meta
 
 ### In Middleware
