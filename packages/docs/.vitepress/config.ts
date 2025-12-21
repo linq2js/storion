@@ -11,7 +11,6 @@ export default defineConfig({
     /\/examples\/(todo|async-data|form)/,
     /\/guide\/(actions|dependency-injection|middleware|devtools|meta)/,
     /\/guide\/react\/(use-local-store|with-store|provider)/,
-    /\/api\//,
   ],
   
   head: [
