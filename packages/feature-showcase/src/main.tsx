@@ -8,6 +8,15 @@ import { persistMiddleware } from "storion/persist";
 import { App } from "./App";
 import "./index.css";
 
+// Handle browser back/forward navigation outside this demo's scope
+// This is needed because each demo is a separate SPA
+const BASE_PATH = import.meta.env.BASE_URL || "/";
+window.addEventListener("popstate", () => {
+  if (!window.location.pathname.startsWith(BASE_PATH)) {
+    window.location.reload();
+  }
+});
+
 // Set default middleware for all containers (in development)
 if (import.meta.env.DEV) {
   container.defaults({
