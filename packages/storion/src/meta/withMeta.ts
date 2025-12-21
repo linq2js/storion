@@ -1,4 +1,4 @@
-import { MetaEntry } from "../types";
+import { Factory, MetaEntry } from "../types";
 
 /**
  * Attach metadata to a service or factory function.
@@ -38,22 +38,22 @@ import { MetaEntry } from "../types";
  * // In middleware, ctx.meta includes both factory.meta and spec.meta
  * ```
  *
- * @param service - The factory function to attach meta to
+ * @param factory - The factory function to attach meta to
  * @param meta - Single MetaEntry or array of MetaEntry
  * @returns The same factory function with `.meta` property attached
  */
 export function withMeta<
-  TArgs extends any[],
-  TValue,
-  TField extends TValue extends object ? keyof TValue : never
+  TFactory extends Factory,
+  TField extends ReturnType<TFactory> extends object
+    ? keyof ReturnType<TFactory>
+    : any
 >(
-  service: (...args: TArgs) => TValue,
-  meta: MetaEntry<TField, TValue> | MetaEntry<TField, TValue>[]
-): {
-  (...args: TArgs): TValue;
-  meta: MetaEntry<TField, TValue>[];
+  factory: TFactory,
+  meta: MetaEntry<TField, any> | MetaEntry<TField, any>[]
+): TFactory & {
+  meta: MetaEntry<TField, any>[];
 } {
-  return Object.assign(service, {
+  return Object.assign(factory, {
     meta: Array.isArray(meta) ? meta : [meta],
   });
 }

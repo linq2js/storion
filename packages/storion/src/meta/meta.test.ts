@@ -123,28 +123,15 @@ describe("meta", () => {
     });
   });
 
-  describe("createMetaQuery - single() explicit", () => {
-    it("should work same as default call", () => {
-      const persist = meta();
-      const entries = [persist()];
-      const query = createMetaQuery(entries);
-
-      const result = query.single(persist);
-
-      expect(result.store).toBe(true);
-      expect(result.fields).toEqual({});
-    });
-  });
-
-  describe("createMetaQuery - multiple()", () => {
+  describe("createMetaQuery - all()", () => {
     it("should return arrays of all values", () => {
       const persist = meta();
       const sync = meta((interval: number) => interval);
       const entries = [persist(), sync(5000)];
       const query = createMetaQuery(entries);
 
-      expect(query.multiple(persist).store).toEqual([true]);
-      expect(query.multiple(sync).store).toEqual([5000]);
+      expect(query.all(persist).store).toEqual([true]);
+      expect(query.all(sync).store).toEqual([5000]);
     });
 
     it("should separate store-level and field-level meta", () => {
@@ -156,7 +143,7 @@ describe("meta", () => {
       ];
       const query = createMetaQuery(entries);
 
-      const result = query.multiple(validate);
+      const result = query.all(validate);
 
       expect(result.store).toEqual(["store-rule"]);
       expect(result.fields.email).toEqual(["email-format"]);
@@ -169,7 +156,7 @@ describe("meta", () => {
       const entries = [persist()];
       const query = createMetaQuery(entries);
 
-      const result = query.multiple(other);
+      const result = query.all(other);
 
       expect(result.store).toEqual([]);
       expect(result.fields).toEqual({});
@@ -185,7 +172,7 @@ describe("meta", () => {
       ];
       const query = createMetaQuery(entries);
 
-      const result = query.multiple(tag);
+      const result = query.all(tag);
 
       expect(result.store).toEqual(["important", "critical"]);
       expect(result.fields.value).toEqual(["numeric", "validated"]);
@@ -195,7 +182,7 @@ describe("meta", () => {
       const persist = meta();
       const query = createMetaQuery([]);
 
-      const result = query.multiple(persist);
+      const result = query.all(persist);
 
       expect(result.store).toEqual([]);
       expect(result.fields).toEqual({});
@@ -213,11 +200,11 @@ describe("meta", () => {
       ];
       const query = createMetaQuery(entries);
 
-      expect(query.multiple(persist).store).toEqual([true]);
-      expect(query.multiple(priority).store).toEqual([1]);
-      expect(query.multiple(validate).store).toEqual([]);
-      expect(query.multiple(validate).fields.email).toEqual(["email-format"]);
-      expect(query.multiple(validate).fields.count).toEqual(["positive"]);
+      expect(query.all(persist).store).toEqual([true]);
+      expect(query.all(priority).store).toEqual([1]);
+      expect(query.all(validate).store).toEqual([]);
+      expect(query.all(validate).fields.email).toEqual(["email-format"]);
+      expect(query.all(validate).fields.count).toEqual(["positive"]);
     });
   });
 
@@ -284,20 +271,6 @@ describe("meta", () => {
       expect(myStore.meta![1].value).toBe(1);
     });
 
-    it("should normalize single meta entry to array", () => {
-      const persist = meta();
-
-      const myStore = store({
-        name: "test",
-        state: { count: 0 },
-        setup: () => ({}),
-        meta: persist(),
-      });
-
-      expect(myStore.meta).toHaveLength(1);
-      expect(myStore.meta![0].value).toBe(true);
-    });
-
     it("should have empty array when no meta", () => {
       const myStore = store({
         name: "test",
@@ -324,7 +297,7 @@ describe("meta", () => {
     it("should normalize single meta entry to array", () => {
       const persist = meta();
       const myService = withMeta(
-        (resolver) => ({ doSomething: () => {} }),
+        (_resolver) => ({ doSomething: () => {} }),
         persist()
       );
 
@@ -333,10 +306,7 @@ describe("meta", () => {
 
     it("should preserve function behavior", () => {
       const persist = meta();
-      const myService = withMeta(
-        () => ({ value: 42 }),
-        [persist()]
-      );
+      const myService = withMeta(() => ({ value: 42 }), [persist()]);
 
       const result = myService();
       expect(result.value).toBe(42);
@@ -373,10 +343,7 @@ describe("meta", () => {
       const persist = meta();
       const logMeta = vi.fn();
 
-      const myService = withMeta(
-        (resolver) => ({ value: 42 }),
-        [persist()]
-      );
+      const myService = withMeta((resolver) => ({ value: 42 }), [persist()]);
 
       const app = container({
         middleware: [

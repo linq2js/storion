@@ -312,9 +312,9 @@ const instance = stores.get(testStore);
 {
   const storeWithMeta = store({
     state: { count: 0 },
-    meta: {
+    meta: [
       // StoreMeta is empty by default, but extensible
-    },
+    ],
     setup: () => ({}),
   });
 
@@ -403,7 +403,10 @@ const instance = stores.get(testStore);
   });
 
   // Use HOC with functional component
-  const DataList: FC<{ items: string[]; count: number }> = ({ items, count }) => {
+  const DataList: FC<{ items: string[]; count: number }> = ({
+    items,
+    count,
+  }) => {
     items satisfies string[];
     count satisfies number;
     return null;

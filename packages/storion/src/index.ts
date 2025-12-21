@@ -48,8 +48,6 @@ export {
   // Meta types
   type MetaType,
   type MetaInfo,
-  type SingleMetaInfo,
-  type MultipleMetaInfo,
 } from "./types";
 
 // Type guards

@@ -1,31 +1,27 @@
-import {
-  AnyFunc,
-  MetaEntry,
-  MetaInfo,
-  MetaQuery,
-  MultipleMetaInfo,
-  SingleMetaInfo,
-} from "../types";
+import { AllMetaInfo, AnyFunc, MetaEntry, MetaInfo, MetaQuery } from "../types";
 
 /**
  * Creates a MetaQuery object for querying store metadata.
  *
  * @param entries - Array of MetaEntry objects from store options
- * @returns MetaQuery interface with single/multiple/any methods
+ * @returns MetaQuery interface with single/all/any methods
  */
-export function createMetaQuery<TField>(
-  entries: MetaEntry[]
-): MetaQuery<TField> {
+export function createMetaQuery(
+  entries: undefined | MetaEntry | MetaEntry[]
+): MetaQuery {
+  const entryArray = Array.isArray(entries)
+    ? entries
+    : entries
+    ? [entries]
+    : [];
   // Single/default strategy: returns first value
-  const single = <TValue>(
-    type: AnyFunc
-  ): SingleMetaInfo<TField & string, TValue> => {
+  const single = <TValue>(type: AnyFunc): MetaInfo<any, TValue> => {
     const result: {
       store: TValue | undefined;
       fields: Record<string, TValue | undefined>;
     } = { store: undefined, fields: {} };
 
-    for (const entry of entries) {
+    for (const entry of entryArray) {
       if (entry.type !== type) continue;
 
       if (entry.field) {
@@ -42,19 +38,17 @@ export function createMetaQuery<TField>(
       }
     }
 
-    return result as SingleMetaInfo<TField & string, TValue>;
+    return result as MetaInfo<any, TValue>;
   };
 
-  // Multiple strategy: returns arrays
-  const multiple = <TValue>(
-    type: AnyFunc
-  ): MultipleMetaInfo<TField & string, TValue> => {
+  // All strategy: returns arrays of all values
+  const all = <TValue>(type: AnyFunc): AllMetaInfo<any, TValue> => {
     const result: {
       store: TValue[];
       fields: Record<string, TValue[]>;
     } = { store: [], fields: {} };
 
-    for (const entry of entries) {
+    for (const entry of entryArray) {
       if (entry.type !== type) continue;
 
       if (entry.field) {
@@ -70,21 +64,21 @@ export function createMetaQuery<TField>(
       }
     }
 
-    return result as unknown as MultipleMetaInfo<TField & string, TValue>;
+    return result as unknown as AllMetaInfo<any, TValue>;
   };
 
   // Any check: returns true if any type matches
   const any = (...types: AnyFunc[]): boolean => {
-    return entries.some((entry) => types.includes(entry.type));
+    return entryArray.some((entry) => types.includes(entry.type));
   };
 
   // Create the MetaQuery object
   // Default call uses single strategy
   const query = Object.assign(
-    <TValue>(type: AnyFunc): MetaInfo<TField & string, TValue> =>
-      single(type) as MetaInfo<TField & string, TValue>,
-    { single, multiple, any }
+    <TValue>(type: AnyFunc): MetaInfo<any, TValue> =>
+      single(type) as MetaInfo<any, TValue>,
+    { single, all, any }
   );
 
-  return query as MetaQuery<TField>;
+  return query;
 }

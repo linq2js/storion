@@ -18,7 +18,6 @@ import {
   type Equality,
   type AutoDisposeOptions,
 } from "../types";
-import { createMetaQuery } from "../meta/createMetaQuery";
 
 import { produce } from "immer";
 import { createStoreContext } from "./storeContext";

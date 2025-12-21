@@ -941,7 +941,10 @@ export interface ContainerOptions {
  *
  * StoreSpec is a specialized factory that returns StoreInstance.
  */
-export type Factory<T = any> = (resolver: Resolver) => T;
+export type Factory<T = any> = {
+  (resolver: Resolver): T;
+  meta?: MetaEntry | MetaEntry[];
+};
 
 // =============================================================================
 // Middleware Context (Discriminated Union)
@@ -988,7 +991,7 @@ interface BaseMiddlewareContext {
    * };
    * ```
    */
-  readonly meta: MetaQuery<any>;
+  readonly meta: MetaQuery;
 }
 
 /**
@@ -1003,7 +1006,7 @@ export interface FactoryMiddlewareContext extends BaseMiddlewareContext {
  * Context for store middleware.
  * `spec` and `displayName` are always present.
  */
-export interface StoreMiddlewareContext {
+export interface StoreMiddlewareContext extends BaseMiddlewareContext {
   /** Discriminant - this is a store */
   readonly type: "store";
 
@@ -1011,16 +1014,10 @@ export interface StoreMiddlewareContext {
   readonly spec: StoreSpec;
 
   /** The factory being invoked (same as spec) */
-  readonly factory: Factory;
-
-  /** The resolver instance */
-  readonly resolver: Resolver;
+  readonly factory: (resolver: Resolver) => StoreInstance;
 
   /** Call the next middleware or the factory itself */
   readonly next: () => StoreInstance;
-
-  /** Store display name (always present for stores) */
-  readonly displayName: string;
 }
 
 /**
@@ -1460,8 +1457,8 @@ export type MetaEntry<TField = unknown, TValue = unknown> = {
  * userStore.meta(persist).fields.name;   // true (or undefined)
  * userStore.meta(priority).store;        // 1 (or undefined)
  *
- * // Query multiple values
- * userStore.meta.multiple(persist).store; // [true]
+ * // Query all values
+ * userStore.meta.all(persist).store; // [true]
  * ```
  */
 export type MetaType<TField, TArgs extends any[], TValue> = {
@@ -1494,16 +1491,10 @@ export interface MetaInfo<TField extends string | symbol, TValue>
   extends MetaInfoBase<TField, TValue, TValue | undefined> {}
 
 /**
- * Alias for MetaInfo - explicit single mode.
- */
-export interface SingleMetaInfo<TField extends string | symbol, TValue>
-  extends MetaInfoBase<TField, TValue, TValue> {}
-
-/**
- * Multiple-value metadata info.
+ * All-values metadata info.
  * Returns arrays of all matching values.
  */
-export interface MultipleMetaInfo<TField extends string | symbol, TValue>
+export interface AllMetaInfo<TField extends string | symbol, TValue>
   extends MetaInfoBase<TField, readonly TValue[], readonly TValue[]> {}
 
 /**
@@ -1527,39 +1518,26 @@ export interface MultipleMetaInfo<TField extends string | symbol, TValue>
  * // Explicit single mode (same as default)
  * userStore.meta.single(persist).store;   // true
  *
- * // Multiple mode: returns all values as arrays
- * userStore.meta.multiple(priority).store; // [1, 2]
+ * // All mode: returns all values as arrays
+ * userStore.meta.all(priority).store; // [1, 2]
  *
  * // Check if any meta type exists
  * userStore.meta.any(persist);            // true
  * userStore.meta.any(persist, priority);  // true
  * ```
  */
-export type MetaQuery<TField> = {
+export type MetaQuery = {
   /**
    * Get metadata using first-value strategy (default).
    * Returns the first matching value for store and each field.
    */
-  <TValue>(type: MetaType<any, any[], TValue>): MetaInfo<
-    TField & string,
-    TValue
-  >;
+  <TValue>(type: MetaType<any, any[], TValue>): MetaInfo<any, TValue>;
 
   /**
-   * Get metadata using single-value strategy (explicit).
-   * Same as default call - returns first matching value.
-   */
-  single<TValue>(
-    type: MetaType<any, any[], TValue>
-  ): SingleMetaInfo<TField & string, TValue>;
-
-  /**
-   * Get metadata using multiple-value strategy.
+   * Get metadata using all-values strategy.
    * Returns arrays of all matching values.
    */
-  multiple<TValue>(
-    type: MetaType<any, any[], TValue>
-  ): MultipleMetaInfo<TField & string, TValue>;
+  all<TValue>(type: MetaType<any, any[], TValue>): AllMetaInfo<any, TValue>;
 
   /**
    * Check if the store has any of the specified meta types.

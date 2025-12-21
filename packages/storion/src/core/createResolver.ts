@@ -30,7 +30,6 @@
 import type {
   Factory,
   FactoryMiddlewareContext,
-  MetaEntry,
   Middleware,
   Resolver,
   ResolverOptions,
@@ -107,15 +106,6 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
     (overrides.get(factory) as Factory<T>) ?? factory;
 
   /**
-   * Extract meta entries from factory (via withMeta) if present.
-   */
-  const extractFactoryMeta = (factory: Factory): MetaEntry[] => {
-    const meta = (factory as any).meta;
-    if (!meta) return [];
-    return Array.isArray(meta) ? meta : [meta];
-  };
-
-  /**
    * Apply middleware chain and invoke factory.
    * Detects if factory is a store spec and creates appropriate context type.
    *
@@ -127,11 +117,7 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
     const isStoreSpec = isSpec(factory);
     const displayName = extractDisplayName(factory);
 
-    // Collect meta entries from factory (withMeta) and spec (for stores)
-    const factoryMeta = extractFactoryMeta(factory);
-    const specMeta = isStoreSpec ? (factory as StoreSpec).meta ?? [] : [];
-    const allMeta = [...factoryMeta, ...specMeta];
-    const meta = createMetaQuery(allMeta);
+    const meta = createMetaQuery(factory.meta);
 
     // Build middleware chain from right to left
     // Each middleware wraps the next, with factory invocation at the end

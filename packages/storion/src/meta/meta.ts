@@ -7,8 +7,8 @@ import type { MetaType, MetaEntry } from "../types";
  * - Store level: `myMeta(value)` - applies to the entire store
  * - Field level: `myMeta.for("fieldName", value)` - applies to specific state field
  *
- * Retrieve meta via `spec.meta(type)` which returns first value (default),
- * or use `spec.meta.multiple(type)` for all values.
+ * Retrieve meta via `ctx.meta(type)` which returns first value (default),
+ * or use `ctx.meta.all(type)` for all values.
  *
  * @example Store-level meta (boolean flag)
  * ```ts
@@ -19,8 +19,8 @@ import type { MetaType, MetaEntry } from "../types";
  *   meta: [persist()],
  * });
  *
- * userStore.meta(persist).store;           // true (first value)
- * userStore.meta.multiple(persist).store;  // [true] (all values)
+ * ctx.meta(persist).store;           // true (first value)
+ * ctx.meta.all(persist).store;       // [true] (all values)
  * ```
  *
  * @example Store-level meta (with value)
@@ -32,8 +32,8 @@ import type { MetaType, MetaEntry } from "../types";
  *   meta: [priority(1), priority(2)],
  * });
  *
- * criticalStore.meta(priority).store;           // 1 (first)
- * criticalStore.meta.multiple(priority).store;  // [1, 2] (all)
+ * ctx.meta(priority).store;           // 1 (first)
+ * ctx.meta.all(priority).store;       // [1, 2] (all)
  * ```
  *
  * @example Field-level meta
