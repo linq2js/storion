@@ -1,6 +1,6 @@
 {
   "name": "storion",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Reactive stores for modern apps. Type-safe. Auto-tracked. Effortlessly composable",
   "type": "module",
   "main": "./dist/storion.js",
