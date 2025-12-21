@@ -849,5 +849,75 @@ describe("persistMiddleware", () => {
         expect(load.mock.calls[0][0].spec).toBe(storeA);
       });
     });
+
+    describe("all fields excluded", () => {
+      it("should skip persistence entirely when all fields have notPersisted", () => {
+        const load = vi.fn().mockReturnValue({ a: true, b: false });
+        const save = vi.fn();
+
+        const allExcludedStore = store({
+          name: "allExcluded",
+          state: { a: true, b: false },
+          setup: ({ state }) => ({
+            toggle: () => {
+              state.a = !state.a;
+            },
+          }),
+          meta: [notPersisted.for(["a", "b"])], // All fields excluded
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ load, save })]),
+        });
+
+        const instance = app.get(allExcludedStore);
+
+        // load should NOT be called - all fields excluded
+        expect(load).not.toHaveBeenCalled();
+
+        // State should be initial values
+        expect(instance.state.a).toBe(true);
+        expect(instance.state.b).toBe(false);
+
+        // Changes should NOT trigger save
+        instance.actions.toggle();
+        expect(save).not.toHaveBeenCalled();
+      });
+
+      it("should persist store with some fields excluded", () => {
+        const load = vi.fn().mockReturnValue({ name: "loaded" });
+        const save = vi.fn();
+
+        const partialStore = store({
+          name: "partial",
+          state: { name: "", password: "" },
+          setup: ({ state }) => ({
+            setName: (n: string) => {
+              state.name = n;
+            },
+          }),
+          meta: [notPersisted.for("password")], // Only password excluded
+        });
+
+        const app = container({
+          middleware: forStores([persistMiddleware({ load, save })]),
+        });
+
+        const instance = app.get(partialStore);
+
+        // load SHOULD be called - only one field excluded
+        expect(load).toHaveBeenCalledTimes(1);
+
+        // name should be hydrated
+        expect(instance.state.name).toBe("loaded");
+
+        // Changes should trigger save
+        instance.actions.setName("updated");
+        expect(save).toHaveBeenCalled();
+        expect(save.mock.calls[save.mock.calls.length - 1][1]).toEqual({
+          name: "updated",
+        });
+      });
+    });
   });
 });
