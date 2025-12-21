@@ -1,0 +1,167 @@
+# Workflow for updating changelog and docs on new releases
+name: Update Changelog on Release
+
+on:
+  release:
+    types: [published]
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g., 0.9.0)"
+        required: true
+      dry_run:
+        description: "Dry run (don't push changes)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from release
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            # Remove 'v' prefix if present
+            VERSION="${VERSION#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Get release date
+        id: date
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "Date: $DATE"
+
+      - name: Update CHANGELOG.md
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DATE="${{ steps.date.outputs.date }}"
+          CHANGELOG="packages/storion/CHANGELOG.md"
+          
+          # Check if version already exists in changelog
+          if grep -q "## \[$VERSION\]" "$CHANGELOG"; then
+            echo "Version $VERSION already exists in changelog, skipping..."
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Create a temporary file for the new changelog
+          TEMP_FILE=$(mktemp)
+          
+          # Process the changelog
+          awk -v version="$VERSION" -v date="$DATE" '
+            # Print header and keep unchanged until Unreleased section
+            /^## \[Unreleased\]/ {
+              print "## [Unreleased]"
+              print ""
+              print "---"
+              print ""
+              print "## [" version "] - " date
+              next
+            }
+            
+            # Skip the empty Unreleased content if it exists
+            /^## \[Unreleased\]$/,/^---$/ {
+              if (/^---$/) {
+                next
+              }
+              if (/^## \[Unreleased\]$/) {
+                next
+              }
+              # Print the actual content (Added, Changed, etc.)
+              print
+              next
+            }
+            
+            # Update the Unreleased link at the bottom
+            /^\[Unreleased\]:/ {
+              print "[Unreleased]: https://github.com/linq2js/storion/compare/v" version "...HEAD"
+              print "[" version "]: https://github.com/linq2js/storion/compare/v" prev_version "...v" version
+              prev_version = version
+              next
+            }
+            
+            # Track previous version for links
+            /^\[[0-9]+\.[0-9]+\.[0-9]+\]:/ {
+              if (!prev_version) {
+                match($0, /\[([0-9]+\.[0-9]+\.[0-9]+)\]/, arr)
+                prev_version = arr[1]
+              }
+            }
+            
+            # Print all other lines as-is
+            { print }
+          ' "$CHANGELOG" > "$TEMP_FILE"
+          
+          # If the awk script didn't work well, use a simpler approach
+          if [ ! -s "$TEMP_FILE" ]; then
+            echo "Using fallback changelog update method..."
+            
+            # Get the previous version from changelog
+            PREV_VERSION=$(grep -oP '^\## \[\K[0-9]+\.[0-9]+\.[0-9]+' "$CHANGELOG" | head -1)
+            
+            # Simple sed replacement
+            sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n---\n\n## [$VERSION] - $DATE/" "$CHANGELOG"
+            
+            # Update links at bottom
+            sed -i "s|\[Unreleased\]: https://github.com/linq2js/storion/compare/v[^.]*\.\.\.[^$]*|[Unreleased]: https://github.com/linq2js/storion/compare/v$VERSION...HEAD\n[$VERSION]: https://github.com/linq2js/storion/compare/v$PREV_VERSION...v$VERSION|" "$CHANGELOG"
+          else
+            mv "$TEMP_FILE" "$CHANGELOG"
+          fi
+          
+          echo "Updated CHANGELOG.md for version $VERSION"
+          cat "$CHANGELOG" | head -50
+
+      - name: Update VitePress version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CONFIG="packages/docs/.vitepress/config.ts"
+          
+          # Update version in nav
+          sed -i "s/text: 'v[0-9]*\.[0-9]*\.[0-9]*'/text: 'v$VERSION'/" "$CONFIG"
+          
+          echo "Updated VitePress config version to v$VERSION"
+
+      - name: Commit and push changes
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add packages/storion/CHANGELOG.md packages/docs/.vitepress/config.ts
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git commit -m "chore: update changelog for v$VERSION"
+          git push
+
+      - name: Trigger docs deployment
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          event-type: docs-update
+          client-payload: '{"version": "${{ steps.version.outputs.version }}"}'
+
