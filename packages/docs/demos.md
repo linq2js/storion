@@ -99,7 +99,7 @@ Try Storion in action with these interactive demos.
       <span class="tag">Persistence</span>
     </div>
     <div class="actions">
-      <a href="/storion/demos/showcase/" class="primary">Live Demo →</a>
+      <a href="/storion/demos/showcase/" class="primary demo-link">Live Demo →</a>
       <a href="https://github.com/linq2js/storion/tree/main/packages/feature-showcase" class="secondary">Source</a>
     </div>
   </div>
@@ -113,7 +113,7 @@ Try Storion in action with these interactive demos.
       <span class="tag">Search</span>
     </div>
     <div class="actions">
-      <a href="/storion/demos/pokemon/" class="primary">Live Demo →</a>
+      <a href="/storion/demos/pokemon/" class="primary demo-link">Live Demo →</a>
       <a href="https://github.com/linq2js/storion/tree/main/packages/pokemon" class="secondary">Source</a>
     </div>
   </div>
@@ -127,7 +127,7 @@ Try Storion in action with these interactive demos.
       <span class="tag">Multi-store</span>
     </div>
     <div class="actions">
-      <a href="/storion/demos/chat/" class="primary">Live Demo →</a>
+      <a href="/storion/demos/chat/" class="primary demo-link">Live Demo →</a>
       <a href="https://github.com/linq2js/storion/tree/main/packages/chat" class="secondary">Source</a>
     </div>
   </div>
@@ -141,11 +141,25 @@ Try Storion in action with these interactive demos.
       <span class="tag">DI</span>
     </div>
     <div class="actions">
-      <a href="/storion/demos/expense/" class="primary">Live Demo →</a>
+      <a href="/storion/demos/expense/" class="primary demo-link">Live Demo →</a>
       <a href="https://github.com/linq2js/storion/tree/main/packages/expense-manager" class="secondary">Source</a>
     </div>
   </div>
 </div>
+
+<script setup>
+import { onMounted } from 'vue'
+
+onMounted(() => {
+  // Force demo links to do full page navigation instead of VitePress SPA routing
+  document.querySelectorAll('.demo-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault()
+      window.location.href = link.getAttribute('href')
+    })
+  })
+})
+</script>
 
 ## Running Locally
 
