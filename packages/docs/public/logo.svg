@@ -1,0 +1,27 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Main circle -->
+  <circle cx="60" cy="60" r="54" fill="url(#gradient)"/>
+  
+  <!-- Store icon (box with arrow) -->
+  <g fill="white">
+    <!-- Box base -->
+    <path d="M35 50 L60 38 L85 50 L85 80 L60 92 L35 80 Z" fill="none" stroke="white" stroke-width="3" stroke-linejoin="round"/>
+    
+    <!-- Box divider -->
+    <path d="M60 38 L60 92" stroke="white" stroke-width="2"/>
+    <path d="M35 50 L60 62 L85 50" fill="none" stroke="white" stroke-width="2"/>
+    
+    <!-- Reactive dot -->
+    <circle cx="60" cy="55" r="6" fill="white"/>
+    
+    <!-- Arrow up (reactive update) -->
+    <path d="M60 72 L60 85 M54 79 L60 85 L66 79" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
