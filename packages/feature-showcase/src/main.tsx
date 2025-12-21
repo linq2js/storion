@@ -17,13 +17,6 @@ window.addEventListener("popstate", () => {
   }
 });
 
-// Always show devtools panel in this demo (even in production)
-// This demonstrates the devtools capabilities to users
-mountDevtoolsPanel({
-  position: "left",
-  size: 360,
-});
-
 // Create container with middleware
 const app = container({
   middleware: [
@@ -51,6 +44,13 @@ const app = container({
       })
     ),
   ],
+});
+
+// Mount devtools panel after container is created (even in production)
+// This demonstrates the devtools capabilities to users
+mountDevtoolsPanel({
+  position: "left",
+  size: 360,
 });
 
 createRoot(document.getElementById("root")!).render(
