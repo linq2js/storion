@@ -5,9 +5,10 @@
  */
 
 import type {
+  AnyFunc,
   Middleware,
   MiddlewareContext,
-  StoreMiddlewareContext,
+  StoreMiddleware,
 } from "../types";
 
 /** Pattern type for matching displayName */
@@ -74,7 +75,7 @@ function patternsToPredicate(
  * Compose multiple middleware into one.
  * Middleware are applied in order (first middleware wraps the chain).
  */
-export function compose(...middlewares: Middleware[]): Middleware {
+function compose(...middlewares: Middleware[]): Middleware {
   if (middlewares.length === 0) {
     return (ctx) => ctx.next();
   }
@@ -155,14 +156,14 @@ export function applyFor(
 ): Middleware;
 export function applyFor(
   patterns: SpecPattern | SpecPattern[],
-  middleware: Middleware | Middleware[]
+  middleware: StoreMiddleware | StoreMiddleware[]
 ): Middleware;
 export function applyFor(
   predicateOrPatterns:
     | ((ctx: MiddlewareContext) => boolean)
     | SpecPattern
     | SpecPattern[],
-  middleware: Middleware | Middleware[]
+  middleware: AnyFunc | AnyFunc[]
 ): Middleware {
   // Normalize predicate
   const predicate: (ctx: MiddlewareContext) => boolean =
@@ -253,11 +254,15 @@ export function applyExcept(
  * ```
  */
 export function forStores(
-  storeMiddleware: (ctx: StoreMiddlewareContext) => unknown
+  storeMiddleware: StoreMiddleware | StoreMiddleware[]
 ): Middleware {
+  const composedMiddleware = Array.isArray(storeMiddleware)
+    ? compose(...(storeMiddleware as Middleware[]))
+    : storeMiddleware;
+
   return (ctx: MiddlewareContext): unknown => {
     if (ctx.type === "store") {
-      return storeMiddleware(ctx);
+      return composedMiddleware(ctx);
     }
     return ctx.next();
   };

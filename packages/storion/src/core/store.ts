@@ -18,6 +18,7 @@ import {
   type Equality,
   type AutoDisposeOptions,
 } from "../types";
+import { createMetaQuery } from "../meta/createMetaQuery";
 
 import { produce } from "immer";
 import { createStoreContext } from "./storeContext";
@@ -52,9 +53,10 @@ import { collection } from "../collection";
  *
  * Instances are created lazily via container.get() or by calling spec directly.
  */
-export function store<TState extends StateBase, TActions extends ActionsBase>(
-  options: StoreOptions<TState, TActions>
-): StoreSpec<TState, TActions> {
+export function store<
+  TState extends StateBase = StateBase,
+  TActions extends ActionsBase = ActionsBase
+>(options: StoreOptions<TState, TActions>): StoreSpec<TState, TActions> {
   const displayName = options.name ?? generateSpecName();
 
   // Create callable factory function
@@ -66,12 +68,19 @@ export function store<TState extends StateBase, TActions extends ActionsBase>(
     );
   } as StoreSpec<TState, TActions>;
 
+  const metaEntries = Array.isArray(options.meta)
+    ? options.meta
+    : options.meta
+    ? [options.meta]
+    : [];
+
   // Assign properties to make it a valid StoreSpec
   // Note: we use displayName instead of name since name is a reserved function property
   Object.defineProperties(spec, {
     [STORION_TYPE]: { value: "store.spec", enumerable: false },
     displayName: { value: displayName, enumerable: true, writable: false },
     options: { value: options, enumerable: true, writable: false },
+    meta: { value: metaEntries, enumerable: true, writable: false },
   });
 
   return spec;
@@ -687,7 +696,7 @@ export function createStoreInstance<
           scheduledEffects.push(runEffect);
         },
       }),
-      () => options.setup(setupContext)
+      () => options.setup?.(setupContext) ?? ({} as TActions)
     );
   } catch (error) {
     // Cleanup any effects that were already scheduled

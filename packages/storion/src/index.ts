@@ -18,7 +18,6 @@ export {
   type ActionDispatchEvent,
   type ReactiveAction,
   type ReactiveActions,
-  type StoreMeta,
   type StoreSpec,
   type StoreContext,
   type StoreMixin,
@@ -46,6 +45,11 @@ export {
   type MiddlewareContext,
   type Resolver,
   type ResolverOptions,
+  // Meta types
+  type MetaType,
+  type MetaInfo,
+  type SingleMetaInfo,
+  type MultipleMetaInfo,
 } from "./types";
 
 // Type guards
@@ -92,7 +96,6 @@ export {
 export {
   applyFor,
   applyExcept,
-  compose,
   forStores,
   type SpecPattern,
 } from "./core/middleware";
@@ -124,3 +127,7 @@ export {
   LocalStoreDependencyError,
   EffectRefreshError,
 } from "./errors";
+
+// Meta utilities
+export { meta } from "./meta/meta";
+export { withMeta } from "./meta/withMeta";

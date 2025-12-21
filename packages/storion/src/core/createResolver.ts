@@ -30,6 +30,7 @@
 import type {
   Factory,
   FactoryMiddlewareContext,
+  MetaEntry,
   Middleware,
   Resolver,
   ResolverOptions,
@@ -39,6 +40,7 @@ import type {
 } from "../types";
 import { isSpec } from "../is";
 import { tryDispose } from "./disposable";
+import { createMetaQuery } from "../meta/createMetaQuery";
 
 // Re-export types for convenience
 export type {
@@ -105,6 +107,15 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
     (overrides.get(factory) as Factory<T>) ?? factory;
 
   /**
+   * Extract meta entries from factory (via withMeta) if present.
+   */
+  const extractFactoryMeta = (factory: Factory): MetaEntry[] => {
+    const meta = (factory as any).meta;
+    if (!meta) return [];
+    return Array.isArray(meta) ? meta : [meta];
+  };
+
+  /**
    * Apply middleware chain and invoke factory.
    * Detects if factory is a store spec and creates appropriate context type.
    *
@@ -115,6 +126,12 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
     // Detect if this is a store spec
     const isStoreSpec = isSpec(factory);
     const displayName = extractDisplayName(factory);
+
+    // Collect meta entries from factory (withMeta) and spec (for stores)
+    const factoryMeta = extractFactoryMeta(factory);
+    const specMeta = isStoreSpec ? (factory as StoreSpec).meta ?? [] : [];
+    const allMeta = [...factoryMeta, ...specMeta];
+    const meta = createMetaQuery(allMeta);
 
     // Build middleware chain from right to left
     // Each middleware wraps the next, with factory invocation at the end
@@ -129,6 +146,7 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
             next: next as () => StoreInstance,
             displayName: displayName!,
             spec: factory as StoreSpec,
+            meta,
           };
           return mw(ctx);
         } else {
@@ -138,6 +156,7 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
             resolver: resolverForCtx,
             next,
             displayName,
+            meta,
           };
           return mw(ctx);
         }

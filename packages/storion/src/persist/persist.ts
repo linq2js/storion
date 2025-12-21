@@ -4,8 +4,8 @@
  * Provides automatic state persistence and hydration for stores.
  */
 
-import { isStore } from "../is";
-import type { StoreSpec, Middleware } from "../types";
+import type { StoreSpec, StoreMiddleware } from "../types";
+import { isPromiseLike } from "../utils/isPromiseLike";
 
 /**
  * Result from load function - can be sync or async
@@ -73,18 +73,6 @@ export interface PersistOptions {
 }
 
 /**
- * Check if a value is a Promise or PromiseLike
- */
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "then" in value &&
-    typeof (value as PromiseLike<T>).then === "function"
-  );
-}
-
-/**
  * Creates a persist middleware that automatically saves and restores store state.
  *
  * @example
@@ -123,19 +111,12 @@ function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
  * });
  * ```
  */
-export function persistMiddleware(options: PersistOptions): Middleware {
+export function persistMiddleware(options: PersistOptions): StoreMiddleware {
   const { filter, load, save, onError, force = false } = options;
 
-  return (ctx) => {
+  return ({ spec, next }) => {
     // Call next() to create the instance
-    const instance = ctx.next();
-
-    // Skip if not a store instance
-    if (!isStore(instance)) {
-      return instance;
-    }
-
-    const spec = instance.spec;
+    const instance = next();
 
     // Skip if filter returns false
     if (filter && !filter(spec)) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { store, container } from "../index";
+import { store, container, forStores } from "../index";
 import { persistMiddleware } from "./persist";
 
 describe("persistMiddleware", () => {
@@ -23,7 +23,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       app.get(myStore);
@@ -43,7 +43,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -62,7 +62,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -91,7 +91,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -113,12 +113,18 @@ describe("persistMiddleware", () => {
 
       // Hydrating the name triggered another save
       expect(save).toHaveBeenCalledTimes(2);
-      expect(save).toHaveBeenNthCalledWith(2, myStore, { count: 1, name: "loaded" });
+      expect(save).toHaveBeenNthCalledWith(2, myStore, {
+        count: 1,
+        name: "loaded",
+      });
 
       // State change after hydration should also be saved
       instance.actions.increment();
       expect(save).toHaveBeenCalledTimes(3);
-      expect(save).toHaveBeenLastCalledWith(myStore, { count: 2, name: "loaded" });
+      expect(save).toHaveBeenLastCalledWith(myStore, {
+        count: 2,
+        name: "loaded",
+      });
     });
 
     it("should not hydrate when load returns null", () => {
@@ -132,7 +138,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -151,7 +157,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -176,7 +182,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -202,7 +208,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -232,11 +238,13 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: [
-          persistMiddleware({
-            load,
-            save,
-            filter: (spec) => spec.displayName === "persisted",
-          }),
+          forStores(
+            persistMiddleware({
+              load,
+              save,
+              filter: (spec) => spec.displayName === "persisted",
+            })
+          ),
         ],
       });
 
@@ -270,7 +278,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ save })],
+        middleware: forStores([persistMiddleware({ save })]),
       });
 
       const instance = app.get(myStore);
@@ -297,7 +305,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load })],
+        middleware: forStores([persistMiddleware({ load })]),
       });
 
       const instance = app.get(myStore);
@@ -327,7 +335,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save, onError })],
+        middleware: forStores([persistMiddleware({ load, save, onError })]),
       });
 
       app.get(myStore);
@@ -348,7 +356,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save, onError })],
+        middleware: forStores([persistMiddleware({ load, save, onError })]),
       });
 
       app.get(myStore);
@@ -377,7 +385,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save, onError })],
+        middleware: forStores([persistMiddleware({ load, save, onError })]),
       });
 
       const instance = app.get(myStore);
@@ -405,7 +413,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save, onError })],
+        middleware: forStores([persistMiddleware({ load, save, onError })]),
       });
 
       const instance = app.get(myStore);
@@ -427,7 +435,7 @@ describe("persistMiddleware", () => {
       }
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myService);
@@ -450,7 +458,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({})],
+        middleware: forStores([persistMiddleware({})]),
       });
 
       const instance = app.get(myStore);
@@ -483,7 +491,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save })],
+        middleware: forStores([persistMiddleware({ load, save })]),
       });
 
       const instance = app.get(myStore);
@@ -521,7 +529,7 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: [persistMiddleware({ load, save, force: true })],
+        middleware: forStores([persistMiddleware({ load, save, force: true })]),
       });
 
       const instance = app.get(myStore);
@@ -557,7 +565,7 @@ describe("persistMiddleware", () => {
       const save = vi.fn();
 
       const app = container({
-        middleware: [persistMiddleware({ load, save, force: true })],
+        middleware: forStores([persistMiddleware({ load, save, force: true })]),
       });
 
       const instance = app.get(myStore);

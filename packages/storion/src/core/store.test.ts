@@ -7,6 +7,7 @@ import { store } from "./store";
 import { container } from "./container";
 import { batch, untrack } from "./tracking";
 import { effect } from "./effect";
+import { meta } from "../meta/meta";
 
 describe("store()", () => {
   it("should create a store spec", () => {
@@ -356,7 +357,9 @@ describe("dependencies via get()", () => {
 
     const stores = container();
 
-    expect(() => stores.get(storeA)).toThrow(/Maximum call stack size exceeded/i);
+    expect(() => stores.get(storeA)).toThrow(
+      /Maximum call stack size exceeded/i
+    );
   });
 
   it("should throw when keepAlive store depends on autoDispose store", () => {
@@ -1585,12 +1588,10 @@ describe("StoreContext.update()", () => {
           },
         },
         setup: ({ update }) => ({
-          updateProfile: update.action(
-            (draft, name: string, age: number) => {
-              draft.user.profile.name = name;
-              draft.user.profile.age = age;
-            }
-          ),
+          updateProfile: update.action((draft, name: string, age: number) => {
+            draft.user.profile.name = name;
+            draft.user.profile.age = age;
+          }),
           toggleTheme: update.action((draft) => {
             draft.user.preferences.theme =
               draft.user.preferences.theme === "light" ? "dark" : "light";

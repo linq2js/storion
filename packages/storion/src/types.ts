@@ -1,5 +1,7 @@
 export const STORION_TYPE = Symbol("STORION");
 
+export type AnyFunc = (...args: any[]) => any;
+
 /**
  * Kind identifiers for Storion objects.
  * Used with STORION_SYMBOL for runtime type discrimination.
@@ -249,32 +251,6 @@ export type Focus<TValue> = [
 export type Lifetime = "keepAlive" | "autoDispose";
 
 // =============================================================================
-// Store Metadata
-// =============================================================================
-
-/**
- * Metadata interface for middleware and tooling.
- * Extend via declaration merging to add typed metadata fields.
- *
- * @example
- * // In your middleware package:
- * declare module 'storion' {
- *   interface StoreMeta {
- *     persist?: boolean;
- *     persistKey?: string;
- *   }
- * }
- *
- * // Then users get autocomplete:
- * store({
- *   meta: { persist: true, persistKey: 'user' },
- *   ...
- * })
- */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface StoreMeta {}
-
-// =============================================================================
 // Dispatch Events
 // =============================================================================
 
@@ -359,6 +335,8 @@ export interface StoreSpec<
 
   /** Store options (state, setup, lifetime, etc.) */
   readonly options: StoreOptions<TState, TActions>;
+
+  meta?: MetaEntry<keyof TState, any>[];
 
   /**
    * Factory function - creates a new store instance.
@@ -715,10 +693,10 @@ export interface StoreOptions<
   name?: string;
 
   /** Initial state object */
-  state: TState;
+  state?: TState;
 
   /** Setup function - runs once when store is created */
-  setup: (context: StoreContext<TState>) => TActions;
+  setup?: (context: StoreContext<TState>) => TActions;
 
   /**
    * Equality strategy for state properties.
@@ -792,7 +770,7 @@ export interface StoreOptions<
    *   ...
    * })
    */
-  meta?: StoreMeta;
+  meta?: MetaEntry<keyof TState, any> | MetaEntry<keyof TState, any>[];
 }
 
 // =============================================================================
@@ -950,7 +928,7 @@ export interface ContainerOptions {
   autoDispose?: AutoDisposeOptions;
 
   /** Middleware chain for intercepting creation (stores and factories) */
-  middleware?: Middleware[];
+  middleware?: Middleware | Middleware[];
 }
 
 // =============================================================================
@@ -988,6 +966,29 @@ interface BaseMiddlewareContext {
    * - For factories: factory.displayName ?? factory.name ?? undefined
    */
   readonly displayName: string | undefined;
+
+  /**
+   * Query metadata attached to the factory/store.
+   *
+   * For stores: combines factory.meta (via withMeta) + spec.meta
+   * For factories: uses factory.meta (via withMeta)
+   *
+   * @example
+   * ```ts
+   * const persist = meta();
+   *
+   * const middleware: Middleware = (ctx) => {
+   *   if (ctx.meta.any(persist)) {
+   *     // Factory or store has persist meta
+   *   }
+   *   if (ctx.meta(persist).store) {
+   *     // Get first persist value
+   *   }
+   *   return ctx.next();
+   * };
+   * ```
+   */
+  readonly meta: MetaQuery<any>;
 }
 
 /**
@@ -1424,3 +1425,145 @@ export type PickEquality<T> = Equality<T>;
 export interface Disposable {
   dispose: VoidFunction | (VoidFunction | Disposable)[];
 }
+
+/**
+ * A single metadata entry attached to a store or field.
+ */
+export type MetaEntry<TField = unknown, TValue = unknown> = {
+  field?: TField;
+  value: TValue;
+  type: AnyFunc;
+};
+
+// =============================================================================
+// Meta Type (created by meta() function)
+// =============================================================================
+
+/**
+ * A metadata type created by `meta()` function.
+ * Used to attach and query type-safe metadata on stores.
+ *
+ * @example
+ * ```ts
+ * // Create meta types
+ * const persist = meta();                           // boolean meta
+ * const priority = meta((level: number) => level); // parameterized meta
+ *
+ * // Apply to store
+ * const userStore = store({
+ *   state: { name: "" },
+ *   meta: [persist(), priority(1), persist.for("name")],
+ * });
+ *
+ * // Query metadata (default returns first value)
+ * userStore.meta(persist).store;         // true (or undefined)
+ * userStore.meta(persist).fields.name;   // true (or undefined)
+ * userStore.meta(priority).store;        // 1 (or undefined)
+ *
+ * // Query multiple values
+ * userStore.meta.multiple(persist).store; // [true]
+ * ```
+ */
+export type MetaType<TField, TArgs extends any[], TValue> = {
+  /** Attach meta to a specific field */
+  for(field: TField, ...args: TArgs): MetaEntry<TField, TValue>;
+  /** Attach meta to the store itself */
+  (...args: TArgs): MetaEntry<TField, TValue>;
+};
+
+// =============================================================================
+// Meta Info (query results)
+// =============================================================================
+
+export interface MetaInfoBase<
+  TField extends string | symbol,
+  TStoreValue,
+  TFieldValue
+> {
+  /** First store-level meta value, or undefined */
+  readonly store: TStoreValue;
+  /** First field-level meta value per field, or undefined */
+  readonly fields: Readonly<Partial<Record<TField, TFieldValue>>>;
+}
+
+/**
+ * Single-value metadata info (default mode).
+ * Returns first value or undefined if not found.
+ */
+export interface MetaInfo<TField extends string | symbol, TValue>
+  extends MetaInfoBase<TField, TValue, TValue | undefined> {}
+
+/**
+ * Alias for MetaInfo - explicit single mode.
+ */
+export interface SingleMetaInfo<TField extends string | symbol, TValue>
+  extends MetaInfoBase<TField, TValue, TValue> {}
+
+/**
+ * Multiple-value metadata info.
+ * Returns arrays of all matching values.
+ */
+export interface MultipleMetaInfo<TField extends string | symbol, TValue>
+  extends MetaInfoBase<TField, readonly TValue[], readonly TValue[]> {}
+
+/**
+ * Query interface for store metadata.
+ * Provides multiple strategies for accessing metadata values.
+ *
+ * @example
+ * ```ts
+ * const persist = meta();
+ * const priority = meta((n: number) => n);
+ *
+ * const userStore = store({
+ *   state: { name: "" },
+ *   meta: [persist(), priority(1), priority(2)],
+ * });
+ *
+ * // Default: returns first value (most common case)
+ * userStore.meta(persist).store;          // true
+ * userStore.meta(priority).store;         // 1
+ *
+ * // Explicit single mode (same as default)
+ * userStore.meta.single(persist).store;   // true
+ *
+ * // Multiple mode: returns all values as arrays
+ * userStore.meta.multiple(priority).store; // [1, 2]
+ *
+ * // Check if any meta type exists
+ * userStore.meta.any(persist);            // true
+ * userStore.meta.any(persist, priority);  // true
+ * ```
+ */
+export type MetaQuery<TField> = {
+  /**
+   * Get metadata using first-value strategy (default).
+   * Returns the first matching value for store and each field.
+   */
+  <TValue>(type: MetaType<any, any[], TValue>): MetaInfo<
+    TField & string,
+    TValue
+  >;
+
+  /**
+   * Get metadata using single-value strategy (explicit).
+   * Same as default call - returns first matching value.
+   */
+  single<TValue>(
+    type: MetaType<any, any[], TValue>
+  ): SingleMetaInfo<TField & string, TValue>;
+
+  /**
+   * Get metadata using multiple-value strategy.
+   * Returns arrays of all matching values.
+   */
+  multiple<TValue>(
+    type: MetaType<any, any[], TValue>
+  ): MultipleMetaInfo<TField & string, TValue>;
+
+  /**
+   * Check if the store has any of the specified meta types.
+   * Returns true if at least one meta type is found.
+   */
+  any(...types: MetaType<any, any[], any>[]): boolean;
+};

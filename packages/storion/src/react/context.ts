@@ -10,6 +10,7 @@ import {
   type FC,
   useMemo,
   memo,
+  useRef,
 } from "react";
 
 import type { StoreContainer } from "../types";
@@ -32,7 +33,18 @@ export interface StoreProviderProps {
 
 export const StoreProvider: FC<StoreProviderProps> = memo(
   ({ container: value, children }) => {
-    const valueOrDefault = useMemo(() => value ?? container(), [value]);
+    const defaultContainerRef = useRef<StoreContainer>();
+    const valueOrDefault = useMemo(() => {
+      if (value) {
+        return value;
+      }
+
+      if (!defaultContainerRef.current) {
+        defaultContainerRef.current = container();
+      }
+
+      return defaultContainerRef.current;
+    }, [value]);
     return createElement(
       StoreContext.Provider,
       { value: valueOrDefault },

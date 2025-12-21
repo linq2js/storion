@@ -76,7 +76,11 @@ export const container: ContainerFn = function (
   // Merge: pre + container's middleware + post
   const middleware = [
     ...(defaultMiddlewareConfig.pre ?? []),
-    ...(options.middleware ?? []),
+    ...(Array.isArray(options.middleware)
+      ? options.middleware
+      : options.middleware
+      ? [options.middleware]
+      : []),
     ...(defaultMiddlewareConfig.post ?? []),
   ];
 

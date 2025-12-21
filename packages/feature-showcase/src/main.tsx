@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { container } from "storion";
+import { applyFor, container } from "storion";
 import { StoreProvider } from "storion/react";
 import { devtoolsMiddleware } from "storion/devtools";
 import { mountDevtoolsPanel } from "storion/devtools-panel";
@@ -23,25 +23,27 @@ if (import.meta.env.DEV) {
 // Create container with persist middleware
 const app = container({
   middleware: [
-    persistMiddleware({
-      // Only persist counter store for demo
-      filter: (spec) => spec.displayName === "counter",
-      load: (spec) => {
-        const key = `storion:${spec.displayName}`;
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
-      },
-      save: (spec, state) => {
-        const key = `storion:${spec.displayName}`;
-        localStorage.setItem(key, JSON.stringify(state));
-      },
-      onError: (spec, error, operation) => {
-        console.error(
-          `[Persist] ${operation} error for ${spec.displayName}:`,
-          error
-        );
-      },
-    }),
+    applyFor(
+      "counter",
+      persistMiddleware({
+        // Only persist counter store for demo
+        load: (spec) => {
+          const key = `storion:${spec.displayName}`;
+          const data = localStorage.getItem(key);
+          return data ? JSON.parse(data) : null;
+        },
+        save: (spec, state) => {
+          const key = `storion:${spec.displayName}`;
+          localStorage.setItem(key, JSON.stringify(state));
+        },
+        onError: (spec, error, operation) => {
+          console.error(
+            `[Persist] ${operation} error for ${spec.displayName}:`,
+            error
+          );
+        },
+      })
+    ),
   ],
 });
 
