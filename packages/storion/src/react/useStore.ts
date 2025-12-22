@@ -4,7 +4,13 @@
  * Consumes stores with automatic optimization.
  */
 
-import { useReducer, useEffect, useMemo, useState } from "react";
+import {
+  useReducer,
+  useEffect,
+  useMemo,
+  useState,
+  useLayoutEffect,
+} from "react";
 
 import {
   STORION_TYPE,
@@ -15,12 +21,13 @@ import {
   type SelectorContext,
   type Selector,
   type StableResult,
+  type StoreInstance,
 } from "../types";
 import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
-import { AsyncFunctionError } from "../errors";
-import { useLocalStore, type LocalStoreResult } from "./useLocalStore";
+import { AsyncFunctionError, ScopedOutsideSelectorError } from "../errors";
 import { isSpec } from "../is";
+import { dev } from "../dev";
 
 /**
  * React hook to consume stores with automatic optimization.
@@ -61,6 +68,14 @@ export function useStoreWithContainer<T extends object>(
     id: {},
     onceRan: false,
   }));
+
+  // Scoped controller for component-local stores (lazy initialized)
+  const [scopeController] = useState<ScopeController>(
+    () => new ScopeController(container)
+  );
+
+  // Track whether we're inside selector execution (use object for stable reference)
+  const [selectorExecution] = useState(() => ({ active: false }));
 
   // Clear tracked deps for this render
   refs.trackedDeps.clear();
@@ -109,20 +124,36 @@ export function useStoreWithContainer<T extends object>(
           callback();
         }
       },
+
+      scoped(spec: any): any {
+        // Verify we're inside selector execution
+        if (!selectorExecution.active) {
+          throw new ScopedOutsideSelectorError();
+        }
+        const instance = scopeController.get(spec);
+        return [instance.state, instance.actions, instance] as const;
+      },
     };
     return ctx;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [container, shouldRunOnce]);
+  }, [container, shouldRunOnce, scopeController]);
 
   // Run selector with hooks to track dependencies
-  const result = withHooks(
-    {
-      onRead: (event) => {
-        refs.trackedDeps.set(event.key, event);
+  // Use try/finally to ensure selectorExecution.active is properly reset
+  let result: T;
+  selectorExecution.active = true;
+  try {
+    result = withHooks(
+      {
+        onRead: (event) => {
+          refs.trackedDeps.set(event.key, event);
+        },
       },
-    },
-    () => selector(selectorContext)
-  );
+      () => selector(selectorContext)
+    );
+  } finally {
+    selectorExecution.active = false;
+  }
 
   // Mark once as ran after first selector execution
   if (shouldRunOnce) {
@@ -195,59 +226,146 @@ export function useStoreWithContainer<T extends object>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackedKeysToken]);
 
+  // Scoped store lifecycle management
+  // Use layout effect for synchronous commit before paint
+  useIsomorphicLayoutEffect(() => {
+    scopeController.commit();
+    return () => {
+      scopeController.uncommit();
+    };
+  }, [scopeController]);
+
   return output;
 }
 
 /**
  * React hook to consume stores with automatic optimization.
  *
- * @overload With selector - Uses the container from React context (StoreProvider).
- * Access multiple stores, compute derived values, with fine-grained re-renders.
- *
- * @overload With spec - Creates a component-local store instance (like useLocalStore).
- * The store is isolated, disposed on unmount, and cannot have dependencies.
+ * Features:
+ * - Multi-store access via `get()` for global stores
+ * - Component-local stores via `scoped()` (auto-disposed on unmount)
+ * - Auto-stable functions (never cause re-renders)
+ * - Fine-grained updates (only re-renders when selected values change)
  *
  * @example
  * ```tsx
- * // With selector - access global stores
- * const { count, increment } = useStore(({ get }) => {
- *   const [state, actions] = get(counterSpec);
- *   return { count: state.count, increment: actions.increment };
- * });
+ * const { count, increment, form } = useStore(({ get, scoped }) => {
+ *   // Global stores
+ *   const [state, actions] = get(counterStore);
  *
- * // With spec - local store (shorthand for useLocalStore)
- * const [state, actions, { dirty, reset }] = useStore(formSpec);
+ *   // Component-local stores (disposed on unmount)
+ *   const [formState, formActions] = scoped(formStore);
+ *
+ *   return {
+ *     count: state.count,
+ *     increment: actions.increment,
+ *     form: { ...formState, ...formActions },
+ *   };
+ * });
  * ```
  */
 export function useStore<T extends object>(
   selector: Selector<T>
-): StableResult<T>;
-export function useStore<
-  TState extends StateBase,
-  TActions extends ActionsBase
->(spec: StoreSpec<TState, TActions>): LocalStoreResult<TState, TActions>;
-export function useStore<
-  T extends object,
-  TState extends StateBase = StateBase,
-  TActions extends ActionsBase = ActionsBase
->(
-  selectorOrSpec: Selector<T> | StoreSpec<TState, TActions>
-): StableResult<T> | LocalStoreResult<TState, TActions> {
-  // Detect if it's a spec (object with 'options' property) vs selector (function)
-  const isSpec =
-    typeof selectorOrSpec === "object" &&
-    selectorOrSpec !== null &&
-    "options" in selectorOrSpec;
-
-  // For spec, use local store
-  if (isSpec) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    return useLocalStore(selectorOrSpec as StoreSpec<TState, TActions>);
-  }
-
-  // For selector, use container-based store
+): StableResult<T> {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const container = useContainer();
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useStoreWithContainer(selectorOrSpec as Selector<T>, container);
+  return useStoreWithContainer(selector, container);
+}
+
+const isServer = typeof window === "undefined";
+const useIsomorphicLayoutEffect = isServer ? useEffect : useLayoutEffect;
+// only schedule dispose if in development mode and useLayoutEffect is available
+const shouldScheduleDispose =
+  !isServer && typeof useLayoutEffect === "function" && dev();
+
+class ScopeController {
+  /** Whether the effect has committed (is active) */
+  private _committed = false;
+
+  /** Whether this controller has been disposed */
+  private _disposed = false;
+
+  private _stores = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
+
+  constructor(public readonly container: StoreContainer) {}
+
+  /**
+   * Dispose the controller and its store.
+   * Safe to call multiple times.
+   */
+  dispose = () => {
+    if (this._disposed) return;
+    this._disposed = true;
+    for (const store of this._stores.values()) {
+      store.dispose();
+    }
+    this._stores.clear();
+  };
+
+  /**
+   * Schedule disposal check via microtask.
+   *
+   * This deferred check is crucial for StrictMode:
+   * - StrictMode runs cleanup then effect again synchronously
+   * - The microtask runs AFTER the re-commit, so store survives
+   * - On real unmount, no re-commit happens, so disposal proceeds
+   */
+  private _disposeIfUnused = () => {
+    // Skip if already committed or disposed
+    if (this._committed || this._disposed) return;
+
+    if (shouldScheduleDispose) {
+      // Defer check to next microtask
+      // This allows StrictMode's effect re-run to commit before we check
+      Promise.resolve().then(() => {
+        // If still not committed after microtask, it's a real unmount
+        if (!this._committed) {
+          this.dispose();
+        }
+      });
+    } else {
+      this.dispose();
+    }
+  };
+
+  /**
+   * Get or create the store instance.
+   */
+  get = <TState extends StateBase, TActions extends ActionsBase>(
+    spec: StoreSpec<TState, TActions>
+  ): StoreInstance<TState, TActions> => {
+    if (this._disposed) {
+      throw new Error("ScopeController has been disposed");
+    }
+    let store = this._stores.get(spec);
+    if (!store) {
+      store = this.container.create(spec);
+      this._stores.set(spec, store);
+    }
+
+    if (shouldScheduleDispose) {
+      // Schedule cleanup if effect never commits (render-only)
+      this._disposeIfUnused();
+    }
+
+    return store;
+  };
+
+  /**
+   * Mark as committed (effect is active).
+   * Called at the start of useLayoutEffect.
+   */
+  commit = () => {
+    this._committed = true;
+  };
+
+  /**
+   * Mark as uncommitted (effect cleaned up).
+   * Schedules deferred disposal check.
+   */
+  uncommit = () => {
+    this._committed = false;
+    this._disposeIfUnused();
+  };
 }

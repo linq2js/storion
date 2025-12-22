@@ -918,6 +918,23 @@ export interface StoreInstance<
   ): VoidFunction;
 }
 
+/**
+ * Result tuple from scoped() - component-local store instance.
+ *
+ * @example
+ * ```tsx
+ * const [state, actions, instance] = scoped(formStore);
+ * ```
+ */
+export type ScopedResult<
+  TState extends StateBase,
+  TActions extends ActionsBase
+> = readonly [
+  state: Readonly<TState>,
+  actions: ReactiveActions<TActions>,
+  instance: StoreInstance<TState, TActions>
+];
+
 // =============================================================================
 // Container
 // =============================================================================
@@ -1389,6 +1406,37 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
    * });
    */
   once(callback: () => void): void;
+
+  /**
+   * Create a component-scoped store instance.
+   *
+   * Unlike `get()` which accesses global container stores, `scoped()` creates
+   * instances that are local to the component and automatically disposed on unmount.
+   *
+   * - Can only be called during selector execution (not in callbacks)
+   * - Scoped stores can depend on each other via `get()` in their setup
+   * - Scoped stores fall back to global container for non-scoped dependencies
+   *
+   * @example
+   * ```tsx
+   * const { form, submit } = useStore(({ get, scoped }) => {
+   *   // Global store
+   *   const [user] = get(userStore);
+   *
+   *   // Component-local stores (disposed on unmount)
+   *   const [formState, formActions, formInstance] = scoped(formStore);
+   *   const [submitState, submitActions] = scoped(submitStore);
+   *
+   *   return {
+   *     form: { ...formState, ...formActions },
+   *     submit: submitActions.submit,
+   *   };
+   * });
+   * ```
+   */
+  scoped<TState extends StateBase, TActions extends ActionsBase>(
+    spec: StoreSpec<TState, TActions>
+  ): ScopedResult<TState, TActions>;
 }
 
 /**

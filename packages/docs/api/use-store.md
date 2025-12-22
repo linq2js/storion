@@ -18,8 +18,14 @@ Function that selects data from stores. Receives a context with:
 
 ```ts
 interface SelectorContext {
-  // Get store instance: [state, actions]
+  // Get store from global container: [state, actions]
   get<TState, TActions>(store: StoreSpec<TState, TActions>): [TState, TActions];
+  
+  // Create component-local store: [state, actions, instance]
+  scoped<TState, TActions>(store: StoreSpec<TState, TActions>): [TState, TActions, StoreInstance];
+  
+  // Run callback once on mount
+  once(callback: () => void): void;
 }
 ```
 
@@ -159,6 +165,83 @@ const { filteredItems } = useStore(({ get }) => {
       state.filter === 'all' || 
       (state.filter === 'completed') === t.completed
     ),
+  };
+});
+```
+
+## Component-Local Stores with scoped()
+
+Use `scoped()` for stores that should be isolated to a component and automatically disposed on unmount:
+
+```tsx
+function ContactForm() {
+  const { value, setValue, submit, submitting } = useStore(({ get, scoped }) => {
+    // Global store - shared across components
+    const [userState] = get(userStore);
+    
+    // Component-local stores - isolated, auto-disposed on unmount
+    const [formState, formActions] = scoped(formStore);
+    const [submitState, submitActions] = scoped(submitStore);
+    
+    return {
+      value: formState.value,
+      setValue: formActions.setValue,
+      submit: submitActions.submit,
+      submitting: submitState.status === 'pending',
+    };
+  });
+
+  return (
+    <form onSubmit={submit}>
+      <input value={value} onChange={(e) => setValue(e.target.value)} />
+      <button disabled={submitting}>Submit</button>
+    </form>
+  );
+}
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Isolation** | Each component gets its own store instance |
+| **Auto-disposal** | Stores are disposed when component unmounts |
+| **Multiple stores** | Can call `scoped()` multiple times in same selector |
+| **Mixed access** | Combine `get()` for global and `scoped()` for local |
+
+### Rules
+
+```tsx
+// ✅ CORRECT - scoped() in selector body
+useStore(({ scoped }) => {
+  const [state, actions] = scoped(formStore);
+  return { state, actions };
+});
+
+// ❌ WRONG - scoped() in callback (throws error)
+useStore(({ scoped }) => {
+  return {
+    onClick: () => {
+      const [state] = scoped(formStore); // THROWS!
+    }
+  };
+});
+```
+
+### Accessing the Instance
+
+The third tuple element provides access to the store instance:
+
+```tsx
+const { dirty, reset } = useStore(({ scoped }) => {
+  const [state, actions, instance] = scoped(formStore);
+  
+  return {
+    ...state,
+    ...actions,
+    // Access instance methods
+    dirty: instance.dirty,
+    reset: () => instance.hydrate(instance.spec.options.state),
   };
 });
 ```

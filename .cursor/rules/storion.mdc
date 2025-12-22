@@ -216,6 +216,35 @@ function Component() {
 }
 ```
 
+### Component-Local Stores with scoped()
+
+Use `scoped()` for stores that should be isolated to a component and auto-disposed on unmount:
+
+```tsx
+function FormComponent() {
+  const { value, setValue } = useStore(({ get, scoped }) => {
+    // Global stores via get()
+    const [userState] = get(userStore);
+
+    // Component-local stores via scoped() - auto-disposed on unmount
+    const [formState, formActions, formInstance] = scoped(formStore);
+
+    return {
+      value: formState.value,
+      setValue: formActions.setValue,
+    };
+  });
+
+  return <input value={value} onChange={(e) => setValue(e.target.value)} />;
+}
+```
+
+**Key points:**
+- `scoped()` can only be called during selector execution (not in callbacks)
+- Returns `[state, actions, instance]` tuple
+- Each component gets its own isolated instance
+- Instances are automatically disposed when component unmounts
+
 ### Async State
 
 ```ts
@@ -259,6 +288,7 @@ function UserProfile({ userId }: { userId: string }) {
 | `Setup phase has ended`      | get/mixin/focus in action   | Move to setup phase         |
 | `Effect must be synchronous` | async effect                | Use ctx.safe()              |
 | `lifetime mismatch`          | keepAlive → autoDispose dep | Fix dependency direction    |
+| `scoped() outside selector`  | scoped() in callback/async  | Move to selector body       |
 
 ## Testing
 

@@ -948,4 +948,294 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
     expect(result.current.count).toBe(0);
     act(() => result.current.setCount(1));
   });
+
+  describe("scoped()", () => {
+    it("should create component-local store instance", () => {
+      const formStore = store({
+        name: "form",
+        state: { value: "" },
+        setup: ({ state }) => ({
+          setValue: (v: string) => {
+            state.value = v;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            const [state, actions] = scoped(formStore);
+            return { value: state.value, setValue: actions.setValue };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.value).toBe("");
+
+      act(() => {
+        result.current.setValue("test");
+      });
+
+      expect(result.current.value).toBe("test");
+    });
+
+    it("should return instance as third tuple element", () => {
+      const formStore = store({
+        name: "form",
+        state: { value: "" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      let capturedInstance: any;
+
+      renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            const [, , instance] = scoped(formStore);
+            capturedInstance = instance;
+            return {};
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(capturedInstance).toBeDefined();
+      expect(capturedInstance.state).toBeDefined();
+      expect(capturedInstance.actions).toBeDefined();
+      expect(capturedInstance.dispose).toBeDefined();
+    });
+
+    it("should dispose scoped stores on unmount", async () => {
+      const formStore = store({
+        name: "form",
+        state: { value: "" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      let capturedInstance: any;
+
+      const { unmount } = renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            const [, , instance] = scoped(formStore);
+            capturedInstance = instance;
+            return {};
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      const disposeSpy = vi.spyOn(capturedInstance, "dispose");
+
+      unmount();
+
+      // Wait for microtask to complete (StrictMode deferred disposal)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // In strict mode, dispose may be called multiple times
+      expect(disposeSpy).toHaveBeenCalled();
+    });
+
+    it("should isolate scoped stores between components", () => {
+      const formStore = store({
+        name: "form",
+        state: { value: "" },
+        setup: ({ state }) => ({
+          setValue: (v: string) => {
+            state.value = v;
+          },
+        }),
+      });
+
+      const stores = container();
+      const wrapper = createWrapper(stores);
+
+      const { result: result1 } = renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            const [state, actions] = scoped(formStore);
+            return { value: state.value, setValue: actions.setValue };
+          }),
+        { wrapper }
+      );
+
+      const { result: result2 } = renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            const [state, actions] = scoped(formStore);
+            return { value: state.value, setValue: actions.setValue };
+          }),
+        { wrapper }
+      );
+
+      // Update first component
+      act(() => {
+        result1.current.setValue("component1");
+      });
+
+      // First component should be updated
+      expect(result1.current.value).toBe("component1");
+
+      // Second component should remain unchanged (isolated)
+      expect(result2.current.value).toBe("");
+    });
+
+    it("should support multiple scoped stores in same selector", () => {
+      const store1 = store({
+        name: "store1",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const store2 = store({
+        name: "store2",
+        state: { name: "" },
+        setup: ({ state }) => ({
+          setName: (n: string) => {
+            state.name = n;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            const [s1, a1] = scoped(store1);
+            const [s2, a2] = scoped(store2);
+            return {
+              count: s1.count,
+              name: s2.name,
+              increment: a1.increment,
+              setName: a2.setName,
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+      expect(result.current.name).toBe("");
+
+      act(() => {
+        result.current.increment();
+        result.current.setName("test");
+      });
+
+      expect(result.current.count).toBe(1);
+      expect(result.current.name).toBe("test");
+    });
+
+    it("should work alongside get() for global stores", () => {
+      const globalStore = store({
+        name: "global",
+        state: { globalValue: "global" },
+        setup: () => ({}),
+      });
+
+      const localStore = store({
+        name: "local",
+        state: { localValue: "" },
+        setup: ({ state }) => ({
+          setLocal: (v: string) => {
+            state.localValue = v;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get, scoped }) => {
+            const [globalState] = get(globalStore);
+            const [localState, localActions] = scoped(localStore);
+            return {
+              globalValue: globalState.globalValue,
+              localValue: localState.localValue,
+              setLocal: localActions.setLocal,
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.globalValue).toBe("global");
+      expect(result.current.localValue).toBe("");
+
+      act(() => {
+        result.current.setLocal("updated");
+      });
+
+      expect(result.current.localValue).toBe("updated");
+    });
+
+    it("should throw when scoped() called outside selector", async () => {
+      const formStore = store({
+        name: "form",
+        state: { value: "" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      let capturedScoped: any;
+
+      renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            capturedScoped = scoped;
+            return {};
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Calling scoped outside selector should throw
+      expect(() => capturedScoped(formStore)).toThrow(
+        /scoped\(\) can only be called during selector execution/
+      );
+    });
+
+    it("should reuse same scoped instance across re-renders", () => {
+      const formStore = store({
+        name: "form",
+        state: { value: "" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instanceIds: string[] = [];
+
+      const { rerender } = renderHook(
+        () =>
+          useStore(({ scoped }) => {
+            const [, , instance] = scoped(formStore);
+            instanceIds.push(instance.id);
+            return {};
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      const initialCount = instanceIds.length;
+      
+      rerender();
+      rerender();
+
+      // After initial renders, re-renders should reuse the same instance
+      // In strict mode, there may be 2 instances initially (mount/unmount/remount)
+      // But subsequent re-renders should not create new instances
+      const afterRerenderCount = instanceIds.length;
+      const newInstancesAfterRerender = afterRerenderCount - initialCount;
+      
+      // Each rerender should use existing instance, not create new ones
+      // Check that the last few IDs are the same
+      const lastThreeIds = instanceIds.slice(-3);
+      const uniqueLastIds = [...new Set(lastThreeIds)];
+      expect(uniqueLastIds.length).toBe(1);
+    });
+  });
 });

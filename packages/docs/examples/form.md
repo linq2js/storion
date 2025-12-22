@@ -270,12 +270,51 @@ function SignupForm() {
 }
 ```
 
+## Component-Local Forms with scoped()
+
+For forms that should be isolated per component instance (like modal forms, inline editors), use `scoped()`:
+
+```tsx
+// Each form gets its own isolated state, auto-disposed on unmount
+function EditItemModal({ itemId, onClose }) {
+  const { values, errors, save, isDirty } = useStore(({ get, scoped }) => {
+    // Global store for item data
+    const [itemsState] = get(itemsStore);
+    
+    // Component-local form store - isolated, auto-disposed
+    const [formState, formActions] = scoped(editFormStore);
+    
+    return {
+      values: formState.values,
+      errors: formState.errors,
+      save: formActions.save,
+      isDirty: formState.isDirty,
+    };
+  });
+
+  return (
+    <Modal onClose={onClose}>
+      <form onSubmit={save}>
+        {/* Form fields... */}
+      </form>
+    </Modal>
+  );
+}
+```
+
+Benefits of `scoped()` for forms:
+- Each modal/component gets fresh form state
+- Form state is automatically cleaned up on close
+- No need to manually reset forms
+- Multiple forms of the same type can be open simultaneously
+
 ## Key Concepts
 
 1. **Centralized Validation**: Keep validation logic in the store
 2. **Touched State**: Only show errors after user interaction
 3. **Submission State**: Track loading state during async submit
 4. **Field Components**: Reusable field wrappers for consistency
+5. **scoped() for Isolation**: Use `scoped()` for component-local forms that auto-dispose
 
 ## Try It
 

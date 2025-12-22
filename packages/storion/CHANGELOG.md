@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `SelectorContext.scoped()` for component-local stores that auto-dispose on unmount
+  ```tsx
+  const { value, setValue } = useStore(({ scoped }) => {
+    const [state, actions, instance] = scoped(formStore);
+    return { value: state.value, setValue: actions.setValue };
+  });
+  ```
 - `MetaEntry.fields` now supports arrays for applying meta to multiple fields at once
   ```ts
   meta: [notPersisted.for(["password", "token"])];
@@ -24,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     userStore: loggingMiddleware,
     "auth*": [authMiddleware, securityMiddleware],
     "*Cache": cacheMiddleware,
+  });
+  ```
+
+### Removed
+
+- **BREAKING**: `useLocalStore` hook removed - use `scoped()` in `useStore` selector instead
+
+  ```tsx
+  // Before
+  const [state, actions] = useLocalStore(formStore);
+
+  // After
+  const { state, actions } = useStore(({ scoped }) => {
+    const [s, a] = scoped(formStore);
+    return { state: s, actions: a };
   });
   ```
 

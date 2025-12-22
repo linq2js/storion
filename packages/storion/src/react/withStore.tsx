@@ -541,8 +541,11 @@ export function createWithStore<TContext>(
 // =============================================================================
 
 // Create the standard withStore bound to SelectorContext via useStore
-// useStore already has the signature: <T>(selector: (ctx: SelectorContext) => T) => T
-const boundWithStore = createWithStore<SelectorContext>(useStore);
+// useStore returns StableResult<T> which is structurally compatible with T
+// Cast is safe because StableResult only stabilizes function references
+const boundWithStore = createWithStore<SelectorContext>(
+  useStore as UseContextHook<SelectorContext>
+);
 
 // =============================================================================
 // Overloads for withStore (keep existing signatures for backwards compatibility)

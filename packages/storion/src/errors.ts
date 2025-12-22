@@ -160,3 +160,19 @@ export class EffectRefreshError extends StorionError {
   }
 }
 
+// Scoped Errors
+// =============================================================================
+
+/**
+ * Thrown when scoped() is called outside of a selector function.
+ */
+export class ScopedOutsideSelectorError extends StorionError {
+  constructor() {
+    super(
+      "scoped() can only be called during selector execution. " +
+        "Do not call scoped() in callbacks, event handlers, or async functions."
+    );
+    this.name = "ScopedOutsideSelectorError";
+  }
+}
+
