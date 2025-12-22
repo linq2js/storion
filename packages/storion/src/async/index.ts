@@ -9,14 +9,7 @@
  * - stale: data is preserved during loading/error (stale-while-revalidate)
  */
 
-export {
-  async,
-  asyncState,
-  asyncStateFrom,
-  getPendingPromise,
-  type AsyncMixinOptions,
-  type AsyncMixinResult,
-} from "./async";
+export { async, type AsyncMixinOptions, type AsyncMixinResult } from "./async";
 export {
   AsyncNotReadyError,
   AsyncAggregateError,

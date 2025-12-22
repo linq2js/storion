@@ -4,6 +4,7 @@ import type { AsyncState, AsyncMode } from "./types";
 import type { Focus, SelectorContext } from "../types";
 import { withHooks } from "../core/tracking";
 import { container } from "../core/container";
+import { store } from "../core/store";
 
 // Helper to create a mock focus
 function createMockFocus<T, M extends AsyncMode>(
@@ -2128,6 +2129,40 @@ describe("asyncState()", () => {
         id: "123",
         name: "User 123",
       });
+    });
+  });
+
+  describe("context.get", () => {
+    it("should get store state", async () => {
+      const userStore = store({
+        state: {
+          name: "John Doe",
+        },
+      });
+
+      const actionStore = store({
+        state: {
+          result: async.fresh<string>(),
+        },
+        setup: (ctx) => {
+          const fetchUser = async(ctx.focus("result"), async (ctx) => {
+            const [state] = ctx.get(userStore);
+            return state.name;
+          });
+
+          return {
+            dispatch: fetchUser.dispatch,
+          };
+        },
+      });
+
+      const testContainer = container();
+      const instance = testContainer.get(actionStore);
+
+      await instance.actions.dispatch();
+
+      expect(instance.state.result.status).toBe("success");
+      expect(instance.state.result.data).toBe("John Doe");
     });
   });
 });

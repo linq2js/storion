@@ -1,6 +1,12 @@
 // ===== Async Mode =====
 
-import { StoreContext } from "../types";
+import {
+  ActionsBase,
+  StateBase,
+  StoreContext,
+  StoreSpec,
+  StoreTuple,
+} from "../types";
 
 /**
  * Async data mode:
@@ -209,6 +215,30 @@ export interface AsyncContext {
    * });
    */
   cancel(): void;
+
+  /**
+   * Get another store's state and actions.
+   *
+   * @example
+   * // Array destructuring
+   * const [state, actions] = get(counterSpec);
+   *
+   * // Named properties
+   * const tuple = get(counterSpec);
+   * tuple.state.count;
+   */
+  get<S extends StateBase, A extends ActionsBase>(
+    spec: StoreSpec<S, A>
+  ): StoreTuple<S, A>;
+
+  /**
+   * Get a service or factory instance.
+   *
+   * @example
+   * const db = get(() => new IndexedDBService());
+   * await db.users.getAll();
+   */
+  get<T>(factory: (...args: any[]) => T): T;
 }
 
 // ===== Handler Type =====
@@ -221,20 +251,6 @@ export type AsyncHandler<T, TArgs extends any[]> = (
   context: AsyncContext,
   ...args: TArgs
 ) => T | PromiseLike<T>;
-
-/**
- * Async handler function signature for mixin mode.
- * Receives AsyncMixinContext as first arg, then user-defined args.
- */
-export type AsyncMixinHandler<T, TArgs extends any[]> = (
-  context: AsyncMixinContext,
-  ...args: TArgs
-) => T | PromiseLike<T>;
-
-export interface AsyncMixinContext extends AsyncContext {
-  /** Get another store's state and actions. */
-  get: StoreContext<any>["get"];
-}
 
 // ===== Retry Options =====
 

@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   });
   ```
 
-- `AsyncMixinContext.get()` allows mixin handlers to access other stores' state
+- `AsyncContext.get()` allows async handlers to access other stores' state
 
   ```tsx
   // Access other stores for cross-store mutations

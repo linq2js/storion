@@ -167,9 +167,6 @@ export interface FocusContext {
   update: (updater: (draft: StateBase) => void) => void;
   /** Subscribe to state changes */
   subscribe: (listener: VoidFunction) => VoidFunction;
-
-  /** Register a callback to run when the focus is disposed */
-  onDispose: (callback: () => void) => void;
 }
 
 /**
@@ -210,6 +207,12 @@ export type Focus<TValue> = [
 ] & {
   /** The context of the focus */
   readonly context: FocusContext;
+  /** The store context of the focus */
+  // @internal
+  readonly _storeContext: StoreContext<any>;
+  /** The resolver of the focus */
+  // @internal
+  readonly _resolver: Resolver;
   /** The segments of the focused path */
   readonly segments: string[];
   /** The type of the focus */

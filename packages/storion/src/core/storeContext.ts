@@ -24,6 +24,7 @@ import { resolveEquality } from "./equality";
 import { isSpec } from "../is";
 import { willDispose } from "./disposable";
 import { SetupPhaseError, LifetimeMismatchError } from "../errors";
+import { storeTuple } from "../utils/storeTyple";
 
 // =============================================================================
 // Types
@@ -84,6 +85,8 @@ function getAtPath<T>(obj: T, segments: string[]): unknown {
  * @param options - Focus options (fallback, equality)
  */
 export function createFocus<TValue>(
+  storeContext: StoreContext<any>,
+  resolver: Resolver,
   context: FocusContext,
   segments: string[],
   isSetupPhase: () => boolean,
@@ -197,6 +200,8 @@ export function createFocus<TValue>(
     childOptions?: FocusOptions<TChild>
   ): Focus<TChild> => {
     return createFocus(
+      storeContext,
+      resolver,
       context,
       [...segments, ...relativePath.split(".")],
       isSetupPhase,
@@ -211,6 +216,8 @@ export function createFocus<TValue>(
     on,
     to,
     context,
+    _storeContext: storeContext,
+    _resolver: resolver,
     segments,
   });
 
@@ -329,12 +336,7 @@ export function createStoreContext<
       const instance = resolver.get(depSpec);
       onDependency?.(instance);
 
-      // Return tuple with named properties
-      const tuple = [instance.state, instance.actions] as const;
-      return Object.assign(tuple, {
-        state: instance.state,
-        actions: instance.actions,
-      });
+      return storeTuple(instance.state, instance.actions);
     },
 
     // Implementation handles StoreSpec, Factory, and parameterized Factory overloads
@@ -412,12 +414,16 @@ export function createStoreContext<
           ctx.update(updater);
         },
         subscribe,
-        onDispose(callback) {
-          onDispose?.(callback);
-        },
       };
 
-      return createFocus(focusCtx, path.split("."), isSetupPhase, options);
+      return createFocus(
+        ctx,
+        resolver,
+        focusCtx,
+        path.split("."),
+        isSetupPhase,
+        options
+      );
     },
   };
 

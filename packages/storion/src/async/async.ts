@@ -1,4 +1,9 @@
-import type { Focus, SelectorContext, SelectorMixin } from "../types";
+import type {
+  Focus,
+  SelectorContext,
+  SelectorMixin,
+  StoreInstance,
+} from "../types";
 import type {
   AsyncState,
   AsyncMode,
@@ -17,13 +22,14 @@ import type {
   AsyncKey,
   AsyncRequestId,
   SerializedAsyncState,
-  AsyncMixinHandler,
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
 import { untrack } from "../core/tracking";
 import { AsyncFunctionError } from "../errors";
 import { store } from "../core/store";
+import { isSpec } from "../is";
+import { storeTuple } from "../utils/storeTyple";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -175,7 +181,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
  * }
  */
 export function async<T, TArgs extends any[]>(
-  handler: AsyncMixinHandler<T, TArgs>,
+  handler: AsyncHandler<T, TArgs>,
   options?: AsyncMixinOptions<T, "fresh">
 ): SelectorMixin<AsyncMixinResult<T, "fresh", TArgs>>;
 
@@ -189,7 +195,7 @@ export function async<T, TArgs extends any[]>(
 
 // Implementation
 export function async<T, M extends AsyncMode, TArgs extends any[]>(
-  focusOrHandler: Focus<AsyncState<T, M>> | AsyncMixinHandler<T, TArgs>,
+  focusOrHandler: Focus<AsyncState<T, M>> | AsyncHandler<T, TArgs>,
   handlerOrOptions?: AsyncHandler<T, TArgs> | AsyncMixinOptions<T, M>,
   maybeOptions?: AsyncOptions
 ): AsyncActions<T, M, TArgs> | SelectorMixin<AsyncMixinResult<T, M, TArgs>> {
@@ -214,7 +220,6 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
         const actions = asyncWithFocus(
           focus("result") as Focus<AsyncState<T, M>>,
           (asyncContext: AsyncContext, ...args: TArgs) => {
-            Object.assign(asyncContext, { get: storeContext.get });
             return handler(asyncContext, ...args);
           },
           options
@@ -334,10 +339,17 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
             // Create async context
             const isCancelledOrAborted = () =>
               isCancelled || abortController.signal.aborted;
-
             const asyncContext: AsyncContext = {
               signal: abortController.signal,
+              get(specOrFactory: any): any {
+                const instance = focus._resolver.get(specOrFactory);
+                if (isSpec(specOrFactory)) {
+                  const store = instance as StoreInstance<any, any>;
+                  return storeTuple(store.state, store.actions);
+                }
 
+                return instance;
+              },
               safe<T>(
                 promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)
               ): any {
@@ -568,7 +580,7 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
     };
   }
   if (options?.autoCancel) {
-    focus.context.onDispose(() => {
+    focus._storeContext.onDispose(() => {
       cancel();
     });
   }
@@ -866,7 +878,6 @@ export namespace async {
 
   /**
    * Create a fresh mode async state (data undefined during loading/error).
-   * @deprecated Use `asyncState("fresh", "idle")` for explicit state creation
    */
   export function fresh<T = unknown>(): AsyncState<T, "fresh"> {
     return asyncState("fresh", "idle");
@@ -875,7 +886,6 @@ export namespace async {
   /**
    * Create a stale mode async state with initial data.
    * Data is preserved during loading and error states.
-   * @deprecated Use `asyncState("stale", "idle", initialData)` for explicit state creation
    */
   export function stale<T>(initialData: T): AsyncState<T, "stale"> {
     return asyncState("stale", "idle", initialData);
