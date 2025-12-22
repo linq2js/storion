@@ -167,5 +167,4 @@ const { filteredItems } = useStore(({ get }) => {
 
 - [withStore()](/api/with-store) - HOC alternative
 - [trigger()](/api/trigger) - Data fetching helper
-- [create()](/api/create) - Single-store shorthand
 

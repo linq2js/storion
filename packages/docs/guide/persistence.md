@@ -204,3 +204,53 @@ persistMiddleware({
   force: true,  // Always apply persisted state
 });
 ```
+
+## Complex Types with normalize/denormalize
+
+For stores with non-serializable types (`Date`, `Map`, `Set`, class instances), use the `normalize` and `denormalize` options:
+
+```ts
+const sessionStore = store({
+  name: 'session',
+  state: {
+    lastLogin: null as Date | null,
+    cache: new Map<string, unknown>(),
+    permissions: new Set<string>(),
+  },
+  // Transform to JSON-safe format
+  normalize: (state) => ({
+    lastLogin: state.lastLogin?.toISOString() ?? null,
+    cache: Object.fromEntries(state.cache),
+    permissions: Array.from(state.permissions),
+  }),
+  // Restore from JSON-safe format
+  denormalize: (data) => ({
+    lastLogin: data.lastLogin ? new Date(data.lastLogin as string) : null,
+    cache: new Map(Object.entries(data.cache as Record<string, unknown>)),
+    permissions: new Set(data.permissions as string[]),
+  }),
+  setup({ state }) {
+    return {
+      login: () => { state.lastLogin = new Date(); },
+    };
+  },
+});
+```
+
+The `persistMiddleware` automatically uses these when calling:
+- `dehydrate()` → calls `normalize` if defined
+- `hydrate()` → calls `denormalize` if defined
+
+| Type | Normalize | Denormalize |
+|------|-----------|-------------|
+| `Date` | `.toISOString()` | `new Date(str)` |
+| `Map` | `Object.fromEntries()` | `new Map(Object.entries())` |
+| `Set` | `Array.from()` | `new Set(arr)` |
+| `BigInt` | `.toString()` | `BigInt(str)` |
+| Class | `{ ...instance }` | `Object.assign(new Class(), data)` |
+
+## See Also
+
+- [store() API](/api/store) - Full store options reference
+- [persistMiddleware() API](/api/persist-middleware) - Middleware options
+- [notPersisted](/api/not-persisted) - Excluding stores/fields
