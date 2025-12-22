@@ -22,10 +22,10 @@ interface PersistHandler {
 
 interface PersistOptions {
   // Filter which stores to persist
-  filter?: (context: StoreMiddlewareContext) => boolean;
+  filter?: (context: PersistContext) => boolean;
   
   // Filter which fields to persist (for multi-storage patterns)
-  fields?: (context: StoreMiddlewareContext) => string[];
+  fields?: (context: PersistContext) => string[];
   
   // Handler factory - creates load/save for each store
   handler: (context: PersistContext) => PersistHandler | Promise<PersistHandler>;

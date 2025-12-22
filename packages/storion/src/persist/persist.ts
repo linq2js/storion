@@ -94,19 +94,19 @@ export interface PersistOptions {
    * Filter which stores should be persisted.
    * If not provided, all stores are persisted.
    *
-   * @param context - The middleware context
+   * @param context - The persist context with store instance
    * @returns true to persist, false to skip
    */
-  filter?: (context: StoreMiddlewareContext) => boolean;
+  filter?: (context: PersistContext) => boolean;
 
   /**
    * Filter which fields should be persisted.
    * If not provided, all fields are persisted.
    *
-   * @param context - The middleware context
+   * @param context - The persist context with store instance
    * @returns the fields to persist
    */
-  fields?: (context: StoreMiddlewareContext) => string[];
+  fields?: (context: PersistContext) => string[];
 
   /**
    * Handler factory that creates load/save operations for each store.
@@ -246,8 +246,14 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
     // Call next() to create the instance
     const instance = next();
 
+    // Create persist context with store instance
+    const persistContext: PersistContext = {
+      ...context,
+      store: instance,
+    };
+
     // Skip if filter returns false
-    if (filter && !filter(context)) {
+    if (filter && !filter(persistContext)) {
       return instance;
     }
 
@@ -267,7 +273,8 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
       )
     );
 
-    const stateFields = fields?.(context) ?? (context.spec.fields as string[]);
+    const stateFields =
+      fields?.(persistContext) ?? (context.spec.fields as string[]);
 
     // Skip if no fields to persist
     if (stateFields.length === 0) {
@@ -303,12 +310,6 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
       }
 
       return filtered;
-    };
-
-    // Create persist context with store instance
-    const persistContext: PersistContext = {
-      ...context,
-      store: instance,
     };
 
     // Setup persistence with handler result
