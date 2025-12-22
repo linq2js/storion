@@ -1,12 +1,6 @@
 // ===== Async Mode =====
 
-import {
-  ActionsBase,
-  StateBase,
-  StoreContext,
-  StoreSpec,
-  StoreTuple,
-} from "../types";
+import { ActionsBase, StateBase, StoreSpec, StoreTuple } from "../types";
 
 /**
  * Async data mode:

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { async, asyncState, asyncStateFrom } from "./async";
+import { async, asyncState } from "./async";
 import type { AsyncState, AsyncMode } from "./types";
 import type { Focus, SelectorContext } from "../types";
 import { withHooks } from "../core/tracking";
