@@ -165,7 +165,7 @@ const { filteredItems } = useStore(({ get }) => {
 
 ## See Also
 
-- [useLocalStore()](/api/use-local-store) - Component-scoped stores
 - [withStore()](/api/with-store) - HOC alternative
 - [trigger()](/api/trigger) - Data fetching helper
+- [create()](/api/create) - Single-store shorthand
 

@@ -222,40 +222,6 @@ function SignupForm() {
 }
 ```
 
-## Using useLocalStore for Forms
-
-For forms that don't need to share state, use `useLocalStore`:
-
-```tsx
-import { useLocalStore } from 'storion/react';
-import { signupFormStore } from './stores';
-
-function SignupForm() {
-  // Each form instance gets its own state
-  const [state, actions] = useLocalStore(signupFormStore);
-
-  // ... rest of the form
-}
-```
-
-## With Initial Values
-
-```tsx
-function EditUserForm({ user }: { user: User }) {
-  const [state, actions] = useLocalStore(editFormStore, {
-    initialState: {
-      values: {
-        name: user.name,
-        email: user.email,
-      },
-    },
-    deps: [user.id], // Recreate when user changes
-  });
-
-  // ... rest of the form
-}
-```
-
 ## Field-Level Components
 
 ```tsx
@@ -310,7 +276,6 @@ function SignupForm() {
 2. **Touched State**: Only show errors after user interaction
 3. **Submission State**: Track loading state during async submit
 4. **Field Components**: Reusable field wrappers for consistency
-5. **useLocalStore**: Each form instance gets isolated state
 
 ## Try It
 
