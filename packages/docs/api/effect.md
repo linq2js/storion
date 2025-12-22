@@ -64,15 +64,35 @@ dispose();
 
 ## Cleanup Function
 
+Use `ctx.onCleanup()` to register cleanup logic:
+
 ```ts
-effect(() => {
+effect((ctx) => {
   const handler = () => console.log('clicked');
   document.addEventListener('click', handler);
   
   // Cleanup runs before re-execution and on dispose
-  return () => {
+  ctx.onCleanup(() => {
     document.removeEventListener('click', handler);
-  };
+  });
+});
+```
+
+**Note:** Do NOT return a cleanup function (unlike React's `useEffect`):
+
+```ts
+// ❌ WRONG - returning cleanup function
+effect(() => {
+  const handler = () => {};
+  document.addEventListener('click', handler);
+  return () => document.removeEventListener('click', handler);
+});
+
+// ✅ CORRECT - use ctx.onCleanup()
+effect((ctx) => {
+  const handler = () => {};
+  document.addEventListener('click', handler);
+  ctx.onCleanup(() => document.removeEventListener('click', handler));
 });
 ```
 

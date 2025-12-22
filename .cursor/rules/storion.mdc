@@ -96,6 +96,24 @@ effect((ctx) => {
 });
 ```
 
+### 3b. Effect Cleanup: Use ctx.onCleanup()
+
+```ts
+// ❌ WRONG - returning cleanup function (not React useEffect!)
+effect(() => {
+  const handler = () => {};
+  document.addEventListener("click", handler);
+  return () => document.removeEventListener("click", handler);
+});
+
+// ✅ CORRECT - use ctx.onCleanup()
+effect((ctx) => {
+  const handler = () => {};
+  document.addEventListener("click", handler);
+  ctx.onCleanup(() => document.removeEventListener("click", handler));
+});
+```
+
 ### 4. trigger() is Global Function
 
 ```ts
