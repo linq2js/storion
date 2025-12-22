@@ -1468,7 +1468,7 @@ export interface Disposable {
  * - `fields: undefined` → store-level meta
  * - `fields: ["name", "email"]` → applies to multiple fields
  */
-export type MetaEntry<TField = unknown, TValue = unknown> = {
+export type MetaEntry<TField = any, TValue = any> = {
   fields?: TField[];
   value: TValue;
   type: AnyFunc;

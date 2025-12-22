@@ -1,5 +1,6 @@
 import type {
   Focus,
+  MetaEntry,
   SelectorContext,
   SelectorMixin,
   StoreInstance,
@@ -122,6 +123,14 @@ export interface AsyncMixinOptions<T, M extends AsyncMode = "fresh">
    * Initial async state. Defaults to `async.fresh<T>()`.
    */
   initial?: AsyncState<T, M>;
+  /**
+   * Name of store for the async state. Defaults to `async:${handler.name || "anonymous"}`.
+   */
+  name?: string;
+  /**
+   * Metadata for the async state. Defaults to empty array.
+   */
+  meta?: MetaEntry<"result"> | MetaEntry<"result">[];
 }
 
 /**
@@ -212,8 +221,9 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     // Create a store spec for the async state
     // Use 'any' to bypass ActionsBase constraint - we control the types at mixin return
     const asyncSpec = store({
-      name: `async:${handler.name || "anonymous"}`,
+      name: options?.name ?? `async:${handler.name || "anonymous"}`,
       state: { result: initialState },
+      meta: options?.meta,
       setup(storeContext) {
         const { focus } = storeContext;
         // Create async actions bound to the result focus
