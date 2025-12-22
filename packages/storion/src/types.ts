@@ -167,6 +167,9 @@ export interface FocusContext {
   update: (updater: (draft: StateBase) => void) => void;
   /** Subscribe to state changes */
   subscribe: (listener: VoidFunction) => VoidFunction;
+
+  /** Register a callback to run when the focus is disposed */
+  onDispose: (callback: () => void) => void;
 }
 
 /**

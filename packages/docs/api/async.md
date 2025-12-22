@@ -189,15 +189,15 @@ function PostList({ userId }: { userId: string }) {
 
 ## Cancellation
 
-The `ctx.signal` is automatically cancelled when:
-- A new request starts
-- The store is disposed
+When `autoCancel: true` (the default), the `ctx.signal` is automatically aborted when:
+- A new request starts (previous request is cancelled)
+- The store is disposed (via `focus.context.onDispose`)
 
 ```ts
 const profileAsync = async(
   focus('profile'),
   async (ctx, userId: string) => {
-    // Use signal for fetch
+    // Use signal for fetch - automatically cancelled on new request or dispose
     const res = await fetch(`/api/users/${userId}`, {
       signal: ctx.signal,
     });
@@ -207,6 +207,13 @@ const profileAsync = async(
     
     return res.json();
   }
+);
+
+// Disable auto-cancel for concurrent requests
+const multiAsync = async(
+  focus('results'),
+  async (ctx, id: string) => { /* ... */ },
+  { autoCancel: false }
 );
 ```
 
@@ -236,6 +243,160 @@ function UserProfile({ userId }: { userId: string }) {
   // ...
 }
 ```
+
+## AsyncContext
+
+The context object passed to async handler functions (store-bound mode).
+
+### signal
+
+`AbortSignal` for cancellation. When `autoCancel: true` (default), automatically aborted when:
+- A new request starts (previous request is cancelled)
+- The store is disposed (cleanup registered via `focus.context.onDispose`)
+
+```ts
+async(focus('user'), async (ctx, userId: string) => {
+  // Pass signal to fetch for automatic cancellation
+  const res = await fetch(`/api/users/${userId}`, {
+    signal: ctx.signal,
+  });
+  
+  // Check if cancelled before expensive operations
+  if (ctx.signal.aborted) return;
+  
+  return res.json();
+});
+```
+
+### safe(promise)
+
+Wrap a promise to never resolve/reject if the async operation is cancelled. Useful for nested async operations that should be cancelled together.
+
+```ts
+async(focus('data'), async (ctx) => {
+  // If cancelled, these promises will never resolve
+  const data1 = await ctx.safe(fetch('/api/1').then(r => r.json()));
+  const data2 = await ctx.safe(fetch('/api/2').then(r => r.json()));
+  
+  return { data1, data2 };
+});
+```
+
+### safe(callback)
+
+Wrap a callback to not run if the async operation is cancelled. Useful for event handlers, timeouts, and deferred operations.
+
+```ts
+async(focus('data'), async (ctx) => {
+  // Callback won't run if cancelled
+  setTimeout(ctx.safe(() => {
+    console.log('Still active!');
+  }), 1000);
+  
+  // Safe callback for state updates
+  someEmitter.on('data', ctx.safe((data) => {
+    // Only runs if not cancelled
+    processData(data);
+  }));
+  
+  return await fetchData();
+});
+```
+
+### cancel()
+
+Manually cancel the current async operation. Useful for implementing custom timeouts.
+
+```ts
+async(focus('data'), async (ctx) => {
+  // Timeout after 5 seconds
+  const timeoutId = setTimeout(ctx.cancel, 5000);
+  
+  try {
+    const data = await ctx.safe(fetch('/api/slow'));
+    return data.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+});
+```
+
+### Full Interface
+
+```ts
+interface AsyncContext {
+  /** AbortSignal for cancellation */
+  signal: AbortSignal;
+  
+  /** Wrap promise to never resolve if cancelled */
+  safe<T>(promise: Promise<T>): Promise<T>;
+  
+  /** Wrap callback to not run if cancelled */
+  safe<TArgs, TReturn>(
+    callback: (...args: TArgs) => TReturn
+  ): (...args: TArgs) => TReturn | undefined;
+  
+  /** Cancel the current async operation */
+  cancel(): void;
+}
+```
+
+## AsyncMixinContext
+
+Extended context for async mixin handlers (component-local mode). Includes everything from `AsyncContext` plus store access.
+
+### get(spec)
+
+Get another store's state and actions. Same as `StoreContext.get()`.
+
+```ts
+const checkout = async(async (ctx, paymentMethod: string) => {
+  // Access other stores
+  const [user] = ctx.get(userStore);
+  const [cart] = ctx.get(cartStore);
+  
+  const res = await fetch('/api/checkout', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${user.token}` },
+    body: JSON.stringify({
+      userId: user.id,
+      items: cart.items,
+      paymentMethod,
+    }),
+    signal: ctx.signal,
+  });
+  
+  return res.json();
+});
+```
+
+### get(factory)
+
+Get a service or factory instance.
+
+```ts
+const submitOrder = async(async (ctx, order: Order) => {
+  const api = ctx.get(apiService);
+  const logger = ctx.get(loggerService);
+  
+  logger.info('Submitting order', order.id);
+  return api.submitOrder(order);
+});
+```
+
+### Full Interface
+
+```ts
+interface AsyncMixinContext extends AsyncContext {
+  /** Get store state/actions or service instance */
+  get: StoreContext["get"];
+}
+```
+
+| Context | Mode | Store Access |
+|---------|------|--------------|
+| `AsyncContext` | Store-bound (`async(focus, handler)`) | ❌ No |
+| `AsyncMixinContext` | Mixin (`async(handler)`) | ✅ Yes via `ctx.get()` |
 
 ## Component-Local Async (Mixin Pattern)
 
@@ -412,7 +573,7 @@ This is useful for mutations that need to gather data from multiple stores befor
 | **Component-local** | Each component gets its own async state |
 | **Auto-disposed** | State is cleaned up on unmount |
 | **No store boilerplate** | No need to define a store for simple mutations |
-| **Cancellation** | Requests are cancelled on unmount |
+| **Cancellation** | Auto-cancel on new dispatch or store dispose |
 | **Type-safe** | Full TypeScript inference for args and result |
 | **Store access** | `ctx.get()` allows reading other stores' state |
 

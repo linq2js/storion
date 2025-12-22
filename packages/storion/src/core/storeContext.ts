@@ -412,6 +412,9 @@ export function createStoreContext<
           ctx.update(updater);
         },
         subscribe,
+        onDispose(callback) {
+          onDispose?.(callback);
+        },
       };
 
       return createFocus(focusCtx, path.split("."), isSetupPhase, options);

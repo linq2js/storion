@@ -211,7 +211,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
       setup(storeContext) {
         const { focus } = storeContext;
         // Create async actions bound to the result focus
-        return asyncWithFocus(
+        const actions = asyncWithFocus(
           focus("result") as Focus<AsyncState<T, M>>,
           (asyncContext: AsyncContext, ...args: TArgs) => {
             Object.assign(asyncContext, { get: storeContext.get });
@@ -219,6 +219,8 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
           },
           options
         ) as any;
+
+        return actions;
       },
     });
 
@@ -564,6 +566,11 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
       // Read state to trigger reactivity (via focus getter) - this is the only tracked read
       state: getState(),
     };
+  }
+  if (options?.autoCancel) {
+    focus.context.onDispose(() => {
+      cancel();
+    });
   }
 
   return {

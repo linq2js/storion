@@ -168,26 +168,239 @@ Used by `hydrate()` when restoring persisted state.
 | `BigInt` | `.toString()` | `BigInt(str)` |
 | Class | `{ ...instance }` | `Object.assign(new Class(), data)` |
 
-## Setup Context
+## Setup Context (StoreContext)
 
-The `setup` function receives:
+The `setup` function receives a `StoreContext` object with the following properties and methods:
+
+### state
+
+Mutable reactive state proxy. Writes trigger subscriber notifications, reads inside `effect()` create reactive dependencies.
+
+```ts
+setup({ state }) {
+  return {
+    increment: () => { state.count++; },
+    setName: (name: string) => { state.name = name; },
+  };
+}
+```
+
+### get(spec)
+
+Get another store's state and actions. Returns a tuple `[state, actions]`. Creates dependency - store is created if not exists. **Setup-time only.**
+
+```ts
+setup({ get }) {
+  const [userState, userActions] = get(userStore);
+  
+  return {
+    greeting: () => `Hello, ${userState.name}`,
+    logout: () => userActions.clearUser(),
+  };
+}
+```
+
+### get(factory)
+
+Get a service or factory instance. Creates and caches the instance using the factory function.
+
+```ts
+setup({ get }) {
+  const api = get(apiService);
+  const logger = get(loggerService);
+  
+  return {
+    fetchData: async () => {
+      logger.info('Fetching data...');
+      return api.getData();
+    },
+  };
+}
+```
+
+### create(spec)
+
+Create a child store instance that is automatically disposed when the parent store is disposed. Unlike `get()`, returns full `StoreInstance` with access to `id`, `subscribe()`, `dispose()`, etc.
+
+```ts
+setup({ create }) {
+  const childInstance = create(childStore);
+  
+  return {
+    getChildState: () => childInstance.state,
+    subscribeToChild: (fn) => childInstance.subscribe(fn),
+    disposeChild: () => childInstance.dispose(),
+  };
+}
+```
+
+### create(factory, ...args)
+
+Create a service or factory instance with additional arguments. Unlike `get()` which caches, `create()` always creates fresh instances.
+
+```ts
+setup({ create }) {
+  const db = create(createDatabase, { host: 'localhost', port: 5432 });
+  const logger = create(createLogger, 'auth-store');
+  
+  return {
+    getData: async () => db.query('SELECT * FROM users'),
+    log: (msg: string) => logger.info(msg),
+  };
+}
+```
+
+### update
+
+Immer-style state updates for nested mutations. Also provides `.action()` to create action functions.
+
+```ts
+setup({ state, update }) {
+  return {
+    // Direct update with updater function
+    addItem: (item: Item) => {
+      update(draft => {
+        draft.items.push(item);
+        draft.count++;
+      });
+    },
+    
+    // Direct update with partial object
+    setDefaults: () => {
+      update({ count: 0, name: 'Default' });
+    },
+    
+    // Create action with update.action()
+    increment: update.action(draft => {
+      draft.count++;
+    }),
+    
+    // Action with arguments
+    addTodo: update.action((draft, text: string) => {
+      draft.items.push({ id: Date.now(), text, done: false });
+    }),
+  };
+}
+```
+
+### dirty() / dirty(prop)
+
+Check if state has been modified since setup completed.
+
+```ts
+setup({ state, dirty }) {
+  return {
+    hasChanges: () => dirty(),           // Any property modified?
+    isNameChanged: () => dirty('name'),  // Specific property modified?
+  };
+}
+```
+
+### reset()
+
+Reset state to initial values (captured after setup/effects). Triggers change notifications for all modified properties.
+
+```ts
+setup({ state, reset }) {
+  return {
+    clearAll: () => reset(),
+  };
+}
+```
+
+### onDispose(callback)
+
+Register a cleanup callback to run when the store is disposed. Callbacks are called in registration order.
+
+```ts
+setup({ state, onDispose }) {
+  const subscription = api.subscribe(data => {
+    state.data = data;
+  });
+  onDispose(() => subscription.unsubscribe());
+  
+  const intervalId = setInterval(() => {
+    state.tick++;
+  }, 1000);
+  onDispose(() => clearInterval(intervalId));
+  
+  return {};
+}
+```
+
+### mixin(mixin, ...args)
+
+Apply a mixin to compose reusable logic. Mixins receive the same context and can return actions or values. **Setup-time only.**
+
+```ts
+const counterMixin = (ctx: StoreContext, initial: number) => {
+  ctx.state.count = initial;
+  return {
+    increment: () => { ctx.state.count++; },
+    decrement: () => { ctx.state.count--; },
+  };
+};
+
+setup({ mixin }) {
+  const counter = mixin(counterMixin, 10);
+  
+  return {
+    ...counter,
+    double: () => { counter.increment(); counter.increment(); },
+  };
+}
+```
+
+### focus(path, options?)
+
+Create a lens-like accessor for a nested state path. Returns a `[getter, setter]` tuple with an `on()` method for subscribing to changes.
+
+```ts
+setup({ focus }) {
+  const [getName, setName] = focus('profile.name');
+  const [getProfile] = focus('profile', { fallback: () => ({ name: 'Guest' }) });
+  
+  return {
+    getName,
+    setName,
+    uppercaseName: () => setName(prev => prev.toUpperCase()),
+    
+    // Subscribe to changes
+    watchName: (callback) => {
+      return focus('profile.name').on(({ next, prev }) => {
+        callback(next, prev);
+      });
+    },
+  };
+}
+```
+
+### Full Interface
 
 ```ts
 interface StoreContext<TState> {
-  // Reactive state object
-  state: TState;
+  readonly state: TState;
   
-  // Immer-style updates for nested state
-  update: (producer: (draft: TState) => void) => void;
+  get<S, A>(spec: StoreSpec<S, A>): StoreTuple<S, A>;
+  get<T>(factory: Factory<T>): T;
   
-  // Get other stores/services (setup-time only)
-  get: <T>(factory: Factory<T>) => T;
+  create<S, A>(spec: StoreSpec<S, A>): StoreInstance<S, A>;
+  create<T>(factory: Factory<T>): T;
+  create<T, Args>(factory: Factory<T, Args>, ...args: Args): T;
   
-  // Compose with mixins (setup-time only)
-  mixin: <T>(factory: Factory<T>) => T;
+  update: StoreUpdate<TState>;
   
-  // Lens-like access to nested paths
-  focus: <P extends Path>(path: P) => Focus<TState, P>;
+  dirty(): boolean;
+  dirty<K extends keyof TState>(prop: K): boolean;
+  
+  reset(): void;
+  
+  onDispose(callback: () => void): void;
+  
+  mixin<R, Args>(mixin: StoreMixin<TState, R, Args>, ...args: Args): R;
+  
+  focus<P extends StatePath<TState>>(path: P): Focus<PathValue<TState, P>>;
+  focus<P>(path: P, options: FocusOptions): Focus<PathValue<TState, P>>;
 }
 ```
 
