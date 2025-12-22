@@ -5,7 +5,7 @@ Meta marker to exclude stores or fields from persistence.
 ## Import
 
 ```ts
-import { notPersisted } from 'storion/persist';
+import { notPersisted } from "storion/persist";
 ```
 
 ## Store-Level Exclusion
@@ -13,17 +13,17 @@ import { notPersisted } from 'storion/persist';
 Exclude an entire store from persistence:
 
 ```ts
-import { store } from 'storion';
-import { notPersisted } from 'storion/persist';
+import { store } from "storion";
+import { notPersisted } from "storion/persist";
 
 const sessionStore = store({
-  name: 'session',
+  name: "session",
   state: {
-    token: '',
-    refreshToken: '',
+    token: "",
+    refreshToken: "",
     expiry: 0,
   },
-  meta: [notPersisted()],  // Entire store excluded
+  meta: [notPersisted()], // Entire store excluded
   setup({ state }) {
     return {
       setTokens: (token: string, refreshToken: string, expiry: number) => {
@@ -32,8 +32,8 @@ const sessionStore = store({
         state.expiry = expiry;
       },
       clear: () => {
-        state.token = '';
-        state.refreshToken = '';
+        state.token = "";
+        state.refreshToken = "";
         state.expiry = 0;
       },
     };
@@ -97,45 +97,50 @@ When `persist` processes a store:
 
 ```ts
 const signupStore = store({
-  name: 'signup',
+  name: "signup",
   state: {
     // Persist these (user convenience)
-    email: '',
-    username: '',
+    email: "",
+    username: "",
     agreeToTerms: false,
-    
+
     // Don't persist (security/temporary)
-    password: '',
-    confirmPassword: '',
+    password: "",
+    confirmPassword: "",
     validationErrors: {} as Record<string, string>,
     isSubmitting: false,
   },
   meta: [
-    notPersisted.for(['password', 'confirmPassword', 'validationErrors', 'isSubmitting']),
+    notPersisted.for([
+      "password",
+      "confirmPassword",
+      "validationErrors",
+      "isSubmitting",
+    ]),
   ],
   setup({ state, update }) {
     return {
       setField: (field: keyof typeof state, value: unknown) => {
         (state as any)[field] = value;
       },
-      
+
       validate: () => {
         const errors: Record<string, string> = {};
-        
+
         if (state.password.length < 8) {
-          errors.password = 'Password must be at least 8 characters';
+          errors.password = "Password must be at least 8 characters";
         }
         if (state.password !== state.confirmPassword) {
-          errors.confirmPassword = 'Passwords do not match';
+          errors.confirmPassword = "Passwords do not match";
         }
-        
+
         state.validationErrors = errors;
         return Object.keys(errors).length === 0;
       },
-      
+
       submit: async () => {
         if (!this.validate()) return;
-        
+
         state.isSubmitting = true;
         try {
           await api.signup({
@@ -154,15 +159,15 @@ const signupStore = store({
 
 ## Use Cases
 
-| Use Case | Level | Example |
-|----------|-------|---------|
-| Session tokens | Store | `meta: [notPersisted()]` |
-| Passwords | Field | `notPersisted.for('password')` |
-| Confirmation inputs | Field | `notPersisted.for('confirmPassword')` |
-| Validation state | Field | `notPersisted.for('errors')` |
-| Loading flags | Field | `notPersisted.for('isLoading')` |
-| Sensitive data | Store/Field | Credit cards, SSN, etc. |
-| Derived/computed | Field | Cached calculations |
+| Use Case            | Level       | Example                               |
+| ------------------- | ----------- | ------------------------------------- |
+| Session tokens      | Store       | `meta: [notPersisted()]`              |
+| Passwords           | Field       | `notPersisted.for('password')`        |
+| Confirmation inputs | Field       | `notPersisted.for('confirmPassword')` |
+| Validation state    | Field       | `notPersisted.for('errors')`          |
+| Loading flags       | Field       | `notPersisted.for('isLoading')`       |
+| Sensitive data      | Store/Field | Credit cards, SSN, etc.               |
+| Derived/computed    | Field       | Cached calculations                   |
 
 ## Combining with filter
 
@@ -171,10 +176,12 @@ You can use both `notPersisted` and `filter` option:
 ```ts
 persist({
   // Only persist these stores
-  filter: (spec) => ['user', 'settings', 'cart'].includes(spec.displayName),
-  
-  load: /* ... */,
-  save: /* ... */,
+  filter: (ctx) => ['user', 'settings', 'cart'].includes(ctx.spec.displayName),
+
+  handler: (ctx) => ({
+    load: () => /* ... */,
+    save: (state) => /* ... */,
+  }),
 })
 
 // Plus per-store field exclusions via notPersisted.for()
@@ -184,4 +191,3 @@ persist({
 
 - [persist()](/api/persist-middleware) - Persistence middleware
 - [meta()](/api/meta) - Creating custom meta types
-

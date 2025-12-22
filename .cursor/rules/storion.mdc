@@ -245,7 +245,7 @@ function FormComponent() {
 - Each component gets its own isolated instance
 - Instances are automatically disposed when component unmounts
 
-### Async State
+### Async State (Store-bound)
 
 ```ts
 const userStore = store({
@@ -263,6 +263,63 @@ const userStore = store({
   },
 });
 ```
+
+### Async Mixin (Component-local mutations)
+
+Use `async(handler)` without focus for component-local async state - ideal for form submissions and mutations:
+
+```ts
+import { async } from "storion/async";
+
+// Define mutation - returns a selector mixin
+const submitForm = async(async (ctx, data: FormData) => {
+  const res = await fetch("/api/submit", {
+    method: "POST",
+    body: JSON.stringify(data),
+    signal: ctx.signal,
+  });
+  return res.json();
+});
+
+// Use in component - state is component-local, auto-disposed
+function ContactForm() {
+  const { status, error, submit } = useStore(({ mixin }) => {
+    const [state, actions] = mixin(submitForm);
+    return {
+      status: state.status,
+      error: state.error,
+      submit: actions.dispatch,
+    };
+  });
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); submit(formData); }}>
+      <button disabled={status === "pending"}>
+        {status === "pending" ? "Submitting..." : "Submit"}
+      </button>
+      {status === "error" && <p>{error.message}</p>}
+    </form>
+  );
+}
+
+// Access other stores via ctx.get() for cross-store mutations
+const checkout = async(async (ctx, paymentMethod: string) => {
+  const [user] = ctx.get(userStore);
+  const [cart] = ctx.get(cartStore);
+  
+  const res = await fetch("/api/checkout", {
+    headers: { Authorization: `Bearer ${user.token}` },
+    body: JSON.stringify({ items: cart.items, paymentMethod }),
+    signal: ctx.signal,
+  });
+  return res.json();
+});
+```
+
+**When to use:**
+- `async(focus, handler)` → shared/cached data (queries)
+- `async(handler)` → component-local (mutations, form submissions)
+- `ctx.get(store)` → access other stores' state within mixin handler
 
 ### Trigger Fetch
 

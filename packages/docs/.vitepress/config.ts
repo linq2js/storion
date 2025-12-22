@@ -144,7 +144,7 @@ export default defineConfig({
 
     footer: {
       message: "Released under the MIT License.",
-      copyright: "Copyright © 2024 linq2js",
+      copyright: "Copyright © 2024-2025 linq2js",
     },
 
     search: {

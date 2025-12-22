@@ -1,4 +1,4 @@
-import type { Focus } from "../types";
+import type { Focus, SelectorContext, SelectorMixin } from "../types";
 import type {
   AsyncState,
   AsyncMode,
@@ -17,11 +17,13 @@ import type {
   AsyncKey,
   AsyncRequestId,
   SerializedAsyncState,
+  AsyncMixinHandler,
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
 import { untrack } from "../core/tracking";
 import { AsyncFunctionError } from "../errors";
+import { store } from "../core/store";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -103,9 +105,140 @@ function getRetryDelay(
   return 1000;
 }
 
+// ===== Async Mixin Options =====
+
+/**
+ * Options for creating an async selector mixin.
+ */
+export interface AsyncMixinOptions<T, M extends AsyncMode = "fresh">
+  extends AsyncOptions {
+  /**
+   * Initial async state. Defaults to `async.fresh<T>()`.
+   */
+  initial?: AsyncState<T, M>;
+}
+
+/**
+ * Result tuple from async selector mixin: [state, actions]
+ */
+export type AsyncMixinResult<T, M extends AsyncMode, TArgs extends any[]> = [
+  AsyncState<T, M>,
+  AsyncActions<T, M, TArgs>
+];
+
 // ===== Main async function =====
 
+/**
+ * Create async actions bound to a focus (lens) for async state management.
+ *
+ * @example
+ * const userStore = store({
+ *   name: 'user',
+ *   state: { user: async.fresh<User>() },
+ *   setup({ focus }) {
+ *     const userAsync = async(focus('user'), async (ctx, id: string) => {
+ *       const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
+ *       return res.json();
+ *     });
+ *     return { fetchUser: userAsync.dispatch };
+ *   },
+ * });
+ */
 export function async<T, M extends AsyncMode, TArgs extends any[]>(
+  focus: Focus<AsyncState<T, M>>,
+  handler: AsyncHandler<T, TArgs>,
+  options?: AsyncOptions
+): AsyncActions<T, M, TArgs>;
+
+/**
+ * Create an async selector mixin for component-local async state.
+ * Uses `scoped()` internally, so state is isolated per component and auto-disposed.
+ *
+ * @example
+ * const fetchUser = async(
+ *   async (ctx, userId: string) => {
+ *     const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
+ *     return res.json();
+ *   }
+ * );
+ *
+ * function UserProfile({ userId }) {
+ *   const [user, { dispatch }] = useStore(({ mixin }) => {
+ *     return mixin(fetchUser);
+ *   });
+ *
+ *   // Trigger fetch
+ *   trigger(dispatch, [userId], userId);
+ *
+ *   if (user.status === 'pending') return <Spinner />;
+ *   return <div>{user.data?.name}</div>;
+ * }
+ */
+export function async<T, TArgs extends any[]>(
+  handler: AsyncMixinHandler<T, TArgs>,
+  options?: AsyncMixinOptions<T, "fresh">
+): SelectorMixin<AsyncMixinResult<T, "fresh", TArgs>>;
+
+/**
+ * Create an async selector mixin with stale mode.
+ */
+export function async<T, TArgs extends any[]>(
+  handler: AsyncHandler<T, TArgs>,
+  options: AsyncMixinOptions<T, "stale"> & { initial: AsyncState<T, "stale"> }
+): SelectorMixin<AsyncMixinResult<T, "stale", TArgs>>;
+
+// Implementation
+export function async<T, M extends AsyncMode, TArgs extends any[]>(
+  focusOrHandler: Focus<AsyncState<T, M>> | AsyncMixinHandler<T, TArgs>,
+  handlerOrOptions?: AsyncHandler<T, TArgs> | AsyncMixinOptions<T, M>,
+  maybeOptions?: AsyncOptions
+): AsyncActions<T, M, TArgs> | SelectorMixin<AsyncMixinResult<T, M, TArgs>> {
+  // Check if first argument is a handler (mixin mode) or focus (actions mode)
+  if (typeof focusOrHandler === "function") {
+    // Mixin mode: async(handler, options?) => SelectorMixin
+    const handler = focusOrHandler as AsyncHandler<T, TArgs>;
+    const options = handlerOrOptions as AsyncMixinOptions<T, M> | undefined;
+
+    // Determine initial state
+    const initialState =
+      options?.initial ?? (asyncState("fresh", "idle") as AsyncState<T, M>);
+
+    // Create a store spec for the async state
+    // Use 'any' to bypass ActionsBase constraint - we control the types at mixin return
+    const asyncSpec = store({
+      name: `async:${handler.name || "anonymous"}`,
+      state: { result: initialState },
+      setup(storeContext) {
+        const { focus } = storeContext;
+        // Create async actions bound to the result focus
+        return asyncWithFocus(
+          focus("result") as Focus<AsyncState<T, M>>,
+          (asyncContext: AsyncContext, ...args: TArgs) => {
+            Object.assign(asyncContext, { get: storeContext.get });
+            return handler(asyncContext, ...args);
+          },
+          options
+        ) as any;
+      },
+    });
+
+    // Return a selector mixin that uses scoped()
+    return ((context: SelectorContext) => {
+      const [state, actions] = context.scoped(asyncSpec);
+      return [state.result, actions] as AsyncMixinResult<T, M, TArgs>;
+    }) as SelectorMixin<AsyncMixinResult<T, M, TArgs>>;
+  }
+
+  // Actions mode: async(focus, handler, options?) => AsyncActions
+  const focus = focusOrHandler as Focus<AsyncState<T, M>>;
+  const handler = handlerOrOptions as AsyncHandler<T, TArgs>;
+  const options = maybeOptions;
+
+  return asyncWithFocus(focus, handler, options);
+}
+
+// Internal implementation for focus-based async
+function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
   focus: Focus<AsyncState<T, M>>,
   handler: AsyncHandler<T, TArgs>,
   options?: AsyncOptions
@@ -122,240 +255,249 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
 
   // Dispatch implementation
   function dispatch(...args: TArgs): CancellablePromise<T> {
-    // Cancel any ongoing request (if autoCancel enabled, default: true)
-    if (lastCancel && options?.autoCancel !== false) {
-      lastCancel();
-    }
-
-    // Create new abort controller
-    const abortController = new AbortController();
-    let isCancelled = false;
-
-    // Create unique request ID for this dispatch
-    // Used to detect external state modifications (e.g., devtools rollback)
-    const requestId: AsyncRequestId = {};
-
-    // Create a promise that rejects when cancelled
-    // This ensures dispatch() rejects immediately on cancel, even if handler is stuck
-    let rejectOnCancel: ((error: Error) => void) | null = null;
-    const cancelPromise = new Promise<never>((_, reject) => {
-      rejectOnCancel = reject;
-    });
-
-    // Create cancel function
-    const cancel = () => {
-      if (!isCancelled) {
-        isCancelled = true;
-        abortController.abort();
-        // Clean up promise from cache
-        pendingPromises.delete(asyncKey);
-        // Reject the cancel promise to ensure dispatch() rejects immediately
-        rejectOnCancel?.(new DOMException("Aborted", "AbortError"));
+    return untrack(() => {
+      // Cancel any ongoing request (if autoCancel enabled, default: true)
+      if (lastCancel && options?.autoCancel !== false) {
+        lastCancel();
       }
-    };
 
-    // Store as lastCancel and increment invocation count
-    lastCancel = cancel;
-    lastArgs = args;
-    invocationCount++;
+      // Create new abort controller
+      const abortController = new AbortController();
+      let isCancelled = false;
 
-    // Get current state to determine mode and stale data
-    const prevState = getState();
-    const mode = prevState.mode;
-    const staleData =
-      mode === "stale"
-        ? prevState.data
-        : prevState.status === "success"
-        ? prevState.data
-        : undefined;
+      // Create unique request ID for this dispatch
+      // Used to detect external state modifications (e.g., devtools rollback)
+      const requestId: AsyncRequestId = {};
 
-    // Check if state was externally modified (only relevant when autoCancel is true)
-    // With autoCancel: false, concurrent updates are intentional, so skip this check
-    const autoCancel = options?.autoCancel !== false;
+      // Create a promise that rejects when cancelled
+      // This ensures dispatch() rejects immediately on cancel, even if handler is stuck
+      let rejectOnCancel: ((error: Error) => void) | null = null;
+      const cancelPromise = new Promise<never>((_, reject) => {
+        rejectOnCancel = reject;
+      });
 
-    // Helper to check if state was externally modified
-    // Returns true if state was changed by something other than this async action
-    const isStateExternallyModified = (): boolean => {
-      if (!autoCancel) {
-        // When autoCancel is false, concurrent updates are allowed
-        // Only detect true external modifications (no __requestId at all)
+      // Create cancel function
+      const cancel = () => {
+        if (!isCancelled) {
+          isCancelled = true;
+          abortController.abort();
+          // Clean up promise from cache
+          pendingPromises.delete(asyncKey);
+          // Reject the cancel promise to ensure dispatch() rejects immediately
+          rejectOnCancel?.(new DOMException("Aborted", "AbortError"));
+        }
+      };
+
+      // Store as lastCancel and increment invocation count
+      lastCancel = cancel;
+      lastArgs = args;
+      invocationCount++;
+
+      // Get current state to determine mode and stale data
+      const prevState = getState();
+      const mode = prevState.mode;
+      const staleData =
+        mode === "stale"
+          ? prevState.data
+          : prevState.status === "success"
+          ? prevState.data
+          : undefined;
+
+      // Check if state was externally modified (only relevant when autoCancel is true)
+      // With autoCancel: false, concurrent updates are intentional, so skip this check
+      const autoCancel = options?.autoCancel !== false;
+
+      // Helper to check if state was externally modified
+      // Returns true if state was changed by something other than this async action
+      const isStateExternallyModified = (): boolean => {
+        if (!autoCancel) {
+          // When autoCancel is false, concurrent updates are allowed
+          // Only detect true external modifications (no __requestId at all)
+          const currentState = getState();
+          return currentState.__requestId === undefined;
+        }
+        // When autoCancel is true, any different requestId means our state is stale
         const currentState = getState();
-        return currentState.__requestId === undefined;
-      }
-      // When autoCancel is true, any different requestId means our state is stale
-      const currentState = getState();
-      return currentState.__requestId !== requestId;
-    };
+        return currentState.__requestId !== requestId;
+      };
 
-    // Execute with retry logic
-    const retryCount = getRetryCount(options?.retry);
+      // Execute with retry logic
+      const retryCount = getRetryCount(options?.retry);
 
-    const executeWithRetry = async (): Promise<T> => {
-      let lastError: Error | null = null;
+      const executeWithRetry = async (): Promise<T> => {
+        let lastError: Error | null = null;
 
-      for (let attempt = 0; attempt <= retryCount; attempt++) {
-        try {
-          // Create async context
-          const isCancelledOrAborted = () =>
-            isCancelled || abortController.signal.aborted;
+        for (let attempt = 0; attempt <= retryCount; attempt++) {
+          try {
+            // Create async context
+            const isCancelledOrAborted = () =>
+              isCancelled || abortController.signal.aborted;
 
-          const asyncContext: AsyncContext = {
-            signal: abortController.signal,
+            const asyncContext: AsyncContext = {
+              signal: abortController.signal,
 
-            safe<T>(
-              promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)
-            ): any {
-              if (promiseOrCallback instanceof Promise) {
-                // Wrap promise - never resolve/reject if cancelled
-                return new Promise<T>((resolve, reject) => {
-                  promiseOrCallback.then(
-                    (value) => {
-                      if (!isCancelledOrAborted()) {
-                        resolve(value);
+              safe<T>(
+                promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)
+              ): any {
+                if (promiseOrCallback instanceof Promise) {
+                  // Wrap promise - never resolve/reject if cancelled
+                  return new Promise<T>((resolve, reject) => {
+                    promiseOrCallback.then(
+                      (value) => {
+                        if (!isCancelledOrAborted()) {
+                          resolve(value);
+                        }
+                        // Never resolve/reject if cancelled - promise stays pending
+                      },
+                      (error) => {
+                        if (!isCancelledOrAborted()) {
+                          reject(error);
+                        }
+                        // Never resolve/reject if cancelled
                       }
-                      // Never resolve/reject if cancelled - promise stays pending
-                    },
-                    (error) => {
-                      if (!isCancelledOrAborted()) {
-                        reject(error);
-                      }
-                      // Never resolve/reject if cancelled
-                    }
-                  );
-                });
-              }
-
-              // Wrap callback - don't run if cancelled
-              return (...args: unknown[]) => {
-                if (!isCancelledOrAborted()) {
-                  return (promiseOrCallback as (...args: unknown[]) => T)(
-                    ...args
-                  );
+                    );
+                  });
                 }
-                return undefined;
-              };
-            },
 
-            cancel,
-          };
+                // Wrap callback - don't run if cancelled
+                return (...args: unknown[]) => {
+                  if (!isCancelledOrAborted()) {
+                    return (promiseOrCallback as (...args: unknown[]) => T)(
+                      ...args
+                    );
+                  }
+                  return undefined;
+                };
+              },
 
-          // Execute handler - always async via invoke
-          const result = await promiseTry(() => handler(asyncContext, ...args));
+              cancel,
+            };
 
-          // Check if cancelled
-          if (isCancelled) {
-            throw new DOMException("Aborted", "AbortError");
-          }
+            // Execute handler - always async via invoke
+            const result = await promiseTry(() =>
+              handler(asyncContext, ...args)
+            );
 
-          // Check if state was externally modified (e.g., devtools rollback)
-          if (isStateExternallyModified()) {
-            // State was changed externally, don't overwrite
-            // Still return result to the caller
+            // Check if cancelled
+            if (isCancelled) {
+              throw new DOMException("Aborted", "AbortError");
+            }
+
+            // Check if state was externally modified (e.g., devtools rollback)
+            if (isStateExternallyModified()) {
+              // State was changed externally, don't overwrite
+              // Still return result to the caller
+              return result;
+            }
+
+            // Success - update state (preserve mode)
+            setState({
+              status: "success",
+              mode,
+              data: result,
+              error: undefined,
+              timestamp: Date.now(),
+              __requestId: requestId,
+              toJSON: stateToJSON,
+            } as AsyncState<T, M>);
+
+            // Clear lastCancel since we're done
+            if (lastCancel === cancel) {
+              lastCancel = null;
+            }
+
             return result;
-          }
+          } catch (error) {
+            // If aborted, rethrow immediately
+            if (isCancelled || abortController.signal.aborted) {
+              throw error instanceof Error
+                ? error
+                : new DOMException("Aborted", "AbortError");
+            }
 
-          // Success - update state (preserve mode)
-          setState({
-            status: "success",
-            mode,
-            data: result,
-            error: undefined,
-            timestamp: Date.now(),
-            __requestId: requestId,
-            toJSON: stateToJSON,
-          } as AsyncState<T, M>);
+            lastError =
+              error instanceof Error ? error : new Error(String(error));
 
-          // Clear lastCancel since we're done
-          if (lastCancel === cancel) {
-            lastCancel = null;
-          }
-
-          return result;
-        } catch (error) {
-          // If aborted, rethrow immediately
-          if (isCancelled || abortController.signal.aborted) {
-            throw error instanceof Error
-              ? error
-              : new DOMException("Aborted", "AbortError");
-          }
-
-          lastError = error instanceof Error ? error : new Error(String(error));
-
-          // If more retries available, wait and retry
-          if (attempt < retryCount) {
-            const delay = getRetryDelay(options?.retry, attempt + 1, lastError);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            continue;
+            // If more retries available, wait and retry
+            if (attempt < retryCount) {
+              const delay = getRetryDelay(
+                options?.retry,
+                attempt + 1,
+                lastError
+              );
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              continue;
+            }
           }
         }
-      }
 
-      // All retries exhausted - abort the signal to cancel any pending ctx.safe() operations
-      if (!abortController.signal.aborted) {
-        abortController.abort();
-      }
+        // All retries exhausted - abort the signal to cancel any pending ctx.safe() operations
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
 
-      // Check if state was externally modified before setting error state
-      if (isStateExternallyModified()) {
-        // State was changed externally, don't overwrite
-        // Still throw error to the caller
+        // Check if state was externally modified before setting error state
+        if (isStateExternallyModified()) {
+          // State was changed externally, don't overwrite
+          // Still throw error to the caller
+          throw lastError;
+        }
+
+        // All retries exhausted - update state with error
+        // In stale mode, keep data; in fresh mode, data is undefined
+        setState({
+          status: "error",
+          mode,
+          data: mode === "stale" ? staleData : undefined,
+          error: lastError!,
+          timestamp: undefined,
+          __requestId: requestId,
+          toJSON: stateToJSON,
+        } as AsyncState<T, M>);
+
+        // Clear lastCancel since we're done
+        if (lastCancel === cancel) {
+          lastCancel = null;
+        }
+
+        // Call error callback
+        if (options?.onError && lastError) {
+          options.onError(lastError);
+        }
+
         throw lastError;
-      }
+      };
 
-      // All retries exhausted - update state with error
-      // In stale mode, keep data; in fresh mode, data is undefined
+      // Start execution and race with cancellation
+      // This ensures dispatch() rejects immediately on cancel, even if handler is stuck
+      const executionPromise = executeWithRetry();
+      const promise = Promise.race([executionPromise, cancelPromise]);
+
+      // Store execution promise in cache for Suspense support
+      // (not the raced promise, as we want Suspense to track actual execution)
+      pendingPromises.set(asyncKey, executionPromise);
+
+      // Update state to pending with key and requestId
+      // In stale mode, preserve data; in fresh mode, data is undefined
       setState({
-        status: "error",
+        status: "pending",
         mode,
         data: mode === "stale" ? staleData : undefined,
-        error: lastError!,
+        error: undefined,
         timestamp: undefined,
+        __key: asyncKey,
         __requestId: requestId,
         toJSON: stateToJSON,
       } as AsyncState<T, M>);
 
-      // Clear lastCancel since we're done
-      if (lastCancel === cancel) {
-        lastCancel = null;
-      }
+      // Clean up promise from cache when done (success or error)
+      promise.then(
+        () => pendingPromises.delete(asyncKey),
+        () => pendingPromises.delete(asyncKey)
+      );
 
-      // Call error callback
-      if (options?.onError && lastError) {
-        options.onError(lastError);
-      }
-
-      throw lastError;
-    };
-
-    // Start execution and race with cancellation
-    // This ensures dispatch() rejects immediately on cancel, even if handler is stuck
-    const executionPromise = executeWithRetry();
-    const promise = Promise.race([executionPromise, cancelPromise]);
-
-    // Store execution promise in cache for Suspense support
-    // (not the raced promise, as we want Suspense to track actual execution)
-    pendingPromises.set(asyncKey, executionPromise);
-
-    // Update state to pending with key and requestId
-    // In stale mode, preserve data; in fresh mode, data is undefined
-    setState({
-      status: "pending",
-      mode,
-      data: mode === "stale" ? staleData : undefined,
-      error: undefined,
-      timestamp: undefined,
-      __key: asyncKey,
-      __requestId: requestId,
-      toJSON: stateToJSON,
-    } as AsyncState<T, M>);
-
-    // Clean up promise from cache when done (success or error)
-    promise.then(
-      () => pendingPromises.delete(asyncKey),
-      () => pendingPromises.delete(asyncKey)
-    );
-
-    return createCancellablePromise(promise, cancel);
+      return createCancellablePromise(promise, cancel);
+    });
   }
 
   // Refresh: re-dispatch with last args

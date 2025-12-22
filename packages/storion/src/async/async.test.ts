@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { async, asyncState, asyncStateFrom } from "./async";
 import type { AsyncState, AsyncMode } from "./types";
-import type { Focus } from "../types";
+import type { Focus, SelectorContext } from "../types";
 import { withHooks } from "../core/tracking";
+import { container } from "../core/container";
 
 // Helper to create a mock focus
 function createMockFocus<T, M extends AsyncMode>(
@@ -1941,6 +1942,191 @@ describe("asyncState()", () => {
         throwPromise = true;
         // Trigger re-run by manually calling the effect
         // (In real usage, this would happen via dependency tracking)
+      });
+    });
+  });
+
+  describe("mixin overload", () => {
+    it("should return a selector mixin", () => {
+      const fetchData = async(async () => "result");
+
+      // The mixin should be a function
+      expect(typeof fetchData).toBe("function");
+    });
+
+    it("should work with scoped() in selector context", () => {
+      const fetchData = async(async () => "result");
+
+      const testContainer = container();
+
+      // Create a mock selector context with scoped()
+      let capturedState: any;
+      let capturedActions: any;
+
+      // Use the mixin
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          const mockContext: SelectorContext = {
+            [Symbol.for("storion")]: "selector.context",
+            id: {},
+            get: (spec: any) => testContainer.get(spec),
+            mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
+            once: () => {},
+            scoped: (spec: any) => {
+              const instance = testContainer.create(spec);
+              return [instance.state, instance.actions, instance];
+            },
+          } as any;
+
+          const [state, actions] = fetchData(mockContext);
+          capturedState = state;
+          capturedActions = actions;
+        }
+      );
+
+      // Should have idle state initially
+      expect(capturedState.status).toBe("idle");
+      expect(capturedState.mode).toBe("fresh");
+
+      // Should have async actions
+      expect(typeof capturedActions.dispatch).toBe("function");
+      expect(typeof capturedActions.cancel).toBe("function");
+      expect(typeof capturedActions.reset).toBe("function");
+      expect(typeof capturedActions.refresh).toBe("function");
+    });
+
+    it("should dispatch and update state", async () => {
+      const fetchData = async(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return "fetched";
+      });
+
+      const testContainer = container();
+      let capturedState: any;
+      let capturedActions: any;
+      let scopedInstance: any;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          const mockContext: SelectorContext = {
+            [Symbol.for("storion")]: "selector.context",
+            id: {},
+            get: (spec: any) => testContainer.get(spec),
+            mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
+            once: () => {},
+            scoped: (spec: any) => {
+              const instance = testContainer.create(spec);
+              scopedInstance = instance;
+              return [instance.state, instance.actions, instance];
+            },
+          } as any;
+
+          const [state, actions] = fetchData(mockContext);
+          capturedState = state;
+          capturedActions = actions;
+        }
+      );
+
+      // Dispatch
+      const promise = capturedActions.dispatch();
+
+      // Should be pending
+      expect(scopedInstance.state.result.status).toBe("pending");
+
+      // Wait for completion
+      await promise;
+
+      // Should be success
+      expect(scopedInstance.state.result.status).toBe("success");
+      expect(scopedInstance.state.result.data).toBe("fetched");
+    });
+
+    it("should support stale mode with initial state", async () => {
+      const fetchData = async(async () => "new-data", {
+        initial: asyncState("stale", "idle", "old-data"),
+      });
+
+      const testContainer = container();
+      let capturedState: any;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          const mockContext: SelectorContext = {
+            [Symbol.for("storion")]: "selector.context",
+            id: {},
+            get: (spec: any) => testContainer.get(spec),
+            mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
+            once: () => {},
+            scoped: (spec: any) => {
+              const instance = testContainer.create(spec);
+              return [instance.state, instance.actions, instance];
+            },
+          } as any;
+
+          const [state] = fetchData(mockContext);
+          capturedState = state;
+        }
+      );
+
+      // Should have stale mode with initial data
+      expect(capturedState.status).toBe("idle");
+      expect(capturedState.mode).toBe("stale");
+      expect(capturedState.data).toBe("old-data");
+    });
+
+    it("should support handler with arguments", async () => {
+      const fetchUser = async(async (_ctx, userId: string) => {
+        return { id: userId, name: `User ${userId}` };
+      });
+
+      const testContainer = container();
+      let capturedActions: any;
+      let scopedInstance: any;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => runEffect(),
+          scheduleNotification: (execute) => execute(),
+        },
+        () => {
+          const mockContext: SelectorContext = {
+            [Symbol.for("storion")]: "selector.context",
+            id: {},
+            get: (spec: any) => testContainer.get(spec),
+            mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
+            once: () => {},
+            scoped: (spec: any) => {
+              const instance = testContainer.create(spec);
+              scopedInstance = instance;
+              return [instance.state, instance.actions, instance];
+            },
+          } as any;
+
+          const [, actions] = fetchUser(mockContext);
+          capturedActions = actions;
+        }
+      );
+
+      // Dispatch with arguments
+      await capturedActions.dispatch("123");
+
+      // Should have success with user data
+      expect(scopedInstance.state.result.status).toBe("success");
+      expect(scopedInstance.state.result.data).toEqual({
+        id: "123",
+        name: "User 123",
       });
     });
   });

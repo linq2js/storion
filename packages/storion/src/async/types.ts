@@ -1,5 +1,7 @@
 // ===== Async Mode =====
 
+import { StoreContext } from "../types";
+
 /**
  * Async data mode:
  * - "fresh": data is undefined during loading/error (only show fresh data)
@@ -219,6 +221,20 @@ export type AsyncHandler<T, TArgs extends any[]> = (
   context: AsyncContext,
   ...args: TArgs
 ) => T | PromiseLike<T>;
+
+/**
+ * Async handler function signature for mixin mode.
+ * Receives AsyncMixinContext as first arg, then user-defined args.
+ */
+export type AsyncMixinHandler<T, TArgs extends any[]> = (
+  context: AsyncMixinContext,
+  ...args: TArgs
+) => T | PromiseLike<T>;
+
+export interface AsyncMixinContext extends AsyncContext {
+  /** Get another store's state and actions. */
+  get: StoreContext<any>["get"];
+}
 
 // ===== Retry Options =====
 

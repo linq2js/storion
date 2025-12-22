@@ -16,6 +16,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     return { value: state.value, setValue: actions.setValue };
   });
   ```
+- `async()` mixin overload for component-local async state (mutations, form submissions)
+
+  ```tsx
+  // Define mutation - no store needed
+  const submitForm = async(async (ctx, data: FormData) => {
+    const res = await fetch("/api/submit", {
+      method: "POST",
+      body: JSON.stringify(data),
+      signal: ctx.signal,
+    });
+    return res.json();
+  });
+
+  // Use as mixin - state is component-local, auto-disposed
+  const { status, submit } = useStore(({ mixin }) => {
+    const [state, actions] = mixin(submitForm);
+    return { status: state.status, submit: actions.dispatch };
+  });
+  ```
+
+- `AsyncMixinContext.get()` allows mixin handlers to access other stores' state
+
+  ```tsx
+  // Access other stores for cross-store mutations
+  const checkout = async(async (ctx, paymentMethod: string) => {
+    const [user] = ctx.get(userStore);
+    const [cart] = ctx.get(cartStore);
+    return fetch("/api/checkout", {
+      body: JSON.stringify({ userId: user.id, items: cart.items }),
+    });
+  });
+  ```
+
 - `MetaEntry.fields` now supports arrays for applying meta to multiple fields at once
   ```ts
   meta: [notPersisted.for(["password", "token"])];

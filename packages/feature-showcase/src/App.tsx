@@ -3,10 +3,22 @@
  * Demonstrates all Storion features in an interactive UI
  */
 import { memo, useState } from "react";
-import { CounterDemo, FocusDemo, AsyncDemo, TodoDemo } from "./components";
+import {
+  CounterDemo,
+  FocusDemo,
+  AsyncDemo,
+  TodoDemo,
+  MutationDemo,
+} from "./components";
 import { WithStoreDemo } from "./components/WithStoreDemo";
 
-type Tab = "counter" | "focus" | "async" | "selectors" | "withStore";
+type Tab =
+  | "counter"
+  | "focus"
+  | "async"
+  | "mutations"
+  | "selectors"
+  | "withStore";
 
 const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
   {
@@ -26,6 +38,12 @@ const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
     label: "Async Actions",
     icon: "⚡",
     description: "Async operations with loading, error, and retry",
+  },
+  {
+    id: "mutations",
+    label: "Mutations",
+    icon: "📝",
+    description: "Component-local async state for forms and mutations",
   },
   {
     id: "selectors",
@@ -103,6 +121,7 @@ export function App() {
           {activeTab === "counter" && <CounterDemo />}
           {activeTab === "focus" && <FocusDemo />}
           {activeTab === "async" && <AsyncDemo />}
+          {activeTab === "mutations" && <MutationDemo />}
           {activeTab === "selectors" && <TodoDemo />}
           {activeTab === "withStore" && <WithStoreDemo />}
         </div>
