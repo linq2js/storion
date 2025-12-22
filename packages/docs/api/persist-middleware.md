@@ -1,11 +1,11 @@
-# persistMiddleware()
+# persist()
 
 Middleware for persisting store state to storage (localStorage, IndexedDB, etc.).
 
 ## Signature
 
 ```ts
-function persistMiddleware(options: PersistOptions): StoreMiddleware;
+function persist(options: PersistOptions): StoreMiddleware;
 ```
 
 ## Options
@@ -49,9 +49,9 @@ The `PersistContext` provides access to:
 
 ## Design Philosophy
 
-Storion's `persistMiddleware` takes a **minimal, composable approach** compared to other state management libraries. It provides the essential building blocks while letting you control the implementation details.
+Storion's `persist` takes a **minimal, composable approach** compared to other state management libraries. It provides the essential building blocks while letting you control the implementation details.
 
-### What persistMiddleware Does
+### What persist Does
 
 | Feature              | Description                                                |
 | -------------------- | ---------------------------------------------------------- |
@@ -158,7 +158,7 @@ const useStore = create(
 ```ts
 // Storion - handler pattern with full control
 import { container, forStores, meta } from 'storion';
-import { persistMiddleware, notPersisted } from 'storion/persist';
+import { persist, notPersisted } from 'storion/persist';
 import { debounce } from 'lodash-es';
 
 const inSession = meta();  // Fields to persist in sessionStorage
@@ -175,7 +175,7 @@ const userStore = store({
 
 const app = container({
   middleware: forStores([
-    persistMiddleware({
+    persist({
       filter: ({ meta }) => meta.any(inSession),
       fields: ({ meta }) => meta.fields(inSession),
       handler: (ctx) => {
@@ -230,11 +230,11 @@ const app = container({
 
 ```ts
 import { container, forStores } from "storion";
-import { persistMiddleware } from "storion/persist";
+import { persist } from "storion/persist";
 
 const app = container({
   middleware: forStores([
-    persistMiddleware({
+    persist({
       handler: (ctx) => {
         const key = `app:${ctx.displayName}`;
         return {
@@ -257,7 +257,7 @@ const app = container({
 Only persist specific stores:
 
 ```ts
-persistMiddleware({
+persist({
   filter: (ctx) => ctx.displayName === "user" || ctx.displayName === "settings",
   handler: (ctx) => {
     const key = `app:${ctx.displayName}`;
@@ -278,7 +278,7 @@ container({
   middleware: [
     applyFor(
       "user",
-      persistMiddleware({
+      persist({
         handler: (ctx) => ({
           load: () => JSON.parse(localStorage.getItem("user") || "null"),
           save: (state) => localStorage.setItem("user", JSON.stringify(state)),
@@ -296,7 +296,7 @@ The handler can be async for initialization that requires async setup:
 ```ts
 import { openDB } from "idb";
 
-persistMiddleware({
+persist({
   handler: async (ctx) => {
     // Async initialization - opens DB once per store
     const db = await openDB("app-db", 1, {
@@ -348,7 +348,7 @@ const userStore = store({
 ## Error Handling
 
 ```ts
-persistMiddleware({
+persist({
   handler: (ctx) => ({
     load: () => /* ... */,
     save: (state) => /* ... */,
@@ -372,7 +372,7 @@ persistMiddleware({
 By default, hydration skips "dirty" properties (modified since initialization). Use `force: true` to always overwrite:
 
 ```ts
-persistMiddleware({
+persist({
   handler: (ctx) => ({
     load: () => /* ... */,
     save: (state) => /* ... */,
@@ -388,7 +388,7 @@ Implement debouncing in the handler closure:
 ```ts
 import { debounce } from "lodash-es";
 
-persistMiddleware({
+persist({
   handler: (ctx) => {
     const key = `app:${ctx.displayName}`;
 
@@ -412,7 +412,7 @@ Use the `fields` option combined with custom meta types to split store state acr
 
 ```ts
 import { store, container, forStores, meta } from "storion";
-import { persistMiddleware } from "storion/persist";
+import { persist } from "storion/persist";
 
 // Define meta types for different storage targets
 const inSession = meta(); // Fields for sessionStorage
@@ -446,7 +446,7 @@ const authStore = store({
 });
 
 // Session storage middleware
-const sessionMiddleware = persistMiddleware({
+const sessionMiddleware = persist({
   filter: ({ meta }) => meta.any(inSession),
   fields: ({ meta }) => meta.fields(inSession),
   handler: (ctx) => {
@@ -459,7 +459,7 @@ const sessionMiddleware = persistMiddleware({
 });
 
 // Local storage middleware
-const localMiddleware = persistMiddleware({
+const localMiddleware = persist({
   filter: ({ meta }) => meta.any(inLocal),
   fields: ({ meta }) => meta.fields(inLocal),
   handler: (ctx) => {

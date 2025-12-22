@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { store, container, forStores, meta } from "../index";
-import { persistMiddleware, notPersisted, PersistContext } from "./persist";
+import { persist, notPersisted, PersistContext } from "./persist";
 
-describe("persistMiddleware", () => {
+describe("persist", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -25,7 +25,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: (ctx) => {
               capturedContext = ctx;
               return { load, save };
@@ -53,7 +53,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -76,7 +76,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -109,7 +109,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -153,7 +153,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -176,7 +176,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -205,7 +205,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -235,7 +235,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -269,7 +269,7 @@ describe("persistMiddleware", () => {
       const app = container({
         middleware: [
           forStores(
-            persistMiddleware({
+            persist({
               filter: (ctx) => ctx.spec.displayName === "persisted",
               handler: () => ({ load, save }),
             })
@@ -307,7 +307,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ save }),
           }),
         ]),
@@ -338,7 +338,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load }),
           }),
         ]),
@@ -372,7 +372,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: async () => {
               // Simulate async DB initialization
               await Promise.resolve();
@@ -411,7 +411,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: (ctx) => {
               capturedStore = ctx.store;
               return {};
@@ -443,7 +443,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
             onError,
           }),
@@ -469,7 +469,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
             onError,
           }),
@@ -503,7 +503,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
             onError,
           }),
@@ -529,7 +529,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => {
               throw error;
             },
@@ -555,7 +555,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: async () => {
               throw error;
             },
@@ -590,7 +590,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
             onError,
           }),
@@ -615,7 +615,7 @@ describe("persistMiddleware", () => {
       }
 
       const app = container({
-        middleware: forStores([persistMiddleware({ handler: () => ({}) })]),
+        middleware: forStores([persist({ handler: () => ({}) })]),
       });
 
       const instance = app.get(myService);
@@ -647,7 +647,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
           }),
         ]),
@@ -689,7 +689,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: () => ({ load, save }),
             force: true,
           }),
@@ -730,7 +730,7 @@ describe("persistMiddleware", () => {
 
         const app = container({
           middleware: forStores([
-            persistMiddleware({
+            persist({
               handler: () => ({ load, save }),
             }),
           ]),
@@ -768,7 +768,7 @@ describe("persistMiddleware", () => {
 
         const app = container({
           middleware: forStores([
-            persistMiddleware({
+            persist({
               handler: () => ({ load, save }),
             }),
           ]),
@@ -800,7 +800,7 @@ describe("persistMiddleware", () => {
 
         const app = container({
           middleware: forStores([
-            persistMiddleware({
+            persist({
               handler: () => ({ load, save }),
             }),
           ]),
@@ -834,7 +834,7 @@ describe("persistMiddleware", () => {
 
         const app = container({
           middleware: forStores([
-            persistMiddleware({
+            persist({
               handler: () => ({ load, save }),
             }),
           ]),
@@ -883,13 +883,13 @@ describe("persistMiddleware", () => {
         ],
       });
 
-      const sessionMiddleware = persistMiddleware({
+      const sessionMiddleware = persist({
         filter: ({ meta }) => meta.any(sessionStore),
         fields: ({ meta }) => meta.fields(sessionStore),
         handler: () => ({ save: sessionSave }),
       });
 
-      const localMiddleware = persistMiddleware({
+      const localMiddleware = persist({
         filter: ({ meta }) => meta.any(localStore),
         fields: ({ meta }) => meta.fields(localStore),
         handler: () => ({ save: localSave }),
@@ -940,7 +940,7 @@ describe("persistMiddleware", () => {
 
       const app = container({
         middleware: forStores([
-          persistMiddleware({
+          persist({
             handler: (ctx) => {
               // Key computed once per store
               const key = `app:${ctx.displayName}`;

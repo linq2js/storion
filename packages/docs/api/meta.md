@@ -315,6 +315,6 @@ const info = ctx.meta(persist);
 ## See Also
 
 - [notPersisted](/api/not-persisted) - Built-in persistence meta
-- [persistMiddleware()](/api/persist-middleware) - Using meta for persistence
+- [persist()](/api/persist-middleware) - Using meta for persistence
 - [Meta Guide](/guide/meta) - Deep dive into the meta system
 

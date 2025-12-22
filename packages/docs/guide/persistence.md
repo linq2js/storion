@@ -1,22 +1,22 @@
 # Persistence
 
-Storion provides a `persistMiddleware` for automatic state persistence.
+Storion provides a `persist` for automatic state persistence.
 
 ## Installation
 
 ```ts
-import { persistMiddleware, notPersisted } from 'storion/persist';
+import { persist, notPersisted } from 'storion/persist';
 ```
 
 ## Basic Usage
 
 ```ts
 import { container, forStores } from 'storion';
-import { persistMiddleware } from 'storion/persist';
+import { persist } from 'storion/persist';
 
 const app = container({
   middleware: forStores([
-    persistMiddleware({
+    persist({
       handler: (ctx) => {
         const key = `storion:${ctx.displayName}`;
         return {
@@ -73,7 +73,7 @@ The `handler` function receives a context and returns load/save operations. This
 3. **Encapsulation** - All persist logic in one place
 
 ```ts
-persistMiddleware({
+persist({
   handler: (ctx) => {
     // This runs once per store
     const key = `app:${ctx.displayName}`;
@@ -91,7 +91,7 @@ persistMiddleware({
 ### Using Filter
 
 ```ts
-persistMiddleware({
+persist({
   filter: (ctx) => ctx.displayName !== 'temporary',
   handler: (ctx) => ({ /* ... */ }),
 });
@@ -137,7 +137,7 @@ The handler can be async for database connections:
 ```ts
 import { openDB } from 'idb';
 
-persistMiddleware({
+persist({
   handler: async (ctx) => {
     // Opens DB once per store
     const db = await openDB('app-db', 1, {
@@ -161,7 +161,7 @@ Implement debouncing in the handler closure:
 ```ts
 import { debounce } from 'lodash-es';
 
-persistMiddleware({
+persist({
   handler: (ctx) => {
     const key = `app:${ctx.displayName}`;
     const debouncedSave = debounce(
@@ -180,7 +180,7 @@ persistMiddleware({
 ## Error Handling
 
 ```ts
-persistMiddleware({
+persist({
   handler: (ctx) => ({ /* ... */ }),
   onError: (error, operation) => {
     if (operation === 'init') {
@@ -199,7 +199,7 @@ persistMiddleware({
 By default, `hydrate()` skips "dirty" fields (modified since init). Use `force: true` to override:
 
 ```ts
-persistMiddleware({
+persist({
   handler: (ctx) => ({ /* ... */ }),
   force: true,  // Always apply persisted state
 });
@@ -237,7 +237,7 @@ const sessionStore = store({
 });
 ```
 
-The `persistMiddleware` automatically uses these when calling:
+The `persist` automatically uses these when calling:
 - `dehydrate()` → calls `normalize` if defined
 - `hydrate()` → calls `denormalize` if defined
 
@@ -252,5 +252,5 @@ The `persistMiddleware` automatically uses these when calling:
 ## See Also
 
 - [store() API](/api/store) - Full store options reference
-- [persistMiddleware() API](/api/persist-middleware) - Middleware options
+- [persist() API](/api/persist-middleware) - Middleware options
 - [notPersisted](/api/not-persisted) - Excluding stores/fields

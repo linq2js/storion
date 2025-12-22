@@ -29,9 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING**: `persistMiddleware` API refactored for better encapsulation
+- **BREAKING**: `persist` API refactored for better encapsulation (renamed from `persistMiddleware`)
 
   - New `handler` option replaces `load`/`save` callbacks
+  - `persistMiddleware` is now deprecated, use `persist` instead
   - Handler receives `PersistContext` (extends `StoreMiddlewareContext` with `store` instance)
   - Handler returns `{ load, save }` object (can be sync or async)
   - `onError` signature changed to `(error, operation)` where operation is `"init" | "load" | "save"`
@@ -46,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   });
 
   // After (new API)
-  persistMiddleware({
+  persist({
     handler: (ctx) => {
       const key = `app:${ctx.displayName}`;
       return {
@@ -57,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   });
 
   // Async handler (IndexedDB)
-  persistMiddleware({
+  persist({
     handler: async (ctx) => {
       const db = await openDB("app-db");
       return {
@@ -75,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Persist Module** (`storion/persist`)
-  - `persistMiddleware(options)` for automatic state persistence
+  - `persist(options)` for automatic state persistence
   - `notPersisted` meta for excluding stores or fields from persistence
   - Supports sync and async `load`/`save` handlers
   - `force` option to override dirty state during hydration

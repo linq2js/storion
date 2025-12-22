@@ -114,7 +114,7 @@ export default defineConfig({
         {
           text: "Persist",
           items: [
-            { text: "persistMiddleware()", link: "/api/persist-middleware" },
+            { text: "persist()", link: "/api/persist-middleware" },
             { text: "notPersisted", link: "/api/not-persisted" },
           ],
         },

@@ -1371,7 +1371,7 @@ const loggingMiddleware: StoreMiddleware = (ctx) => {
 };
 
 // Middleware with store-specific logic
-const persistMiddleware: StoreMiddleware = (ctx) => {
+const customPersistMiddleware: StoreMiddleware = (ctx) => {
   const instance = ctx.next();
 
   if (ctx.spec.options.meta?.persist) {
@@ -1393,7 +1393,7 @@ const app = container({
     applyFor("user*", loggingMiddleware),
 
     // Apply except to cache stores
-    applyExcept("*Cache", persistMiddleware),
+    applyExcept("*Cache", customPersistMiddleware),
 
     // Apply to specific stores
     applyFor(["authStore", "settingsStore"], loggingMiddleware),

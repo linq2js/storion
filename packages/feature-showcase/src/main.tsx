@@ -4,7 +4,7 @@ import { applyFor, container } from "storion";
 import { StoreProvider } from "storion/react";
 import { devtoolsMiddleware } from "storion/devtools";
 import { mountDevtoolsPanel } from "storion/devtools-panel";
-import { persistMiddleware } from "storion/persist";
+import { persist } from "storion/persist";
 import { App } from "./App";
 import "./index.css";
 
@@ -25,7 +25,7 @@ const app = container({
     // Persist middleware for counter store
     applyFor(
       "counter",
-      persistMiddleware({
+      persist({
         handler: (ctx) => {
           const key = `storion:${ctx.spec.displayName}`;
           return {

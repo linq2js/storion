@@ -52,12 +52,12 @@ function App() {
 import { container } from 'storion';
 import { StoreProvider } from 'storion/react';
 import { devtoolsMiddleware } from 'storion/devtools';
-import { persistMiddleware } from 'storion/persist';
+import { persist } from 'storion/persist';
 
 const app = container({
   middleware: [
     devtoolsMiddleware({ maxHistory: 50 }),
-    persistMiddleware({
+    persist({
       load: spec => JSON.parse(localStorage.getItem(`app:${spec.displayName}`) || 'null'),
       save: (spec, state) => localStorage.setItem(`app:${spec.displayName}`, JSON.stringify(state)),
     }),

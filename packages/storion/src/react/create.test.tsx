@@ -258,7 +258,7 @@ describe("create", () => {
       const savedStates: Record<string, unknown>[] = [];
       let loadedState: Record<string, unknown> | null = { count: 42 };
 
-      const persistMiddleware = () => {
+      const mockPersist = () => {
         return (ctx: { type: string; next: () => unknown }) => {
           const instance = ctx.next();
           if (
@@ -302,7 +302,7 @@ describe("create", () => {
           },
         },
         {
-          middleware: [persistMiddleware()],
+          middleware: [mockPersist()],
         }
       );
 

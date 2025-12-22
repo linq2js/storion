@@ -169,11 +169,11 @@ export interface PersistOptions {
  * @example localStorage (sync handler)
  * ```ts
  * import { container, forStores } from "storion";
- * import { persistMiddleware } from "storion/persist";
+ * import { persist } from "storion/persist";
  *
  * const app = container({
  *   middleware: forStores([
- *     persistMiddleware({
+ *     persist({
  *       handler: (ctx) => {
  *         const key = `app:${ctx.displayName}`;
  *         return {
@@ -189,7 +189,7 @@ export interface PersistOptions {
  *
  * @example IndexedDB (async handler)
  * ```ts
- * persistMiddleware({
+ * persist({
  *   handler: async (ctx) => {
  *     const db = await openDB('app-db', 1, {
  *       upgrade(db) { db.createObjectStore('stores'); },
@@ -204,7 +204,7 @@ export interface PersistOptions {
  *
  * @example With shared debounce
  * ```ts
- * persistMiddleware({
+ * persist({
  *   handler: (ctx) => {
  *     const key = `app:${ctx.displayName}`;
  *     const debouncedSave = debounce(
@@ -221,13 +221,13 @@ export interface PersistOptions {
  *
  * @example Multi-storage with meta
  * ```ts
- * const sessionStore = meta();
- * const localStore = meta();
+ * const inSession = meta();
+ * const inLocal = meta();
  *
  * // Session storage middleware
- * persistMiddleware({
- *   filter: ({ meta }) => meta.any(sessionStore),
- *   fields: ({ meta }) => meta.fields(sessionStore),
+ * persist({
+ *   filter: ({ meta }) => meta.any(inSession),
+ *   fields: ({ meta }) => meta.fields(inSession),
  *   handler: (ctx) => {
  *     const key = `session:${ctx.displayName}`;
  *     return {
@@ -238,7 +238,7 @@ export interface PersistOptions {
  * });
  * ```
  */
-export function persistMiddleware(options: PersistOptions): StoreMiddleware {
+export function persist(options: PersistOptions): StoreMiddleware {
   const { filter, fields, handler, onError, force = false } = options;
 
   return (context) => {

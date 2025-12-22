@@ -86,7 +86,7 @@ const formStore = store({
 
 ## How It Works
 
-When `persistMiddleware` processes a store:
+When `persist` processes a store:
 
 1. **Store-level check**: If `notPersisted()` is in meta, the entire store is skipped
 2. **Field-level filtering**: Fields marked with `notPersisted.for()` are excluded from:
@@ -169,7 +169,7 @@ const signupStore = store({
 You can use both `notPersisted` and `filter` option:
 
 ```ts
-persistMiddleware({
+persist({
   // Only persist these stores
   filter: (spec) => ['user', 'settings', 'cart'].includes(spec.displayName),
   
@@ -182,6 +182,6 @@ persistMiddleware({
 
 ## See Also
 
-- [persistMiddleware()](/api/persist-middleware) - Persistence middleware
+- [persist()](/api/persist-middleware) - Persistence middleware
 - [meta()](/api/meta) - Creating custom meta types
 

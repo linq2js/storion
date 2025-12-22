@@ -150,7 +150,7 @@ export type MiddlewareMap = Record<string, StoreMiddleware | StoreMiddleware[]>;
  * // Predicate function
  * applyFor(
  *   (ctx) => ctx.type === "store" && ctx.spec.options.meta?.persist === true,
- *   persistMiddleware
+ *   persist
  * );
  *
  * // Multiple middleware
@@ -248,14 +248,14 @@ export function applyFor(
  * );
  *
  * // Exclude exact names
- * applyExcept(["tempStore", "cacheStore"], persistMiddleware);
+ * applyExcept(["tempStore", "cacheStore"], persist);
  *
  * // Exclude with wildcards
  * applyExcept("_*", loggingMiddleware);        // exclude _internal, _temp, etc.
- * applyExcept("*Cache", persistMiddleware);    // exclude userCache, dataCache, etc.
+ * applyExcept("*Cache", persist);    // exclude userCache, dataCache, etc.
  *
  * // Exclude with RegExp
- * applyExcept(/^(temp|cache)/, persistMiddleware);
+ * applyExcept(/^(temp|cache)/, persist);
  * ```
  */
 export function applyExcept(

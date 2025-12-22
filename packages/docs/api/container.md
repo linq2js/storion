@@ -54,13 +54,13 @@ container.defaults({
 ```ts
 import { container } from 'storion';
 import { devtoolsMiddleware } from 'storion/devtools';
-import { persistMiddleware } from 'storion/persist';
+import { persist } from 'storion/persist';
 
 // Create container with middleware
 const app = container({
   middleware: [
     devtoolsMiddleware({ maxHistory: 50 }),
-    persistMiddleware({
+    persist({
       load: (spec) => localStorage.getItem(`app:${spec.displayName}`),
       save: (spec, state) => localStorage.setItem(`app:${spec.displayName}`, JSON.stringify(state)),
     }),
@@ -95,5 +95,5 @@ function App() {
 
 - [store()](/api/store) - Create store specifications
 - [StoreProvider](/api/store-provider) - React provider
-- [persistMiddleware()](/api/persist-middleware) - Persistence middleware
+- [persist()](/api/persist-middleware) - Persistence middleware
 
