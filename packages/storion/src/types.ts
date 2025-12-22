@@ -458,7 +458,7 @@ export interface StoreUpdate<TState extends StateBase> {
 /**
  * Context provided to the setup() function.
  */
-export interface StoreContext<TState extends StateBase = StateBase>
+export interface StoreContext<TState extends StateBase = any>
   extends StorionObject<"store.context"> {
   /**
    * Mutable reactive state proxy.

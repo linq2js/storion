@@ -13,6 +13,8 @@ export { async, type AsyncMixinOptions, type AsyncMixinResult } from "./async";
 export {
   AsyncNotReadyError,
   AsyncAggregateError,
+  retryStrategy,
+  type RetryStrategyName,
   type AsyncMode,
   type AsyncState,
   type AsyncIdleState,
@@ -30,6 +32,7 @@ export {
   type AsyncHandler,
   type AsyncOptions,
   type AsyncRetryOptions,
+  type AsyncRetryDelayFn,
   type AsyncActions,
   type AsyncLastInvocation,
   type CancellablePromise,

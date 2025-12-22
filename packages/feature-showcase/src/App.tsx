@@ -9,6 +9,7 @@ import {
   AsyncDemo,
   TodoDemo,
   MutationDemo,
+  NetworkDemo,
 } from "./components";
 import { WithStoreDemo } from "./components/WithStoreDemo";
 
@@ -17,6 +18,7 @@ type Tab =
   | "focus"
   | "async"
   | "mutations"
+  | "network"
   | "selectors"
   | "withStore";
 
@@ -44,6 +46,12 @@ const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
     label: "Mutations",
     icon: "📝",
     description: "Component-local async state for forms and mutations",
+  },
+  {
+    id: "network",
+    label: "Network",
+    icon: "🌐",
+    description: "Network connectivity state and network-aware retry",
   },
   {
     id: "selectors",
@@ -122,6 +130,7 @@ export function App() {
           {activeTab === "focus" && <FocusDemo />}
           {activeTab === "async" && <AsyncDemo />}
           {activeTab === "mutations" && <MutationDemo />}
+          {activeTab === "network" && <NetworkDemo />}
           {activeTab === "selectors" && <TodoDemo />}
           {activeTab === "withStore" && <WithStoreDemo />}
         </div>

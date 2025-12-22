@@ -30,6 +30,10 @@
     "./persist": {
       "types": "./dist/persist/index.d.ts",
       "default": "./dist/persist/index.js"
+    },
+    "./network": {
+      "types": "./dist/network/index.d.ts",
+      "default": "./dist/network/index.js"
     }
   },
   "files": [

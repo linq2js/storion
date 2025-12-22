@@ -248,11 +248,54 @@ export type AsyncHandler<T, TArgs extends any[]> = (
 
 // ===== Retry Options =====
 
+/**
+ * Built-in retry delay strategies.
+ */
+export const retryStrategy = {
+  /** Exponential backoff: 1s, 2s, 4s, 8s... (max 30s) */
+  backoff: (attempt: number) => Math.min(1000 * 2 ** attempt, 30000),
+
+  /** Linear: 1s, 2s, 3s, 4s... (max 30s) */
+  linear: (attempt: number) => Math.min(1000 * (attempt + 1), 30000),
+
+  /** Fixed 1 second delay */
+  fixed: () => 1000,
+
+  /** Fibonacci: 1s, 1s, 2s, 3s, 5s, 8s... (max 30s) */
+  fibonacci: (attempt: number) => {
+    const fib = [1, 1, 2, 3, 5, 8, 13, 21, 30];
+    return Math.min(fib[attempt] ?? 30, 30) * 1000;
+  },
+
+  /** Immediate retry (no delay) */
+  immediate: () => 0,
+
+  /** Add jitter (±30%) to any strategy */
+  withJitter: (strategy: (n: number) => number) => (attempt: number) => {
+    const base = strategy(attempt);
+    const jitter = base * 0.3 * (Math.random() * 2 - 1); // ±30%
+    return Math.max(0, Math.round(base + jitter));
+  },
+} as const;
+
+/** Built-in retry strategy names */
+export type RetryStrategyName = Exclude<
+  keyof typeof retryStrategy,
+  "withJitter"
+>;
+
+export type AsyncRetryDelayFn = (
+  attempt: number,
+  error: Error
+) => number | Promise<void>;
+
+export type AsyncRetryDelay = number | AsyncRetryDelayFn;
+
 export interface AsyncRetryOptions {
   /** Number of retry attempts */
   count: number;
-  /** Delay between retries (ms) or function returning delay */
-  delay?: number | ((attempt: number, error: Error) => number | Promise<void>);
+  /** Delay between retries: ms, strategy name, or custom function */
+  delay?: AsyncRetryDelay | RetryStrategyName;
 }
 
 // ===== Mixin Options =====
@@ -263,8 +306,14 @@ export interface AsyncRetryOptions {
 export interface AsyncOptions {
   /** Error callback */
   onError?: (error: Error) => void;
-  /** Retry configuration */
-  retry?: number | AsyncRetryOptions;
+  /**
+   * Retry configuration:
+   * - number: retry count with default backoff delay
+   * - "backoff" | "linear" | "fixed" | "fibonacci" | "immediate": retry 3 times with named strategy
+   * - AsyncRetryDelayFn: custom delay function, retry until it returns a number (or Promise<void> to wait)
+   * - { count, delay }: full control over retry count and delay
+   */
+  retry?: number | RetryStrategyName | AsyncRetryDelayFn | AsyncRetryOptions;
   /** Auto-cancel previous request on new dispatch (default: true) */
   autoCancel?: boolean;
 }

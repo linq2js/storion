@@ -70,6 +70,7 @@ export default defineConfig({
           text: "Advanced",
           items: [
             { text: "Async State", link: "/guide/async" },
+            { text: "Network", link: "/guide/network" },
             {
               text: "Dependency Injection",
               link: "/guide/dependency-injection",
@@ -110,6 +111,10 @@ export default defineConfig({
         {
           text: "Async",
           items: [{ text: "async()", link: "/api/async" }],
+        },
+        {
+          text: "Network",
+          items: [{ text: "Network Module", link: "/api/network" }],
         },
         {
           text: "Persist",

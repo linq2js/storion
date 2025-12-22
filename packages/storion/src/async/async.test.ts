@@ -529,7 +529,7 @@ describe("async", () => {
           }
           return "success";
         },
-        { retry: 3 }
+        { retry: { count: 3, delay: "immediate" } }
       );
 
       const result = await dispatch();
@@ -545,7 +545,7 @@ describe("async", () => {
         async () => {
           throw new Error("always fail");
         },
-        { retry: 2 }
+        { retry: { count: 2, delay: "immediate" } }
       );
 
       await expect(dispatch()).rejects.toThrow("always fail");
@@ -688,6 +688,113 @@ describe("async", () => {
       const result = await dispatch();
       expect(result).toBe("connected");
       expect(networkReady).toBe(true);
+    });
+
+    it("should use retry function directly (shorthand)", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+      const delayArgs: Array<{ attempt: number; error: Error }> = [];
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          attempts++;
+          if (attempts < 3) {
+            throw new Error(`fail-${attempts}`);
+          }
+          return "success";
+        },
+        {
+          // Direct function - retries indefinitely until success
+          retry: (attempt, error) => {
+            delayArgs.push({ attempt, error });
+            return 10;
+          },
+        }
+      );
+
+      const result = await dispatch();
+      expect(result).toBe("success");
+      expect(attempts).toBe(3);
+      expect(delayArgs).toHaveLength(2);
+      expect(delayArgs[0].attempt).toBe(1);
+      expect(delayArgs[1].attempt).toBe(2);
+    });
+
+    it("should use retry function with Promise<void> (shorthand)", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+      let ready = false;
+
+      setTimeout(() => {
+        ready = true;
+      }, 40);
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          attempts++;
+          if (!ready) {
+            throw new Error("not ready");
+          }
+          return "done";
+        },
+        {
+          // Direct function returning Promise<void>
+          retry: () =>
+            new Promise<void>((resolve) => {
+              const check = () => (ready ? resolve() : setTimeout(check, 10));
+              check();
+            }),
+        }
+      );
+
+      const result = await dispatch();
+      expect(result).toBe("done");
+      expect(ready).toBe(true);
+    });
+
+    it("should accept strategy name as retry option (shorthand)", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          attempts++;
+          if (attempts < 3) {
+            throw new Error("fail");
+          }
+          return "success";
+        },
+        // Strategy name directly - defaults to 3 retries
+        { retry: "immediate" }
+      );
+
+      const result = await dispatch();
+      expect(result).toBe("success");
+      expect(attempts).toBe(3);
+    });
+
+    it("should accept strategy name in delay option", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          attempts++;
+          if (attempts < 2) {
+            throw new Error("fail");
+          }
+          return "done";
+        },
+        { retry: { count: 2, delay: "immediate" } }
+      );
+
+      const result = await dispatch();
+      expect(result).toBe("done");
+      expect(attempts).toBe(2);
     });
   });
 

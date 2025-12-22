@@ -713,7 +713,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       // Capture the id after initial mount
       const firstId = result.current.id;
       expect(firstId).toBeDefined();
-      expect(typeof firstId).toBe("object");
+      expect(typeof firstId).toBe("string");
 
       // Re-render multiple times and verify id is stable
       rerender();
@@ -735,8 +735,8 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const stores = container();
       stores.get(counter);
 
-      let id1: object | undefined;
-      let id2: object | undefined;
+      let id1: string | undefined;
+      let id2: string | undefined;
 
       const { unmount: unmount1 } = renderHook(
         () =>
@@ -1143,7 +1143,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       );
 
       const initialCount = instanceIds.length;
-      
+
       rerender();
       rerender();
 
@@ -1152,7 +1152,7 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       // But subsequent re-renders should not create new instances
       const afterRerenderCount = instanceIds.length;
       const newInstancesAfterRerender = afterRerenderCount - initialCount;
-      
+
       // Each rerender should use existing instance, not create new ones
       // Check that the last few IDs are the same
       const lastThreeIds = instanceIds.slice(-3);

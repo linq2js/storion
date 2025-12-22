@@ -186,6 +186,58 @@ const userStore = store({
 meta: [persist("password")]  // This passes "password" as VALUE, not field!
 ```
 
+### 8. Store Type Inference and Documentation
+
+**Don't pass explicit generics to store()** - let TypeScript infer state and actions:
+
+```ts
+// ❌ WRONG - explicit generics
+const userStore = store<UserState, UserActions>({
+  name: "user",
+  state: { name: "" },
+  setup() { return { setName: (n: string) => {} }; },
+});
+
+// ✅ CORRECT - let TypeScript infer
+const userStore = store({
+  name: "user",
+  state: { name: "" },
+  setup() { return { setName: (n: string) => {} }; },
+});
+```
+
+**Put JSDoc comments inline** - document state props in state object, actions in return object:
+
+```ts
+// ❌ WRONG - separate interfaces
+interface UserState { name: string; }
+interface UserActions { setName(n: string): void; }
+
+// ✅ CORRECT - inline documentation
+const userStore = store({
+  name: "user",
+  state: {
+    /** User's display name */
+    name: "",
+    /** User's age in years */
+    age: 0,
+  },
+  setup({ state }) {
+    return {
+      /** Update the user's name */
+      setName: (name: string) => {
+        state.name = name;
+      },
+      /** Reset user to default values */
+      reset: () => {
+        state.name = "";
+        state.age = 0;
+      },
+    };
+  },
+});
+```
+
 ## Quick Patterns
 
 ### Define Store
@@ -193,9 +245,15 @@ meta: [persist("password")]  // This passes "password" as VALUE, not field!
 ```ts
 const userStore = store({
   name: "user",
-  state: { name: "", age: 0 },
+  state: {
+    /** User's display name */
+    name: "",
+    /** User's age in years */
+    age: 0,
+  },
   setup({ state, update }) {
     return {
+      /** Update the user's name */
       setName: (name: string) => {
         state.name = name;
       },

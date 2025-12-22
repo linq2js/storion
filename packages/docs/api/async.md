@@ -246,12 +246,19 @@ function UserProfile({ userId }: { userId: string }) {
 Configuration options for async operations.
 
 ```ts
+type AsyncRetryDelayFn = (attempt: number, error: Error) => number | Promise<void>;
+
 interface AsyncOptions {
   /** Error callback */
   onError?: (error: Error) => void;
 
-  /** Retry configuration */
-  retry?: number | AsyncRetryOptions;
+  /**
+   * Retry configuration:
+   * - number: retry count with 1000ms default delay
+   * - AsyncRetryOptions: object with count and delay
+   * - AsyncRetryDelayFn: function only (retries indefinitely until success)
+   */
+  retry?: number | AsyncRetryOptions | AsyncRetryDelayFn;
 
   /** Auto-cancel previous request on new dispatch (default: true) */
   autoCancel?: boolean;
@@ -267,7 +274,7 @@ interface AsyncRetryOptions {
    * - function returning number: dynamic delay based on attempt/error
    * - function returning Promise<void>: custom async delay (retry when promise resolves)
    */
-  delay?: number | ((attempt: number, error: Error) => number | Promise<void>);
+  delay?: AsyncRetryDelayFn | number;
 }
 ```
 
@@ -290,12 +297,17 @@ async(focus("data"), handler, {
   },
 });
 
-// Wait for network reconnection
+// Wait for network reconnection (with count limit)
 async(focus("data"), handler, {
   retry: {
     count: 10,
     delay: () => waitForOnline(), // Returns Promise<void>
   },
+});
+
+// Function shorthand - retry indefinitely until success
+async(focus("data"), handler, {
+  retry: () => waitForOnline(), // No count limit, retry until network available
 });
 
 // Custom retry condition

@@ -3,7 +3,6 @@ import type {
   MetaEntry,
   SelectorContext,
   SelectorMixin,
-  StoreInstance,
 } from "../types";
 import type {
   AsyncState,
@@ -15,6 +14,7 @@ import type {
   AsyncLastInvocation,
   CancellablePromise,
   AsyncRetryOptions,
+  AsyncRetryDelayFn,
   InferAsyncData,
   SettledResult,
   MapAsyncData,
@@ -29,8 +29,7 @@ import { effect } from "../core/effect";
 import { untrack } from "../core/tracking";
 import { AsyncFunctionError } from "../errors";
 import { store } from "../core/store";
-import { isSpec } from "../is";
-import { storeTuple } from "../utils/storeTuple";
+import { createAsyncContext } from "./context";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -93,23 +92,54 @@ function stateToJSON<T>(
 
 // ===== Helper: Get retry config =====
 
-function getRetryCount(retry: number | AsyncRetryOptions | undefined): number {
+import { retryStrategy, type RetryStrategyName } from "./types";
+
+type RetryOption =
+  | number
+  | RetryStrategyName
+  | AsyncRetryDelayFn
+  | AsyncRetryOptions
+  | undefined;
+
+const STRATEGY_NAMES = new Set<string>([
+  "backoff",
+  "linear",
+  "fixed",
+  "fibonacci",
+  "immediate",
+]);
+
+function isStrategyName(value: unknown): value is RetryStrategyName {
+  return typeof value === "string" && STRATEGY_NAMES.has(value);
+}
+
+function getRetryCount(retry: RetryOption): number {
   if (typeof retry === "number") return retry;
+  if (typeof retry === "function") return Infinity; // Retry until delay function signals stop
+  if (isStrategyName(retry)) return 3; // Default 3 retries for named strategies
   if (retry && typeof retry === "object") return retry.count;
   return 0;
 }
 
 function getRetryDelay(
-  retry: number | AsyncRetryOptions | undefined,
+  retry: RetryOption,
   attempt: number,
   error: Error
 ): number | Promise<void> {
-  if (typeof retry === "number") return 1000;
+  // Number: use default backoff strategy
+  if (typeof retry === "number") return retryStrategy.backoff(attempt);
+  // Function: custom delay
+  if (typeof retry === "function") return retry(attempt, error);
+  // Strategy name: use named strategy
+  if (isStrategyName(retry)) return retryStrategy[retry](attempt);
+  // Object with delay
   if (retry && typeof retry === "object") {
-    if (typeof retry.delay === "function") return retry.delay(attempt, error);
-    return retry.delay ?? 1000;
+    const { delay } = retry;
+    if (typeof delay === "function") return delay(attempt, error);
+    if (isStrategyName(delay)) return retryStrategy[delay](attempt);
+    return delay ?? retryStrategy.backoff(attempt);
   }
-  return 1000;
+  return retryStrategy.backoff(attempt);
 }
 
 // ===== Async Mixin Options =====
@@ -349,53 +379,12 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
             // Create async context
             const isCancelledOrAborted = () =>
               isCancelled || abortController.signal.aborted;
-            const asyncContext: AsyncContext = {
-              signal: abortController.signal,
-              get(specOrFactory: any): any {
-                const instance = focus._resolver.get(specOrFactory);
-                if (isSpec(specOrFactory)) {
-                  const store = instance as StoreInstance<any, any>;
-                  return storeTuple(store);
-                }
-
-                return instance;
-              },
-              safe<T>(
-                promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)
-              ): any {
-                if (promiseOrCallback instanceof Promise) {
-                  // Wrap promise - never resolve/reject if cancelled
-                  return new Promise<T>((resolve, reject) => {
-                    promiseOrCallback.then(
-                      (value) => {
-                        if (!isCancelledOrAborted()) {
-                          resolve(value);
-                        }
-                        // Never resolve/reject if cancelled - promise stays pending
-                      },
-                      (error) => {
-                        if (!isCancelledOrAborted()) {
-                          reject(error);
-                        }
-                        // Never resolve/reject if cancelled
-                      }
-                    );
-                  });
-                }
-
-                // Wrap callback - don't run if cancelled
-                return (...args: unknown[]) => {
-                  if (!isCancelledOrAborted()) {
-                    return (promiseOrCallback as (...args: unknown[]) => T)(
-                      ...args
-                    );
-                  }
-                  return undefined;
-                };
-              },
-
+            const asyncContext = createAsyncContext(
+              abortController,
+              isCancelledOrAborted,
               cancel,
-            };
+              focus._resolver
+            );
 
             // Execute handler - always async via invoke
             const result = await promiseTry(() =>

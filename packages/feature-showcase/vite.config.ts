@@ -54,6 +54,10 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../storion/src/persist/index.ts"),
       },
       {
+        find: "storion/network",
+        replacement: path.resolve(__dirname, "../storion/src/network/index.ts"),
+      },
+      {
         find: "storion/async",
         replacement: path.resolve(__dirname, "../storion/src/async/index.ts"),
       },
@@ -84,6 +88,7 @@ export default defineConfig({
       "storion/devtools",
       "storion/devtools-panel",
       "storion/persist",
+      "storion/network",
     ],
   },
   test: {
