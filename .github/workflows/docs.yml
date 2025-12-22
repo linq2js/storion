@@ -92,6 +92,9 @@ jobs:
           cp -r packages/chat/dist packages/docs/.vitepress/dist/demos/chat
           cp -r packages/expense-manager/dist packages/docs/.vitepress/dist/demos/expense
 
+      - name: Add .nojekyll file
+        run: touch packages/docs/.vitepress/dist/.nojekyll
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
