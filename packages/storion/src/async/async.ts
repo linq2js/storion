@@ -102,7 +102,7 @@ function getRetryDelay(
   retry: number | AsyncRetryOptions | undefined,
   attempt: number,
   error: Error
-): number {
+): number | Promise<void> {
   if (typeof retry === "number") return 1000;
   if (retry && typeof retry === "object") {
     if (typeof retry.delay === "function") return retry.delay(attempt, error);
@@ -439,7 +439,12 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
                 attempt + 1,
                 lastError
               );
-              await new Promise((resolve) => setTimeout(resolve, delay));
+              // Support both number (ms) and Promise<void> for custom delay logic
+              if (typeof delay === "number") {
+                await new Promise((resolve) => setTimeout(resolve, delay));
+              } else {
+                await delay;
+              }
               continue;
             }
           }

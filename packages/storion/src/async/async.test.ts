@@ -551,6 +551,144 @@ describe("async", () => {
       await expect(dispatch()).rejects.toThrow("always fail");
       expect(getState().status).toBe("error");
     });
+
+    it("should use numeric delay between retries", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+      const timestamps: number[] = [];
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          timestamps.push(Date.now());
+          attempts++;
+          if (attempts < 2) {
+            throw new Error("fail");
+          }
+          return "success";
+        },
+        { retry: { count: 2, delay: 50 } }
+      );
+
+      await dispatch();
+      expect(attempts).toBe(2);
+      // Second attempt should be ~50ms after first
+      expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(45);
+    });
+
+    it("should use delay function returning number", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+      const delayArgs: Array<{ attempt: number; error: Error }> = [];
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          attempts++;
+          if (attempts < 3) {
+            throw new Error(`fail-${attempts}`);
+          }
+          return "success";
+        },
+        {
+          retry: {
+            count: 3,
+            delay: (attempt, error) => {
+              delayArgs.push({ attempt, error });
+              return 10; // Short delay for test
+            },
+          },
+        }
+      );
+
+      await dispatch();
+      expect(attempts).toBe(3);
+      expect(delayArgs).toHaveLength(2);
+      expect(delayArgs[0].attempt).toBe(1);
+      expect(delayArgs[0].error.message).toBe("fail-1");
+      expect(delayArgs[1].attempt).toBe(2);
+      expect(delayArgs[1].error.message).toBe("fail-2");
+    });
+
+    it("should use delay function returning Promise<void>", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+      let customDelayResolved = false;
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          attempts++;
+          if (attempts < 2) {
+            throw new Error("fail");
+          }
+          return "success";
+        },
+        {
+          retry: {
+            count: 2,
+            delay: () => {
+              // Return a promise that resolves after custom logic
+              return new Promise<void>((resolve) => {
+                setTimeout(() => {
+                  customDelayResolved = true;
+                  resolve();
+                }, 30);
+              });
+            },
+          },
+        }
+      );
+
+      const result = await dispatch();
+      expect(result).toBe("success");
+      expect(attempts).toBe(2);
+      expect(customDelayResolved).toBe(true);
+    });
+
+    it("should support async delay for custom retry conditions", async () => {
+      const [focus] = createMockFocus(async.fresh<string>());
+      let attempts = 0;
+      let networkReady = false;
+
+      // Simulate network becoming ready after some time
+      setTimeout(() => {
+        networkReady = true;
+      }, 50);
+
+      const { dispatch } = async(
+        focus,
+        async () => {
+          attempts++;
+          if (!networkReady) {
+            throw new Error("network not ready");
+          }
+          return "connected";
+        },
+        {
+          retry: {
+            count: 5,
+            delay: () => {
+              // Wait for network to be ready (poll every 20ms)
+              return new Promise<void>((resolve) => {
+                const check = () => {
+                  if (networkReady) {
+                    resolve();
+                  } else {
+                    setTimeout(check, 20);
+                  }
+                };
+                check();
+              });
+            },
+          },
+        }
+      );
+
+      const result = await dispatch();
+      expect(result).toBe("connected");
+      expect(networkReady).toBe(true);
+    });
   });
 
   describe("async.wait", () => {

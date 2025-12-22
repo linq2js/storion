@@ -241,6 +241,78 @@ function UserProfile({ userId }: { userId: string }) {
 }
 ```
 
+## AsyncOptions
+
+Configuration options for async operations.
+
+```ts
+interface AsyncOptions {
+  /** Error callback */
+  onError?: (error: Error) => void;
+
+  /** Retry configuration */
+  retry?: number | AsyncRetryOptions;
+
+  /** Auto-cancel previous request on new dispatch (default: true) */
+  autoCancel?: boolean;
+}
+
+interface AsyncRetryOptions {
+  /** Number of retry attempts */
+  count: number;
+
+  /**
+   * Delay between retries:
+   * - number: fixed delay in milliseconds
+   * - function returning number: dynamic delay based on attempt/error
+   * - function returning Promise<void>: custom async delay (retry when promise resolves)
+   */
+  delay?: number | ((attempt: number, error: Error) => number | Promise<void>);
+}
+```
+
+### Retry Examples
+
+```ts
+// Simple retry count (1000ms default delay)
+async(focus("data"), handler, { retry: 3 });
+
+// Fixed delay
+async(focus("data"), handler, {
+  retry: { count: 3, delay: 2000 },
+});
+
+// Exponential backoff
+async(focus("data"), handler, {
+  retry: {
+    count: 5,
+    delay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
+  },
+});
+
+// Wait for network reconnection
+async(focus("data"), handler, {
+  retry: {
+    count: 10,
+    delay: () => waitForOnline(), // Returns Promise<void>
+  },
+});
+
+// Custom retry condition
+async(focus("data"), handler, {
+  retry: {
+    count: 5,
+    delay: (attempt, error) => {
+      // Different delay based on error type
+      if (error.message.includes("rate limit")) {
+        return 5000; // Wait 5s for rate limits
+      }
+      return 1000 * attempt; // Linear backoff otherwise
+    },
+  },
+});
+```
+
 ## AsyncContext
 
 The context object passed to async handler functions (store-bound mode).

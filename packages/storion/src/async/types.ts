@@ -252,7 +252,7 @@ export interface AsyncRetryOptions {
   /** Number of retry attempts */
   count: number;
   /** Delay between retries (ms) or function returning delay */
-  delay?: number | ((attempt: number, error: Error) => number);
+  delay?: number | ((attempt: number, error: Error) => number | Promise<void>);
 }
 
 // ===== Mixin Options =====
