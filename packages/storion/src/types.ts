@@ -1352,22 +1352,6 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
   get<T>(factory: (resolver: Resolver) => T): T;
 
   /**
-   * Create a fresh instance from a parameterized factory (bypasses cache).
-   * The factory receives the resolver as the first argument, followed by custom args.
-   *
-   * Unlike `get()` which only supports parameterless factories, `create()` supports
-   * parameterized factories that need additional configuration.
-   *
-   * @example
-   * const db = create(createDatabase, { host: 'localhost' });
-   * const logger = create(createLogger, 'my-namespace');
-   */
-  create<TResult, TArgs extends [any, ...any[]]>(
-    factory: (resolver: Resolver, ...args: TArgs) => TResult,
-    ...args: TArgs
-  ): TResult;
-
-  /**
    * Apply a mixin to compose reusable selector logic.
    * Mixins receive the same context and can return computed values.
    *
