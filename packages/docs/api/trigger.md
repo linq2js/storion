@@ -77,10 +77,10 @@ if (userId) {
 ## How It Works
 
 1. `trigger` uses the action reference + deps as a cache key
-2. On first call, executes the action
+2. On first call, executes the action with provided args
 3. On subsequent renders:
-   - If deps haven't changed → skips execution
-   - If deps changed → re-executes the action
+   - If deps haven't changed AND args haven't changed → skips execution
+   - If deps changed OR args changed → re-executes the action
 
 ## With Async State
 
