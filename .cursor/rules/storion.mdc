@@ -15,7 +15,7 @@ For detailed documentation, see `packages/storion/README.md` and `packages/stori
 - Meta types:
   - Boolean flags: adjectives/past participles (`persisted`, `deprecated`, `hidden`)
   - Exclusions: `not` + adjective (`notPersisted`, `notLogged`)
-  - Storage targets: noun + `Store` (`sessionStore`, `localStore`)
+  - Storage targets: `in` + storage (`inSession`, `inLocal`, `inCloud`)
   - Validation: verb/noun (`validate`, `minLength`, `pattern`)
   - Config values: noun (`priority`, `debounce`, `ttl`)
   - Features: `with` + feature or `-able` suffix (`withDevtools`, `loggable`)

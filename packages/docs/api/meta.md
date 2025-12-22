@@ -75,7 +75,7 @@ Follow these conventions for clear, consistent meta type names:
 |----------|---------|----------|
 | Boolean flags | Adjective/past participle | `persisted`, `deprecated`, `hidden`, `cached` |
 | Exclusions | `not` + adjective | `notPersisted`, `notLogged`, `notCached` |
-| Storage targets | noun + `Store` | `sessionStore`, `localStore`, `cloudStore` |
+| Storage targets | `in` + storage | `inSession`, `inLocal`, `inCloud`, `inIndexedDB` |
 | Validation | verb/noun | `validate`, `minLength`, `pattern`, `sanitize` |
 | Config values | noun | `priority`, `debounce`, `throttle`, `ttl` |
 | Features | `with` + feature or `-able` | `withDevtools`, `withHistory`, `loggable` |
@@ -84,8 +84,8 @@ Follow these conventions for clear, consistent meta type names:
 // ✅ Good naming
 const persisted = meta();           // Boolean flag
 const notPersisted = meta();        // Exclusion
-const sessionStore = meta();        // Storage target
-const localStore = meta();          // Storage target
+const inSession = meta();           // Storage target
+const inLocal = meta();             // Storage target
 const validate = meta<string>();    // Validation rule
 const priority = meta<number>();    // Config value
 const withDevtools = meta();        // Feature flag
@@ -94,6 +94,7 @@ const withDevtools = meta();        // Feature flag
 const p = meta();                   // Too short
 const persistMeta = meta();         // Redundant "Meta" suffix
 const PERSIST = meta();             // Not camelCase
+const sessionStore = meta();        // Conflicts with store naming
 ```
 
 ## Querying Meta
@@ -199,23 +200,23 @@ interface AllMetaInfo<TValue> {
 Get all field names that have a specific meta type. Useful for multi-storage patterns:
 
 ```ts
-const sessionStore = meta();
-const localStore = meta();
+const inSession = meta();
+const inLocal = meta();
 
 const authStore = store({
   name: 'auth',
   state: { token: '', refreshToken: '', userId: '' },
   meta: [
-    sessionStore.for(['token']),
-    localStore.for(['refreshToken', 'userId']),
+    inSession.for(['token']),
+    inLocal.for(['refreshToken', 'userId']),
   ],
 });
 
 // In middleware
-const sessionFields = ctx.meta.fields(sessionStore);
+const sessionFields = ctx.meta.fields(inSession);
 // Returns: ['token']
 
-const localFields = ctx.meta.fields(localStore);
+const localFields = ctx.meta.fields(inLocal);
 // Returns: ['refreshToken', 'userId']
 
 // With predicate filter
