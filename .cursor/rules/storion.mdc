@@ -246,3 +246,87 @@ function UserProfile({ userId }: { userId: string }) {
 
 - Use `jest` with `it()` (not `test()`)
 - Write tests first, then code, then run and fix
+
+## GitHub Pages Demo Deployment
+
+When deploying demos (SPAs) alongside VitePress docs to GitHub Pages, follow these rules to avoid navigation issues between docs and demos:
+
+### 1. Demo App: Handle Back Navigation
+
+Each demo SPA must handle browser back/forward navigation outside its base path:
+
+```tsx
+// In demo's main.tsx
+const BASE_PATH = "/storion/demos/my-demo";
+
+// Handle back/forward navigation
+window.addEventListener("popstate", () => {
+  if (!window.location.pathname.startsWith(BASE_PATH)) {
+    // Navigated outside demo - do full page reload
+    window.location.reload();
+  }
+});
+```
+
+### 2. Demo App: Vite Base Path
+
+Configure Vite with the correct base path:
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  base: "/storion/demos/my-demo/",
+  // ...
+});
+```
+
+### 3. Docs: Force Full Navigation to Demos
+
+In VitePress, demo links must trigger full page navigation (not client-side routing):
+
+```vue
+<!-- In demos.md -->
+<script setup>
+import { onMounted } from 'vue'
+
+onMounted(() => {
+  document.querySelectorAll('a[href*="/demos/"]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault()
+      window.location.href = link.getAttribute('href')
+    })
+  })
+})
+</script>
+```
+
+### 4. GitHub Actions: Add .nojekyll
+
+Prevent Jekyll processing of the static site:
+
+```yaml
+# In .github/workflows/docs.yml
+- name: Add .nojekyll file
+  run: touch packages/docs/.vitepress/dist/.nojekyll
+```
+
+### 5. Demo Build Output
+
+All demo builds should be copied to `packages/docs/.vitepress/dist/demos/`:
+
+```yaml
+# In .github/workflows/docs.yml
+- name: Copy demo builds
+  run: |
+    mkdir -p packages/docs/.vitepress/dist/demos
+    cp -r packages/my-demo/dist packages/docs/.vitepress/dist/demos/my-demo
+```
+
+### Why These Rules?
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Back button doesn't work | Demo SPA captures all routes | `popstate` listener with reload |
+| Demo doesn't load on click | VitePress client-side routing | Force `window.location.href` |
+| 404 on refresh | GitHub Pages tries Jekyll | Add `.nojekyll` file |
+| Styles broken | Wrong asset paths | Correct Vite `base` path |
