@@ -1381,7 +1381,7 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
    *   return { data: store.state.data };
    * });
    */
-  readonly id: object;
+  readonly id: string;
 
   /**
    * Run a callback once when the component mounts.

@@ -10,6 +10,7 @@ import {
   useMemo,
   useState,
   useLayoutEffect,
+  useId,
 } from "react";
 
 import {
@@ -46,7 +47,7 @@ interface UseStoreRefs {
   stableFns: Map<string, Function>;
   trackedDeps: Map<string, ReadEvent>;
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
-  id: object; // unique id for this component instance
+  id: string; // unique id for this component instance
   onceRan: boolean; // whether once has been executed
 }
 
@@ -58,6 +59,7 @@ export function useStoreWithContainer<T extends object>(
   selector: Selector<T>,
   container: StoreContainer
 ): StableResult<T> {
+  const id = useId();
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
 
   // Combined ref for all mutable values
@@ -66,7 +68,7 @@ export function useStoreWithContainer<T extends object>(
     stableFns: new Map(),
     trackedDeps: new Map(),
     subscriptions: new Map(),
-    id: {},
+    id,
     onceRan: false,
   }));
 
