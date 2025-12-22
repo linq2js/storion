@@ -887,8 +887,14 @@ export namespace async {
    * Create a stale mode async state with initial data.
    * Data is preserved during loading and error states.
    */
-  export function stale<T>(initialData: T): AsyncState<T, "stale"> {
-    return asyncState("stale", "idle", initialData);
+  export function stale<T>(): AsyncState<T | undefined, "stale">;
+  export function stale<T>(
+    initialData: T | undefined | null
+  ): AsyncState<T, "stale">;
+  export function stale<T>(
+    initialData?: T | undefined | null
+  ): AsyncState<T, "stale"> {
+    return asyncState("stale", "idle", initialData as T);
   }
 
   // ===== Utility Methods =====
