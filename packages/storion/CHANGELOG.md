@@ -49,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   });
   ```
 
+- **BREAKING**: `SelectorContext.create()` removed - creates uncontrolled instances without disposal tracking. Use `get()` for cached services or `scoped()` for component-local stores instead.
+
 ### Changed
 
 - **BREAKING**: `persist` API refactored for better encapsulation (renamed from `persistMiddleware`)

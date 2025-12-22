@@ -21,11 +21,20 @@ interface SelectorContext {
   // Get store from global container: [state, actions]
   get<TState, TActions>(store: StoreSpec<TState, TActions>): [TState, TActions];
   
+  // Get a service/factory from container
+  get<T>(factory: (resolver: Resolver) => T): T;
+  
   // Create component-local store: [state, actions, instance]
   scoped<TState, TActions>(store: StoreSpec<TState, TActions>): [TState, TActions, StoreInstance];
   
+  // Apply reusable selector logic
+  mixin<TResult, TArgs>(mixin: SelectorMixin<TResult, TArgs>, ...args: TArgs): TResult;
+  
   // Run callback once on mount
   once(callback: () => void): void;
+  
+  // Unique ID for this component instance (useful with trigger)
+  readonly id: object;
 }
 ```
 
