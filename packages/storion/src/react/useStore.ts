@@ -28,6 +28,7 @@ import { useContainer } from "./context";
 import { AsyncFunctionError, ScopedOutsideSelectorError } from "../errors";
 import { isSpec } from "../is";
 import { dev } from "../dev";
+import { storeTuple } from "../utils/storeTuple";
 
 /**
  * React hook to consume stores with automatic optimization.
@@ -126,7 +127,7 @@ export function useStoreWithContainer<T extends object>(
           throw new ScopedOutsideSelectorError();
         }
         const instance = scopeController.get(spec);
-        return [instance.state, instance.actions, instance] as const;
+        return storeTuple(instance);
       },
     };
     return ctx;

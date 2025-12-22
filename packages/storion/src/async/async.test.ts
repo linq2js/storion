@@ -5,6 +5,7 @@ import type { Focus, SelectorContext } from "../types";
 import { withHooks } from "../core/tracking";
 import { container } from "../core/container";
 import { store } from "../core/store";
+import { storeTuple } from "../utils/storeTuple";
 
 // Helper to create a mock focus
 function createMockFocus<T, M extends AsyncMode>(
@@ -1979,7 +1980,7 @@ describe("asyncState()", () => {
             once: () => {},
             scoped: (spec: any) => {
               const instance = testContainer.create(spec);
-              return [instance.state, instance.actions, instance];
+              return storeTuple(instance);
             },
           } as any;
 
@@ -2026,7 +2027,7 @@ describe("asyncState()", () => {
             scoped: (spec: any) => {
               const instance = testContainer.create(spec);
               scopedInstance = instance;
-              return [instance.state, instance.actions, instance];
+              return storeTuple(instance);
             },
           } as any;
 
@@ -2072,7 +2073,7 @@ describe("asyncState()", () => {
             once: () => {},
             scoped: (spec: any) => {
               const instance = testContainer.create(spec);
-              return [instance.state, instance.actions, instance];
+              return storeTuple(instance);
             },
           } as any;
 
@@ -2111,7 +2112,7 @@ describe("asyncState()", () => {
             scoped: (spec: any) => {
               const instance = testContainer.create(spec);
               scopedInstance = instance;
-              return [instance.state, instance.actions, instance];
+              return storeTuple(instance);
             },
           } as any;
 

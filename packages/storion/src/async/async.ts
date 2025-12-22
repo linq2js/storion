@@ -29,7 +29,7 @@ import { untrack } from "../core/tracking";
 import { AsyncFunctionError } from "../errors";
 import { store } from "../core/store";
 import { isSpec } from "../is";
-import { storeTuple } from "../utils/storeTyple";
+import { storeTuple } from "../utils/storeTuple";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -345,7 +345,7 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
                 const instance = focus._resolver.get(specOrFactory);
                 if (isSpec(specOrFactory)) {
                   const store = instance as StoreInstance<any, any>;
-                  return storeTuple(store.state, store.actions);
+                  return storeTuple(store);
                 }
 
                 return instance;

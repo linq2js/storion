@@ -24,7 +24,7 @@ import { resolveEquality } from "./equality";
 import { isSpec } from "../is";
 import { willDispose } from "./disposable";
 import { SetupPhaseError, LifetimeMismatchError } from "../errors";
-import { storeTuple } from "../utils/storeTyple";
+import { storeTuple } from "../utils/storeTuple";
 
 // =============================================================================
 // Types
@@ -336,7 +336,7 @@ export function createStoreContext<
       const instance = resolver.get(depSpec);
       onDependency?.(instance);
 
-      return storeTuple(instance.state, instance.actions);
+      return storeTuple(instance);
     },
 
     // Implementation handles StoreSpec, Factory, and parameterized Factory overloads
