@@ -11,6 +11,15 @@ function persistMiddleware(options: PersistOptions): StoreMiddleware
 ## Options
 
 ```ts
+interface PersistContext extends StoreMiddlewareContext {
+  store: StoreInstance;  // The created store instance
+}
+
+interface PersistHandler {
+  load?: () => unknown | Promise<unknown>;
+  save?: (state: Record<string, unknown>) => void;
+}
+
 interface PersistOptions {
   // Filter which stores to persist
   filter?: (context: StoreMiddlewareContext) => boolean;
@@ -18,45 +27,46 @@ interface PersistOptions {
   // Filter which fields to persist (for multi-storage patterns)
   fields?: (context: StoreMiddlewareContext) => string[];
   
-  // Load persisted state (sync or async)
-  load?: (context: StoreMiddlewareContext) => unknown | Promise<unknown>;
+  // Handler factory - creates load/save for each store
+  handler: (context: PersistContext) => PersistHandler | Promise<PersistHandler>;
   
-  // Save state changes
-  save?: (context: StoreMiddlewareContext, state: unknown) => void | Promise<void>;
-  
-  // Handle errors
-  onError?: (context: StoreMiddlewareContext, error: unknown, operation: 'load' | 'save') => void;
+  // Handle errors during init, load, or save
+  onError?: (error: unknown, operation: 'init' | 'load' | 'save') => void;
   
   // Force overwrite dirty state during hydration
   force?: boolean;
 }
 ```
 
-The `StoreMiddlewareContext` provides access to:
+The `PersistContext` provides access to:
 - `spec` - The store specification
 - `meta` - MetaQuery for querying store metadata
 - `displayName` - The store's display name
+- `store` - The created store instance
 
 ## Basic Example
 
 ```ts
-import { container } from 'storion';
+import { container, forStores } from 'storion';
 import { persistMiddleware } from 'storion/persist';
 
 const app = container({
-  middleware: [
+  middleware: forStores([
     persistMiddleware({
-      load: (ctx) => {
-        const key = `app:${ctx.spec.displayName}`;
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
-      },
-      save: (ctx, state) => {
-        const key = `app:${ctx.spec.displayName}`;
-        localStorage.setItem(key, JSON.stringify(state));
+      handler: (ctx) => {
+        const key = `app:${ctx.displayName}`;
+        return {
+          load: () => {
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : null;
+          },
+          save: (state) => {
+            localStorage.setItem(key, JSON.stringify(state));
+          },
+        };
       },
     }),
-  ],
+  ]),
 });
 ```
 
@@ -67,38 +77,53 @@ Only persist specific stores:
 ```ts
 persistMiddleware({
   filter: (ctx) => ctx.displayName === 'user' || ctx.displayName === 'settings',
-  load: (ctx) => /* ... */,
-  save: (ctx, state) => /* ... */,
+  handler: (ctx) => {
+    const key = `app:${ctx.displayName}`;
+    return {
+      load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+      save: (state) => localStorage.setItem(key, JSON.stringify(state)),
+    };
+  },
 })
 ```
 
-Or use the `forStores` helper:
+Or use the `applyFor` helper:
 
 ```ts
-import { forStores } from 'storion';
+import { applyFor } from 'storion';
 
 container({
-  middleware: forStores([
-    persistMiddleware({
-      filter: (ctx) => ctx.displayName === 'user',
-      load: /* ... */,
-      save: /* ... */,
-    }),
-  ]),
+  middleware: [
+    applyFor('user', persistMiddleware({
+      handler: (ctx) => ({
+        load: () => JSON.parse(localStorage.getItem('user') || 'null'),
+        save: (state) => localStorage.setItem('user', JSON.stringify(state)),
+      }),
+    })),
+  ],
 });
 ```
 
-## Async Loading
+## Async Handler (IndexedDB)
+
+The handler can be async for initialization that requires async setup:
 
 ```ts
+import { openDB } from 'idb';
+
 persistMiddleware({
-  load: async (ctx) => {
-    const db = await openDB('app-storage');
-    return db.get('stores', ctx.spec.displayName);
-  },
-  save: async (ctx, state) => {
-    const db = await openDB('app-storage');
-    await db.put('stores', state, ctx.spec.displayName);
+  handler: async (ctx) => {
+    // Async initialization - opens DB once per store
+    const db = await openDB('app-db', 1, {
+      upgrade(db) {
+        db.createObjectStore('stores');
+      },
+    });
+    
+    return {
+      load: () => db.get('stores', ctx.displayName),
+      save: (state) => db.put('stores', state, ctx.displayName),
+    };
   },
 })
 ```
@@ -129,8 +154,7 @@ const userStore = store({
     confirmPassword: '',  // Temporary
   },
   meta: [
-    notPersisted.for('password'),
-    notPersisted.for('confirmPassword'),
+    notPersisted.for(['password', 'confirmPassword']),
   ],
   setup: /* ... */,
 });
@@ -140,14 +164,19 @@ const userStore = store({
 
 ```ts
 persistMiddleware({
-  load: (ctx) => /* ... */,
-  save: (ctx, state) => /* ... */,
-  onError: (ctx, error, operation) => {
-    console.error(`Persist ${operation} failed for ${ctx.displayName}:`, error);
+  handler: (ctx) => ({
+    load: () => /* ... */,
+    save: (state) => /* ... */,
+  }),
+  onError: (error, operation) => {
+    console.error(`Persist ${operation} failed:`, error);
     
-    if (operation === 'load') {
-      // Maybe clear corrupted data
-      localStorage.removeItem(`app:${ctx.displayName}`);
+    if (operation === 'init') {
+      // Handler initialization failed (e.g., DB connection)
+    } else if (operation === 'load') {
+      // Loading persisted state failed
+    } else {
+      // Saving state failed
     }
   },
 })
@@ -159,55 +188,35 @@ By default, hydration skips "dirty" properties (modified since initialization). 
 
 ```ts
 persistMiddleware({
-  load: (ctx) => /* ... */,
-  save: (ctx, state) => /* ... */,
+  handler: (ctx) => ({
+    load: () => /* ... */,
+    save: (state) => /* ... */,
+  }),
   force: true,  // Always use persisted values
 })
 ```
 
 ## Debouncing Saves
 
-The middleware doesn't include built-in debouncing. Implement it in your save function:
+Implement debouncing in the handler closure:
 
 ```ts
 import { debounce } from 'lodash-es';
 
-const debouncedSaves = new Map<string, (state: unknown) => void>();
-
 persistMiddleware({
-  load: (ctx) => /* ... */,
-  save: (ctx, state) => {
-    let save = debouncedSaves.get(ctx.displayName);
-    if (!save) {
-      save = debounce((s: unknown) => {
-        localStorage.setItem(`app:${ctx.displayName}`, JSON.stringify(s));
-      }, 300);
-      debouncedSaves.set(ctx.displayName, save);
-    }
-    save(state);
-  },
-})
-```
-
-## With IndexedDB
-
-```ts
-import { openDB } from 'idb';
-
-const dbPromise = openDB('app-db', 1, {
-  upgrade(db) {
-    db.createObjectStore('stores');
-  },
-});
-
-persistMiddleware({
-  load: async (ctx) => {
-    const db = await dbPromise;
-    return db.get('stores', ctx.spec.displayName);
-  },
-  save: async (ctx, state) => {
-    const db = await dbPromise;
-    await db.put('stores', state, ctx.spec.displayName);
+  handler: (ctx) => {
+    const key = `app:${ctx.displayName}`;
+    
+    // Debounced save - created once per store
+    const debouncedSave = debounce(
+      (state: unknown) => localStorage.setItem(key, JSON.stringify(state)),
+      300
+    );
+    
+    return {
+      load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+      save: debouncedSave,
+    };
   },
 })
 ```
@@ -242,35 +251,34 @@ const authStore = store({
     updateActivity: () => { state.lastActivity = Date.now(); },
   }),
   meta: [
-    // Mark which fields go where
     sessionStore.for(['accessToken', 'lastActivity']),
     localStore.for(['refreshToken', 'userId']),
   ],
 });
 
-// Session storage middleware - clears when browser closes
+// Session storage middleware
 const sessionMiddleware = persistMiddleware({
   filter: ({ meta }) => meta.any(sessionStore),
   fields: ({ meta }) => meta.fields(sessionStore),
-  load: (ctx) => {
-    const data = sessionStorage.getItem(`session:${ctx.displayName}`);
-    return data ? JSON.parse(data) : null;
-  },
-  save: (ctx, state) => {
-    sessionStorage.setItem(`session:${ctx.displayName}`, JSON.stringify(state));
+  handler: (ctx) => {
+    const key = `session:${ctx.displayName}`;
+    return {
+      load: () => JSON.parse(sessionStorage.getItem(key) || 'null'),
+      save: (state) => sessionStorage.setItem(key, JSON.stringify(state)),
+    };
   },
 });
 
-// Local storage middleware - persists across sessions
+// Local storage middleware
 const localMiddleware = persistMiddleware({
   filter: ({ meta }) => meta.any(localStore),
   fields: ({ meta }) => meta.fields(localStore),
-  load: (ctx) => {
-    const data = localStorage.getItem(`local:${ctx.displayName}`);
-    return data ? JSON.parse(data) : null;
-  },
-  save: (ctx, state) => {
-    localStorage.setItem(`local:${ctx.displayName}`, JSON.stringify(state));
+  handler: (ctx) => {
+    const key = `local:${ctx.displayName}`;
+    return {
+      load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+      save: (state) => localStorage.setItem(key, JSON.stringify(state)),
+    };
   },
 });
 
@@ -310,4 +318,3 @@ const mixedStore = store({
 - [notPersisted](/api/not-persisted) - Meta for excluding from persistence
 - [container()](/api/container) - Container with middleware
 - [Persistence Guide](/guide/persistence) - Deep dive into persistence
-

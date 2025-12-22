@@ -11,45 +11,79 @@ import { persistMiddleware, notPersisted } from 'storion/persist';
 ## Basic Usage
 
 ```ts
-import { container } from 'storion/react';
+import { container, forStores } from 'storion';
 import { persistMiddleware } from 'storion/persist';
 
 const app = container({
-  middleware: [
+  middleware: forStores([
     persistMiddleware({
-      load: (spec) => {
-        const key = `storion:${spec.displayName}`;
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
-      },
-      save: (spec, state) => {
-        const key = `storion:${spec.displayName}`;
-        localStorage.setItem(key, JSON.stringify(state));
+      handler: (ctx) => {
+        const key = `storion:${ctx.displayName}`;
+        return {
+          load: () => {
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : null;
+          },
+          save: (state) => {
+            localStorage.setItem(key, JSON.stringify(state));
+          },
+        };
       },
     }),
-  ],
+  ]),
 });
 ```
 
 ## Options
 
 ```ts
+interface PersistContext extends StoreMiddlewareContext {
+  store: StoreInstance;  // The created store instance
+}
+
+interface PersistHandler {
+  load?: () => unknown | Promise<unknown>;
+  save?: (state: Record<string, unknown>) => void;
+}
+
 interface PersistOptions {
   // Filter which stores to persist
-  filter?: (spec: StoreSpec) => boolean;
+  filter?: (context: StoreMiddlewareContext) => boolean;
   
-  // Load persisted state (sync or async)
-  load?: (spec: StoreSpec) => object | null | Promise<object | null>;
+  // Filter which fields to persist
+  fields?: (context: StoreMiddlewareContext) => string[];
   
-  // Save state to storage
-  save?: (spec: StoreSpec, state: object) => void;
+  // Handler factory - creates load/save for each store
+  handler: (context: PersistContext) => PersistHandler | Promise<PersistHandler>;
   
-  // Handle errors
-  onError?: (spec: StoreSpec, error: unknown, op: 'load' | 'save') => void;
+  // Handle errors during init, load, or save
+  onError?: (error: unknown, op: 'init' | 'load' | 'save') => void;
   
   // Force hydration even for dirty state
   force?: boolean;
 }
+```
+
+## Handler Pattern
+
+The `handler` function receives a context and returns load/save operations. This enables:
+
+1. **Shared closures** - Compute keys or open connections once per store
+2. **Async initialization** - Open databases before creating handlers
+3. **Encapsulation** - All persist logic in one place
+
+```ts
+persistMiddleware({
+  handler: (ctx) => {
+    // This runs once per store
+    const key = `app:${ctx.displayName}`;
+    
+    return {
+      load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+      save: (state) => localStorage.setItem(key, JSON.stringify(state)),
+    };
+  },
+})
 ```
 
 ## Excluding Stores
@@ -58,8 +92,8 @@ interface PersistOptions {
 
 ```ts
 persistMiddleware({
-  filter: (spec) => spec.displayName !== 'temporary',
-  // ...
+  filter: (ctx) => ctx.displayName !== 'temporary',
+  handler: (ctx) => ({ /* ... */ }),
 });
 ```
 
@@ -96,39 +130,66 @@ const userStore = store({
 });
 ```
 
-## Async Loading
+## Async Handler (IndexedDB)
 
-`load` can return a Promise:
+The handler can be async for database connections:
 
 ```ts
+import { openDB } from 'idb';
+
 persistMiddleware({
-  load: async (spec) => {
-    const db = await openIndexedDB();
-    return db.get('stores', spec.displayName);
-  },
-  save: (spec, state) => {
-    openIndexedDB().then(db => {
-      db.put('stores', state, spec.displayName);
+  handler: async (ctx) => {
+    // Opens DB once per store
+    const db = await openDB('app-db', 1, {
+      upgrade(db) {
+        db.createObjectStore('stores');
+      },
     });
+    
+    return {
+      load: () => db.get('stores', ctx.displayName),
+      save: (state) => db.put('stores', state, ctx.displayName),
+    };
   },
 });
 ```
 
-## Handling Empty State
+## Debouncing
 
-When all fields are excluded, `save` receives `{}`. Handle as needed:
+Implement debouncing in the handler closure:
+
+```ts
+import { debounce } from 'lodash-es';
+
+persistMiddleware({
+  handler: (ctx) => {
+    const key = `app:${ctx.displayName}`;
+    const debouncedSave = debounce(
+      (state) => localStorage.setItem(key, JSON.stringify(state)),
+      300
+    );
+    
+    return {
+      load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+      save: debouncedSave,
+    };
+  },
+});
+```
+
+## Error Handling
 
 ```ts
 persistMiddleware({
-  save: (spec, state) => {
-    const key = `storion:${spec.displayName}`;
-    
-    if (Object.keys(state).length === 0) {
-      localStorage.removeItem(key);  // Clean up
-      return;
+  handler: (ctx) => ({ /* ... */ }),
+  onError: (error, operation) => {
+    if (operation === 'init') {
+      console.error('Handler initialization failed:', error);
+    } else if (operation === 'load') {
+      console.error('Loading state failed:', error);
+    } else {
+      console.error('Saving state failed:', error);
     }
-    
-    localStorage.setItem(key, JSON.stringify(state));
   },
 });
 ```
@@ -139,8 +200,7 @@ By default, `hydrate()` skips "dirty" fields (modified since init). Use `force: 
 
 ```ts
 persistMiddleware({
+  handler: (ctx) => ({ /* ... */ }),
   force: true,  // Always apply persisted state
-  // ...
 });
 ```
-

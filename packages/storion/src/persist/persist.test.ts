@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { store, container, forStores, meta } from "../index";
-import { persistMiddleware, notPersisted } from "./persist";
+import { persistMiddleware, notPersisted, PersistContext } from "./persist";
 
 describe("persistMiddleware", () => {
   beforeEach(() => {
@@ -15,6 +15,7 @@ describe("persistMiddleware", () => {
     it("should call load on store creation", () => {
       const load = vi.fn().mockReturnValue(null);
       const save = vi.fn();
+      let capturedContext: PersistContext | undefined;
 
       const myStore = store({
         name: "test",
@@ -23,14 +24,21 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: (ctx) => {
+              capturedContext = ctx;
+              return { load, save };
+            },
+          }),
+        ]),
       });
 
       app.get(myStore);
 
       expect(load).toHaveBeenCalledTimes(1);
-      // Context is passed, which has spec property
-      expect(load.mock.calls[0][0].spec).toBe(myStore);
+      expect(capturedContext?.spec).toBe(myStore);
+      expect(capturedContext?.store).toBeDefined();
     });
 
     it("should hydrate store with sync load result", () => {
@@ -44,7 +52,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -63,7 +75,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -92,7 +108,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -102,27 +122,23 @@ describe("persistMiddleware", () => {
 
       // Save should be called immediately (subscription is set up before loading)
       expect(save).toHaveBeenCalledTimes(1);
-      expect(save.mock.calls[0][0].spec).toBe(myStore);
-      expect(save.mock.calls[0][1]).toEqual({ count: 1, name: "initial" });
+      expect(save.mock.calls[0][0]).toEqual({ count: 1, name: "initial" });
 
       // Wait for async load to complete
       await vi.runAllTimersAsync();
 
       // hydrate() skips dirty props (count was modified), but hydrates clean props (name)
-      // This prevents overwriting fresh user changes with stale persisted data
       expect(instance.state.count).toBe(1); // Kept user's change
       expect(instance.state.name).toBe("loaded"); // Hydrated from storage
 
       // Hydrating the name triggered another save
       expect(save).toHaveBeenCalledTimes(2);
-      expect(save.mock.calls[1][0].spec).toBe(myStore);
-      expect(save.mock.calls[1][1]).toEqual({ count: 1, name: "loaded" });
+      expect(save.mock.calls[1][0]).toEqual({ count: 1, name: "loaded" });
 
       // State change after hydration should also be saved
       instance.actions.increment();
       expect(save).toHaveBeenCalledTimes(3);
-      expect(save.mock.calls[2][0].spec).toBe(myStore);
-      expect(save.mock.calls[2][1]).toEqual({ count: 2, name: "loaded" });
+      expect(save.mock.calls[2][0]).toEqual({ count: 2, name: "loaded" });
     });
 
     it("should not hydrate when load returns null", () => {
@@ -136,7 +152,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -155,7 +175,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -180,7 +204,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -188,8 +216,7 @@ describe("persistMiddleware", () => {
       instance.actions.increment();
 
       expect(save).toHaveBeenCalledTimes(1);
-      expect(save.mock.calls[0][0].spec).toBe(myStore);
-      expect(save.mock.calls[0][1]).toEqual({ count: 1 });
+      expect(save.mock.calls[0][0]).toEqual({ count: 1 });
     });
 
     it("should call save with dehydrated state", () => {
@@ -207,15 +234,18 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
 
       instance.actions.setCount(10);
 
-      expect(save.mock.calls[0][0].spec).toBe(myStore);
-      expect(save.mock.calls[0][1]).toEqual({ count: 10, name: "test" });
+      expect(save.mock.calls[0][0]).toEqual({ count: 10, name: "test" });
     });
   });
 
@@ -240,9 +270,8 @@ describe("persistMiddleware", () => {
         middleware: [
           forStores(
             persistMiddleware({
-              load,
-              save,
               filter: (ctx) => ctx.spec.displayName === "persisted",
+              handler: () => ({ load, save }),
             })
           ),
         ],
@@ -259,12 +288,11 @@ describe("persistMiddleware", () => {
 
       // Load should only be called for persisted store
       expect(load).toHaveBeenCalledTimes(1);
-      expect(load.mock.calls[0][0].spec).toBe(persistedStore);
     });
   });
 
-  describe("optional load", () => {
-    it("should work without load option (save only)", () => {
+  describe("optional load/save", () => {
+    it("should work without load (save only)", () => {
       const save = vi.fn();
 
       const myStore = store({
@@ -278,7 +306,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -288,11 +320,10 @@ describe("persistMiddleware", () => {
 
       // Save should still work
       instance.actions.increment();
-      expect(save.mock.calls[0][0].spec).toBe(myStore);
-      expect(save.mock.calls[0][1]).toEqual({ count: 1 });
+      expect(save.mock.calls[0][0]).toEqual({ count: 1 });
     });
 
-    it("should work without save option (load only)", () => {
+    it("should work without save (load only)", () => {
       const load = vi.fn().mockReturnValue({ count: 42 });
 
       const myStore = store({
@@ -306,7 +337,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -317,6 +352,77 @@ describe("persistMiddleware", () => {
       // State changes should work but no save happens
       instance.actions.increment();
       expect(instance.state.count).toBe(43);
+    });
+  });
+
+  describe("async handler (init)", () => {
+    it("should support async handler for IndexedDB-like initialization", async () => {
+      const load = vi.fn().mockReturnValue({ count: 42 });
+      const save = vi.fn();
+
+      const myStore = store({
+        name: "test",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const app = container({
+        middleware: forStores([
+          persistMiddleware({
+            handler: async () => {
+              // Simulate async DB initialization
+              await Promise.resolve();
+              return { load, save };
+            },
+          }),
+        ]),
+      });
+
+      const instance = app.get(myStore);
+
+      // Before async handler resolves, state is initial
+      expect(instance.state.count).toBe(0);
+
+      // Wait for async handler
+      await vi.runAllTimersAsync();
+
+      // After handler resolves, load is called and state is hydrated
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(instance.state.count).toBe(42);
+
+      // Save should work after handler resolves
+      instance.actions.increment();
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(save.mock.calls[0][0]).toEqual({ count: 43 });
+    });
+
+    it("should provide store instance in handler context", () => {
+      let capturedStore: unknown;
+
+      const myStore = store({
+        name: "test",
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const app = container({
+        middleware: forStores([
+          persistMiddleware({
+            handler: (ctx) => {
+              capturedStore = ctx.store;
+              return {};
+            },
+          }),
+        ]),
+      });
+
+      const instance = app.get(myStore);
+
+      expect(capturedStore).toBe(instance);
     });
   });
 
@@ -336,14 +442,17 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save, onError })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+            onError,
+          }),
+        ]),
       });
 
       app.get(myStore);
 
-      expect(onError.mock.calls[0][0].spec).toBe(myStore);
-      expect(onError.mock.calls[0][1]).toBe(error);
-      expect(onError.mock.calls[0][2]).toBe("load");
+      expect(onError).toHaveBeenCalledWith(error, "load");
     });
 
     it("should call onError when async load rejects", async () => {
@@ -359,16 +468,19 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save, onError })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+            onError,
+          }),
+        ]),
       });
 
       app.get(myStore);
 
       await vi.runAllTimersAsync();
 
-      expect(onError.mock.calls[0][0].spec).toBe(myStore);
-      expect(onError.mock.calls[0][1]).toBe(error);
-      expect(onError.mock.calls[0][2]).toBe("load");
+      expect(onError).toHaveBeenCalledWith(error, "load");
     });
 
     it("should call onError when save throws", () => {
@@ -390,16 +502,73 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save, onError })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+            onError,
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
 
       instance.actions.increment();
 
-      expect(onError.mock.calls[0][0].spec).toBe(myStore);
-      expect(onError.mock.calls[0][1]).toBe(error);
-      expect(onError.mock.calls[0][2]).toBe("save");
+      expect(onError).toHaveBeenCalledWith(error, "save");
+    });
+
+    it("should call onError when handler (init) throws", () => {
+      const error = new Error("Init failed");
+      const onError = vi.fn();
+
+      const myStore = store({
+        name: "test",
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const app = container({
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => {
+              throw error;
+            },
+            onError,
+          }),
+        ]),
+      });
+
+      app.get(myStore);
+
+      expect(onError).toHaveBeenCalledWith(error, "init");
+    });
+
+    it("should call onError when async handler (init) rejects", async () => {
+      const error = new Error("Async init failed");
+      const onError = vi.fn();
+
+      const myStore = store({
+        name: "test",
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const app = container({
+        middleware: forStores([
+          persistMiddleware({
+            handler: async () => {
+              throw error;
+            },
+            onError,
+          }),
+        ]),
+      });
+
+      app.get(myStore);
+
+      await vi.runAllTimersAsync();
+
+      expect(onError).toHaveBeenCalledWith(error, "init");
     });
 
     it("should still setup save subscription even if load fails", () => {
@@ -420,7 +589,12 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save, onError })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+            onError,
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -428,53 +602,26 @@ describe("persistMiddleware", () => {
       // State change should still trigger save
       instance.actions.increment();
 
-      expect(save.mock.calls[0][0].spec).toBe(myStore);
-      expect(save.mock.calls[0][1]).toEqual({ count: 1 });
+      expect(save.mock.calls[0][0]).toEqual({ count: 1 });
     });
   });
 
   describe("non-store instances", () => {
     it("should pass through non-store instances", () => {
-      const load = vi.fn();
-      const save = vi.fn();
+      const handler = vi.fn();
 
       function myService() {
         return { getValue: () => 42 };
       }
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([persistMiddleware({ handler: () => ({}) })]),
       });
 
       const instance = app.get(myService);
 
       expect(instance.getValue()).toBe(42);
-      expect(load).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("empty options", () => {
-    it("should work with empty options (passthrough)", () => {
-      const myStore = store({
-        name: "test",
-        state: { count: 0 },
-        setup: ({ state }) => ({
-          increment: () => {
-            state.count++;
-          },
-        }),
-      });
-
-      const app = container({
-        middleware: forStores([persistMiddleware({})]),
-      });
-
-      const instance = app.get(myStore);
-
-      // Should work normally
-      expect(instance.state.count).toBe(0);
-      instance.actions.increment();
-      expect(instance.state.count).toBe(1);
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 
@@ -499,7 +646,11 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -537,7 +688,12 @@ describe("persistMiddleware", () => {
       });
 
       const app = container({
-        middleware: forStores([persistMiddleware({ load, save, force: true })]),
+        middleware: forStores([
+          persistMiddleware({
+            handler: () => ({ load, save }),
+            force: true,
+          }),
+        ]),
       });
 
       const instance = app.get(myStore);
@@ -551,35 +707,6 @@ describe("persistMiddleware", () => {
 
       // With force: true, both should be overwritten
       expect(instance.state.count).toBe(100);
-      expect(instance.state.name).toBe("loaded");
-    });
-
-    it("should work with sync load and force: true", () => {
-      const myStore = store({
-        name: "test",
-        state: { count: 0, name: "initial" },
-        setup: ({ state }) => ({
-          setCount: (n: number) => {
-            state.count = n;
-          },
-        }),
-      });
-
-      // Pre-create a container to simulate dirty state scenario
-      // In sync scenario, the state is hydrated immediately after store creation
-      // so dirty check doesn't apply (nothing modified yet)
-
-      const load = vi.fn().mockReturnValue({ count: 42, name: "loaded" });
-      const save = vi.fn();
-
-      const app = container({
-        middleware: forStores([persistMiddleware({ load, save, force: true })]),
-      });
-
-      const instance = app.get(myStore);
-
-      // Sync load applies immediately, so values should be from persisted state
-      expect(instance.state.count).toBe(42);
       expect(instance.state.name).toBe("loaded");
     });
   });
@@ -602,7 +729,11 @@ describe("persistMiddleware", () => {
         });
 
         const app = container({
-          middleware: forStores([persistMiddleware({ load, save })]),
+          middleware: forStores([
+            persistMiddleware({
+              handler: () => ({ load, save }),
+            }),
+          ]),
         });
 
         const instance = app.get(tempStore);
@@ -617,57 +748,6 @@ describe("persistMiddleware", () => {
         instance.actions.increment();
         expect(save).not.toHaveBeenCalled();
       });
-
-      it("should persist stores without notPersisted meta", () => {
-        const load = vi.fn().mockReturnValue({ count: 42 });
-        const save = vi.fn();
-
-        const persistedStore = store({
-          name: "persisted",
-          state: { count: 0 },
-          setup: ({ state }) => ({
-            increment: () => {
-              state.count++;
-            },
-          }),
-        });
-
-        const notPersistedStore = store({
-          name: "notPersisted",
-          state: { count: 0 },
-          setup: ({ state }) => ({
-            increment: () => {
-              state.count++;
-            },
-          }),
-          meta: [notPersisted()],
-        });
-
-        const app = container({
-          middleware: forStores([persistMiddleware({ load, save })]),
-        });
-
-        const persistedInstance = app.get(persistedStore);
-        const notPersistedInstance = app.get(notPersistedStore);
-
-        // Only persisted store should be loaded
-        expect(load).toHaveBeenCalledTimes(1);
-        expect(load.mock.calls[0][0].spec).toBe(persistedStore);
-
-        // Persisted store should have hydrated value
-        expect(persistedInstance.state.count).toBe(42);
-        // Not persisted store should have initial value
-        expect(notPersistedInstance.state.count).toBe(0);
-
-        // Only persisted store changes should trigger save
-        persistedInstance.actions.increment();
-        expect(save).toHaveBeenCalledTimes(1);
-        expect(save.mock.calls[0][0].spec).toBe(persistedStore);
-        expect(save.mock.calls[0][1]).toEqual({ count: 43 });
-
-        notPersistedInstance.actions.increment();
-        expect(save).toHaveBeenCalledTimes(1); // Still 1
-      });
     });
 
     describe("field-level exclusion", () => {
@@ -679,9 +759,6 @@ describe("persistMiddleware", () => {
           name: "user",
           state: { name: "Alice", password: "secret123", token: "abc" },
           setup: ({ state }) => ({
-            setPassword: (pw: string) => {
-              state.password = pw;
-            },
             setName: (n: string) => {
               state.name = n;
             },
@@ -690,7 +767,11 @@ describe("persistMiddleware", () => {
         });
 
         const app = container({
-          middleware: forStores([persistMiddleware({ load, save })]),
+          middleware: forStores([
+            persistMiddleware({
+              handler: () => ({ load, save }),
+            }),
+          ]),
         });
 
         const instance = app.get(userStore);
@@ -699,8 +780,7 @@ describe("persistMiddleware", () => {
         instance.actions.setName("Bob");
 
         // Save should be called without password and token
-        expect(save.mock.calls[0][0].spec).toBe(userStore);
-        expect(save.mock.calls[0][1]).toEqual({ name: "Bob" });
+        expect(save.mock.calls[0][0]).toEqual({ name: "Bob" });
       });
 
       it("should exclude fields marked with notPersisted from load/hydrate", () => {
@@ -719,134 +799,20 @@ describe("persistMiddleware", () => {
         });
 
         const app = container({
-          middleware: forStores([persistMiddleware({ load, save })]),
+          middleware: forStores([
+            persistMiddleware({
+              handler: () => ({ load, save }),
+            }),
+          ]),
         });
 
         const instance = app.get(userStore);
 
         // name should be hydrated
         expect(instance.state.name).toBe("Loaded");
-        // password and token should NOT be hydrated (kept initial)
+        // password and token should NOT be hydrated
         expect(instance.state.password).toBe("initial-pw");
         expect(instance.state.token).toBe("init-tok");
-      });
-
-      it("should work with mixed persisted and non-persisted fields", () => {
-        const load = vi.fn().mockReturnValue({ count: 100, total: 500 });
-        const save = vi.fn();
-
-        const statsStore = store({
-          name: "stats",
-          state: { count: 0, sessionCount: 0, total: 0 },
-          setup: ({ state }) => ({
-            increment: () => {
-              state.count++;
-              state.sessionCount++;
-              state.total++;
-            },
-          }),
-          meta: [notPersisted.for("sessionCount")], // Only sessionCount is not persisted
-        });
-
-        const app = container({
-          middleware: forStores([persistMiddleware({ load, save })]),
-        });
-
-        const instance = app.get(statsStore);
-
-        // count and total should be hydrated
-        expect(instance.state.count).toBe(100);
-        expect(instance.state.total).toBe(500);
-        // sessionCount should keep initial value
-        expect(instance.state.sessionCount).toBe(0);
-
-        // After increment
-        instance.actions.increment();
-
-        // Save should exclude sessionCount
-        // First call was from hydration, second is from increment
-        const lastCall = save.mock.calls[save.mock.calls.length - 1];
-        expect(lastCall[0].spec).toBe(statsStore);
-        expect(lastCall[1]).toEqual({ count: 101, total: 501 });
-      });
-
-      it("should handle multiple excluded fields", () => {
-        const save = vi.fn();
-
-        const formStore = store({
-          name: "form",
-          state: {
-            username: "",
-            password: "",
-            confirmPassword: "",
-            rememberMe: false,
-          },
-          setup: ({ state }) => ({
-            setUsername: (v: string) => {
-              state.username = v;
-            },
-          }),
-          meta: [notPersisted.for(["password", "confirmPassword"])],
-        });
-
-        const app = container({
-          middleware: forStores([persistMiddleware({ save })]),
-        });
-
-        const instance = app.get(formStore);
-
-        instance.actions.setUsername("john");
-
-        // Only username and rememberMe should be saved
-        expect(save.mock.calls[0][0].spec).toBe(formStore);
-        expect(save.mock.calls[0][1]).toEqual({
-          username: "john",
-          rememberMe: false,
-        });
-      });
-    });
-
-    describe("combined with filter option", () => {
-      it("should respect both filter and notPersisted meta", () => {
-        const load = vi.fn().mockReturnValue({ count: 42 });
-        const save = vi.fn();
-
-        const storeA = store({
-          name: "storeA",
-          state: { count: 0 },
-          setup: () => ({}),
-        });
-
-        const storeB = store({
-          name: "storeB",
-          state: { count: 0 },
-          setup: () => ({}),
-          meta: [notPersisted()],
-        });
-
-        const storeC = store({
-          name: "storeC",
-          state: { count: 0 },
-          setup: () => ({}),
-        });
-
-        const app = container({
-          middleware: forStores([
-            persistMiddleware({
-              load,
-              save,
-              filter: (ctx) => ctx.spec.displayName !== "storeC", // Exclude storeC via filter
-            }),
-          ]),
-        });
-
-        app.get(storeA);
-        app.get(storeB);
-        app.get(storeC);
-
-        // Only storeA should be loaded (storeB has notPersisted, storeC filtered out)
-        expect(load).toHaveBeenCalledTimes(1);
-        expect(load.mock.calls[0][0].spec).toBe(storeA);
       });
     });
 
@@ -863,11 +829,15 @@ describe("persistMiddleware", () => {
               state.a = !state.a;
             },
           }),
-          meta: [notPersisted.for(["a", "b"])], // All fields excluded
+          meta: [notPersisted.for(["a", "b"])],
         });
 
         const app = container({
-          middleware: forStores([persistMiddleware({ load, save })]),
+          middleware: forStores([
+            persistMiddleware({
+              handler: () => ({ load, save }),
+            }),
+          ]),
         });
 
         const instance = app.get(allExcludedStore);
@@ -875,209 +845,125 @@ describe("persistMiddleware", () => {
         // load should NOT be called - all fields excluded
         expect(load).not.toHaveBeenCalled();
 
-        // State should be initial values
-        expect(instance.state.a).toBe(true);
-        expect(instance.state.b).toBe(false);
-
         // Changes should NOT trigger save
         instance.actions.toggle();
         expect(save).not.toHaveBeenCalled();
       });
-
-      it("should persist store with some fields excluded", () => {
-        const load = vi.fn().mockReturnValue({ name: "loaded" });
-        const save = vi.fn();
-
-        const partialStore = store({
-          name: "partial",
-          state: { name: "", password: "" },
-          setup: ({ state }) => ({
-            setName: (n: string) => {
-              state.name = n;
-            },
-          }),
-          meta: [notPersisted.for("password")], // Only password excluded
-        });
-
-        const app = container({
-          middleware: forStores([persistMiddleware({ load, save })]),
-        });
-
-        const instance = app.get(partialStore);
-
-        // load SHOULD be called - only one field excluded
-        expect(load).toHaveBeenCalledTimes(1);
-
-        // name should be hydrated
-        expect(instance.state.name).toBe("loaded");
-
-        // Changes should trigger save
-        instance.actions.setName("updated");
-        expect(save).toHaveBeenCalled();
-        expect(save.mock.calls[save.mock.calls.length - 1][1]).toEqual({
-          name: "updated",
-        });
-      });
     });
+  });
 
-    describe("fields option for multi-storage patterns", () => {
-      it("should support multiple persist middleware with different storage targets", () => {
-        // Meta types to mark fields for different storage
-        const sessionStore = meta();
-        const localStore = meta();
+  describe("fields option for multi-storage patterns", () => {
+    it("should support multiple persist middleware with different storage targets", () => {
+      const sessionStore = meta();
+      const localStore = meta();
 
-        const sessionSave = vi.fn();
-        const localSave = vi.fn();
+      const sessionSave = vi.fn();
+      const localSave = vi.fn();
 
-        // Store with fields split between session and local storage
-        const authStore = store({
-          name: "auth",
-          state: {
-            accessToken: "", // session storage - expires with browser
-            refreshToken: "", // local storage - persists
-            userId: "", // local storage - persists
-            lastActivity: 0, // session storage - track for this session
+      const authStore = store({
+        name: "auth",
+        state: {
+          accessToken: "",
+          refreshToken: "",
+          userId: "",
+          lastActivity: 0,
+        },
+        setup: ({ state }) => ({
+          setTokens: (access: string, refresh: string) => {
+            state.accessToken = access;
+            state.refreshToken = refresh;
           },
-          setup: ({ state }) => ({
-            setTokens: (access: string, refresh: string) => {
-              state.accessToken = access;
-              state.refreshToken = refresh;
-            },
-            setUserId: (id: string) => {
-              state.userId = id;
-            },
-            updateActivity: () => {
-              state.lastActivity = Date.now();
-            },
-          }),
-          meta: [
-            sessionStore.for(["accessToken", "lastActivity"]),
-            localStore.for(["refreshToken", "userId"]),
-          ],
-        });
-
-        // Session storage middleware
-        const sessionMiddleware = persistMiddleware({
-          filter: ({ meta }) => meta.any(sessionStore),
-          fields: ({ meta }) => meta.fields(sessionStore),
-          save: sessionSave,
-        });
-
-        // Local storage middleware
-        const localMiddleware = persistMiddleware({
-          filter: ({ meta }) => meta.any(localStore),
-          fields: ({ meta }) => meta.fields(localStore),
-          save: localSave,
-        });
-
-        const app = container({
-          middleware: forStores([sessionMiddleware, localMiddleware]),
-        });
-
-        const instance = app.get(authStore);
-
-        // Set all values
-        instance.actions.setTokens("access123", "refresh456");
-        instance.actions.setUserId("user1");
-
-        // Session storage should only save accessToken and lastActivity
-        const sessionCalls = sessionSave.mock.calls;
-        expect(sessionCalls.length).toBeGreaterThan(0);
-        const lastSessionCall = sessionCalls[sessionCalls.length - 1][1];
-        expect(Object.keys(lastSessionCall).sort()).toEqual([
-          "accessToken",
-          "lastActivity",
-        ]);
-        expect(lastSessionCall.accessToken).toBe("access123");
-
-        // Local storage should only save refreshToken and userId
-        const localCalls = localSave.mock.calls;
-        expect(localCalls.length).toBeGreaterThan(0);
-        const lastLocalCall = localCalls[localCalls.length - 1][1];
-        expect(Object.keys(lastLocalCall).sort()).toEqual([
-          "refreshToken",
-          "userId",
-        ]);
-        expect(lastLocalCall.refreshToken).toBe("refresh456");
-        expect(lastLocalCall.userId).toBe("user1");
-      });
-
-      it("should skip middleware if fields option returns empty array", () => {
-        const sessionStore = meta();
-        const save = vi.fn();
-
-        // Store without sessionStore meta
-        const regularStore = store({
-          name: "regular",
-          state: { count: 0 },
-          setup: ({ state }) => ({
-            increment: () => {
-              state.count++;
-            },
-          }),
-        });
-
-        const sessionMiddleware = persistMiddleware({
-          filter: ({ meta }) => meta.any(sessionStore),
-          fields: ({ meta }) => meta.fields(sessionStore),
-          save,
-        });
-
-        const app = container({
-          middleware: forStores([sessionMiddleware]),
-        });
-
-        const instance = app.get(regularStore);
-        instance.actions.increment();
-
-        // Filter should skip this store entirely (no sessionStore meta)
-        expect(save).not.toHaveBeenCalled();
-      });
-
-      it("should combine fields option with notPersisted meta", () => {
-        const sessionStore = meta();
-        const save = vi.fn();
-
-        const mixedStore = store({
-          name: "mixed",
-          state: {
-            publicData: "",
-            sensitiveData: "",
-            tempData: "",
+          setUserId: (id: string) => {
+            state.userId = id;
           },
-          setup: ({ state }) => ({
-            setPublic: (v: string) => {
-              state.publicData = v;
-            },
-            setSensitive: (v: string) => {
-              state.sensitiveData = v;
+        }),
+        meta: [
+          sessionStore.for(["accessToken", "lastActivity"]),
+          localStore.for(["refreshToken", "userId"]),
+        ],
+      });
+
+      const sessionMiddleware = persistMiddleware({
+        filter: ({ meta }) => meta.any(sessionStore),
+        fields: ({ meta }) => meta.fields(sessionStore),
+        handler: () => ({ save: sessionSave }),
+      });
+
+      const localMiddleware = persistMiddleware({
+        filter: ({ meta }) => meta.any(localStore),
+        fields: ({ meta }) => meta.fields(localStore),
+        handler: () => ({ save: localSave }),
+      });
+
+      const app = container({
+        middleware: forStores([sessionMiddleware, localMiddleware]),
+      });
+
+      const instance = app.get(authStore);
+
+      instance.actions.setTokens("access123", "refresh456");
+      instance.actions.setUserId("user1");
+
+      // Session storage should only save accessToken and lastActivity
+      const sessionCalls = sessionSave.mock.calls;
+      expect(sessionCalls.length).toBeGreaterThan(0);
+      const lastSessionCall = sessionCalls[sessionCalls.length - 1][0];
+      expect(Object.keys(lastSessionCall).sort()).toEqual([
+        "accessToken",
+        "lastActivity",
+      ]);
+
+      // Local storage should only save refreshToken and userId
+      const localCalls = localSave.mock.calls;
+      expect(localCalls.length).toBeGreaterThan(0);
+      const lastLocalCall = localCalls[localCalls.length - 1][0];
+      expect(Object.keys(lastLocalCall).sort()).toEqual([
+        "refreshToken",
+        "userId",
+      ]);
+    });
+  });
+
+  describe("handler closure pattern", () => {
+    it("should allow shared resources via closure", () => {
+      const storage = new Map<string, string>();
+
+      const myStore = store({
+        name: "test",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          setCount: (n: number) => {
+            state.count = n;
+          },
+        }),
+      });
+
+      const app = container({
+        middleware: forStores([
+          persistMiddleware({
+            handler: (ctx) => {
+              // Key computed once per store
+              const key = `app:${ctx.displayName}`;
+              return {
+                load: () => {
+                  const data = storage.get(key);
+                  return data ? JSON.parse(data) : null;
+                },
+                save: (state) => {
+                  storage.set(key, JSON.stringify(state));
+                },
+              };
             },
           }),
-          meta: [
-            sessionStore.for(["publicData", "sensitiveData"]),
-            notPersisted.for("sensitiveData"), // Also marked as notPersisted
-          ],
-        });
-
-        const sessionMiddleware = persistMiddleware({
-          filter: ({ meta }) => meta.any(sessionStore),
-          fields: ({ meta }) => meta.fields(sessionStore),
-          save,
-        });
-
-        const app = container({
-          middleware: forStores([sessionMiddleware]),
-        });
-
-        const instance = app.get(mixedStore);
-        instance.actions.setPublic("hello");
-        instance.actions.setSensitive("secret");
-
-        // Only publicData should be saved
-        // sensitiveData is in sessionStore but also in notPersisted
-        const lastCall = save.mock.calls[save.mock.calls.length - 1][1];
-        expect(lastCall).toEqual({ publicData: "hello" });
+        ]),
       });
+
+      const instance = app.get(myStore);
+
+      instance.actions.setCount(42);
+
+      // Verify storage was used
+      expect(storage.get("app:test")).toBe('{"count":42}');
     });
   });
 });

@@ -4,7 +4,11 @@
  * Provides automatic state persistence and hydration for stores.
  */
 
-import type { StoreMiddleware, StoreMiddlewareContext } from "../types";
+import type {
+  StoreMiddleware,
+  StoreMiddlewareContext,
+  StoreInstance,
+} from "../types";
 import { meta } from "../meta/meta";
 import { isPromiseLike } from "../utils/isPromiseLike";
 
@@ -35,8 +39,8 @@ import { isPromiseLike } from "../utils/isPromiseLike";
  *   state: { name: '', password: '', token: '' },
  *   setup: () => ({}),
  *   meta: [
- *     notPersisted('password'),
- *     notPersisted('token'),
+ *     notPersisted.for('password'),
+ *     notPersisted.for('token'),
  *   ],
  * });
  * ```
@@ -51,6 +55,36 @@ export type PersistLoadResult =
   | null
   | undefined
   | Promise<Record<string, unknown> | null | undefined>;
+
+/**
+ * Context passed to the handler function.
+ * Extends StoreMiddlewareContext with the created store instance.
+ */
+export interface PersistContext extends StoreMiddlewareContext {
+  /** The store instance being persisted */
+  store: StoreInstance;
+}
+
+/**
+ * Handler returned by the handler function.
+ * Contains the load and save operations for a specific store.
+ */
+export interface PersistHandler {
+  /**
+   * Load persisted state for the store.
+   * Can return sync or async result.
+   *
+   * @returns The persisted state, null/undefined if not found, or a Promise
+   */
+  load?: () => PersistLoadResult;
+
+  /**
+   * Save state to persistent storage.
+   *
+   * @param state - The dehydrated state to save
+   */
+  save?: (state: Record<string, unknown>) => void;
+}
 
 /**
  * Options for persist middleware
@@ -75,37 +109,46 @@ export interface PersistOptions {
   fields?: (context: StoreMiddlewareContext) => string[];
 
   /**
-   * Load persisted state for a store.
-   * Can return sync or async result.
+   * Handler factory that creates load/save operations for each store.
+   * Receives context with store instance, returns handler with load/save.
+   * Can be sync or async (e.g., for IndexedDB initialization).
    *
-   * @param context - The middleware context
-   * @returns The persisted state, null/undefined if not found, or a Promise
+   * @param context - The persist context with store instance
+   * @returns Handler with load/save operations, or Promise of handler
+   *
+   * @example Sync handler (localStorage)
+   * ```ts
+   * handler: (ctx) => {
+   *   const key = `app:${ctx.displayName}`;
+   *   return {
+   *     load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+   *     save: (state) => localStorage.setItem(key, JSON.stringify(state)),
+   *   };
+   * }
+   * ```
+   *
+   * @example Async handler (IndexedDB)
+   * ```ts
+   * handler: async (ctx) => {
+   *   const db = await openDB('app-db');
+   *   return {
+   *     load: () => db.get('stores', ctx.displayName),
+   *     save: (state) => db.put('stores', state, ctx.displayName),
+   *   };
+   * }
+   * ```
    */
-  load?: (context: StoreMiddlewareContext) => PersistLoadResult;
+  handler: (
+    context: PersistContext
+  ) => PersistHandler | PromiseLike<PersistHandler>;
 
   /**
-   * Save state to persistent storage.
+   * Called when an error occurs during init, load, or save.
    *
-   * @param context - The middleware context
-   * @param state - The dehydrated state to save
-   */
-  save?: (
-    context: StoreMiddlewareContext,
-    state: Record<string, unknown>
-  ) => void;
-
-  /**
-   * Called when an error occurs during load or save.
-   *
-   * @param context - The middleware context
    * @param error - The error that occurred
-   * @param operation - Whether the error occurred during 'load' or 'save'
+   * @param operation - Whether the error occurred during 'init', 'load', or 'save'
    */
-  onError?: (
-    context: StoreMiddlewareContext,
-    error: unknown,
-    operation: "load" | "save"
-  ) => void;
+  onError?: (error: unknown, operation: "init" | "load" | "save") => void;
 
   /**
    * Force hydration to overwrite dirty (modified) state properties.
@@ -123,65 +166,80 @@ export interface PersistOptions {
 /**
  * Creates a persist middleware that automatically saves and restores store state.
  *
- * @example
+ * @example localStorage (sync handler)
  * ```ts
- * import { container } from "storion";
+ * import { container, forStores } from "storion";
  * import { persistMiddleware } from "storion/persist";
  *
  * const app = container({
- *   middleware: [persistMiddleware({
- *     load: (ctx) => {
- *       const key = `storion:${ctx.spec.displayName}`;
- *       const data = localStorage.getItem(key);
- *       return data ? JSON.parse(data) : null;
- *     },
- *     save: (ctx, state) => {
- *       const key = `storion:${ctx.spec.displayName}`;
- *       localStorage.setItem(key, JSON.stringify(state));
- *     },
- *     onError: (ctx, error, op) => {
- *       console.error(`Persist ${op} error for ${ctx.spec.displayName}:`, error);
- *     },
- *   })],
+ *   middleware: forStores([
+ *     persistMiddleware({
+ *       handler: (ctx) => {
+ *         const key = `app:${ctx.displayName}`;
+ *         return {
+ *           load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+ *           save: (state) => localStorage.setItem(key, JSON.stringify(state)),
+ *         };
+ *       },
+ *       onError: (error, op) => console.error(`Persist ${op} failed:`, error),
+ *     }),
+ *   ]),
  * });
  * ```
  *
- * @example Async load (e.g., IndexedDB)
+ * @example IndexedDB (async handler)
  * ```ts
  * persistMiddleware({
- *   load: async (ctx) => {
- *     const db = await openDB();
- *     return db.get('stores', ctx.spec.displayName);
- *   },
- *   save: (ctx, state) => {
- *     openDB().then(db => db.put('stores', state, ctx.spec.displayName));
+ *   handler: async (ctx) => {
+ *     const db = await openDB('app-db', 1, {
+ *       upgrade(db) { db.createObjectStore('stores'); },
+ *     });
+ *     return {
+ *       load: () => db.get('stores', ctx.displayName),
+ *       save: (state) => db.put('stores', state, ctx.displayName),
+ *     };
  *   },
  * });
  * ```
  *
- * @example Using meta in callbacks
+ * @example With shared debounce
  * ```ts
- * import { meta } from "storion";
- *
- * const persistKey = meta<string>();
- *
  * persistMiddleware({
- *   load: (ctx) => {
- *     // Use custom key from meta, fallback to displayName
- *     const customKey = ctx.meta(persistKey).store;
- *     const key = customKey ?? ctx.spec.displayName;
- *     return JSON.parse(localStorage.getItem(key) || 'null');
+ *   handler: (ctx) => {
+ *     const key = `app:${ctx.displayName}`;
+ *     const debouncedSave = debounce(
+ *       (s) => localStorage.setItem(key, JSON.stringify(s)),
+ *       300
+ *     );
+ *     return {
+ *       load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+ *       save: debouncedSave,
+ *     };
  *   },
- *   save: (ctx, state) => {
- *     const customKey = ctx.meta(persistKey).store;
- *     const key = customKey ?? ctx.spec.displayName;
- *     localStorage.setItem(key, JSON.stringify(state));
+ * });
+ * ```
+ *
+ * @example Multi-storage with meta
+ * ```ts
+ * const sessionStore = meta();
+ * const localStore = meta();
+ *
+ * // Session storage middleware
+ * persistMiddleware({
+ *   filter: ({ meta }) => meta.any(sessionStore),
+ *   fields: ({ meta }) => meta.fields(sessionStore),
+ *   handler: (ctx) => {
+ *     const key = `session:${ctx.displayName}`;
+ *     return {
+ *       load: () => JSON.parse(sessionStorage.getItem(key) || 'null'),
+ *       save: (state) => sessionStorage.setItem(key, JSON.stringify(state)),
+ *     };
  *   },
  * });
  * ```
  */
 export function persistMiddleware(options: PersistOptions): StoreMiddleware {
-  const { filter, fields, load, save, onError, force = false } = options;
+  const { filter, fields, handler, onError, force = false } = options;
 
   return (context) => {
     const { next, meta } = context;
@@ -247,56 +305,81 @@ export function persistMiddleware(options: PersistOptions): StoreMiddleware {
       return filtered;
     };
 
-    // Hydrate with loaded state
-    const hydrateWithState = (
-      state: Record<string, unknown> | null | undefined
-    ) => {
-      if (state != null) {
-        try {
-          // Filter out excluded fields before hydrating
-          instance.hydrate(filterState(state), { force });
-        } catch (error) {
-          onError?.(context, error, "load");
+    // Create persist context with store instance
+    const persistContext: PersistContext = {
+      ...context,
+      store: instance,
+    };
+
+    // Setup persistence with handler result
+    const setupPersistence = (persistHandler: PersistHandler) => {
+      const { load, save } = persistHandler;
+
+      // Hydrate with loaded state
+      const hydrateWithState = (
+        state: Record<string, unknown> | null | undefined
+      ) => {
+        if (state != null) {
+          try {
+            // Filter out excluded fields before hydrating
+            instance.hydrate(filterState(state), { force });
+          } catch (error) {
+            onError?.(error, "load");
+          }
         }
+      };
+
+      // Load persisted state
+      if (load) {
+        try {
+          const loadResult = load();
+
+          if (loadResult) {
+            if (isPromiseLike(loadResult)) {
+              // Async: hydrate when promise resolves
+              loadResult.then(
+                (state) => hydrateWithState(state),
+                (error) => onError?.(error, "load")
+              );
+            } else {
+              // Sync: hydrate immediately
+              hydrateWithState(loadResult);
+            }
+          }
+        } catch (error) {
+          onError?.(error, "load");
+        }
+      }
+
+      // Setup save subscription
+      if (save) {
+        instance.subscribe(() => {
+          try {
+            const state = instance.dehydrate();
+            save(filterState(state));
+          } catch (error) {
+            onError?.(error, "save");
+          }
+        });
       }
     };
 
-    // Load persisted state
+    // Call handler and setup persistence
     try {
-      const loadResult = load?.(context);
+      const handlerResult = handler(persistContext);
 
-      if (loadResult) {
-        if (isPromiseLike(loadResult)) {
-          // Async: hydrate when promise resolves
-          loadResult.then(
-            (state) => hydrateWithState(state),
-            (error) => onError?.(context, error, "load")
-          );
-        } else {
-          // Sync: hydrate immediately
-          hydrateWithState(loadResult);
-        }
+      if (isPromiseLike(handlerResult)) {
+        // Async handler: setup when promise resolves
+        handlerResult.then(
+          (persistHandler) => setupPersistence(persistHandler),
+          (error) => onError?.(error, "init")
+        );
+      } else {
+        // Sync handler: setup immediately
+        setupPersistence(handlerResult);
       }
     } catch (error) {
-      onError?.(context, error, "load");
-    }
-
-    // Setup save subscription immediately so state changes during loading are saved
-    if (save) {
-      instance.subscribe(() => {
-        try {
-          const state = instance.dehydrate();
-          // Filter out excluded fields before saving.
-          // Note: If all fields are excluded, filterState returns {}.
-          // We still call save({}) to let consumers decide how to handle:
-          // - Save empty object to storage
-          // - Skip saving entirely (just return)
-          // - Delete from storage (e.g., localStorage.removeItem)
-          save(context, filterState(state));
-        } catch (error) {
-          onError?.(context, error, "save");
-        }
-      });
+      onError?.(error, "init");
     }
 
     return instance;
