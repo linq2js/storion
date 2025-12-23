@@ -512,7 +512,7 @@ TypeScript cannot infer generic types through wrapper chains. When you chain mul
 const getData = baseFetch.use(retry(3)).use(timeout(5000));
 ```
 
-## Solution: .as<T>()
+## Solution: `.as<T>()`
 
 Use `.as<T>()` at the domain layer for explicit type assertions:
 
@@ -552,10 +552,10 @@ const result = await searchQuery({ keyword: "test" });
 
 **When to use each approach:**
 
-| Approach                | Use Case                                         |
-| ----------------------- | ------------------------------------------------ |
-| `.as<T>()`              | Simple type assertion, most common case          |
-| Typed `next` in `map()` | Need compile-time checks on inner function calls |
+| Approach                 | Use Case                                         |
+| ------------------------ | ------------------------------------------------ |
+| `.as<T>()`               | Simple type assertion, most common case          |
+| Typed `next` in `map()`  | Need compile-time checks on inner function calls |
 
 ---
 

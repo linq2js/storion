@@ -345,7 +345,7 @@ export const graphqlService = service<GraphqlService>(({ get }) => {
 
 ### Type Safety with Abortable Functions
 
-TypeScript cannot infer generic types through wrapper chains. When you chain multiple `.use()` calls, the generic type parameter `<T>` gets lost:
+TypeScript cannot infer generic types through wrapper chains. When you chain multiple `.use()` calls, the generic type parameter gets lost:
 
 ```ts
 // ❌ TypeScript loses the generic - result is `unknown`
