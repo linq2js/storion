@@ -137,17 +137,55 @@ export function useStoreWithContainer<T extends object>(
   }, [container, shouldRunOnce, scopeController]);
 
   // Run selector with hooks to track dependencies
-  // Use try/finally to ensure selectorExecution.active is properly reset
-  let result: T;
+  // Output wrapping is inside withHooks so property reads are tracked
+  // (e.g., when user returns state proxy directly: `return state`)
+  let output: StableResult<T>;
   selectorExecution.active = true;
   try {
-    result = withHooks(
+    output = withHooks(
       {
         onRead: (event) => {
           refs.trackedDeps.set(event.key, event);
         },
       },
-      () => selector(selectorContext)
+      () => {
+        const result = selector(selectorContext);
+
+        // Prevent async selectors - they cause tracking issues
+        if (
+          result &&
+          typeof (result as unknown as PromiseLike<unknown>).then === "function"
+        ) {
+          throw new AsyncFunctionError(
+            "useStore selector",
+            "Do not return a Promise from the selector function."
+          );
+        }
+
+        // Store fresh result for stable function wrappers
+        refs.fresh = result;
+
+        // Build output with stable functions (preserve array vs object)
+        // This is inside withHooks so Object.entries reads are tracked
+        const out = (Array.isArray(result) ? [] : {}) as StableResult<T>;
+
+        for (const [key, value] of Object.entries(result)) {
+          if (typeof value === "function") {
+            // Get or create stable function wrapper
+            if (!refs.stableFns.has(key)) {
+              refs.stableFns.set(key, (...args: unknown[]) => {
+                // Run fresh selector and call the function
+                return (refs.fresh as any)?.[key]?.(...args);
+              });
+            }
+            (out as any)[key] = refs.stableFns.get(key);
+          } else {
+            (out as any)[key] = value;
+          }
+        }
+
+        return out;
+      }
     );
   } finally {
     selectorExecution.active = false;
@@ -158,34 +196,14 @@ export function useStoreWithContainer<T extends object>(
     refs.onceRan = true;
   }
 
-  // Prevent async selectors - they cause tracking issues
-  if (
-    result &&
-    typeof (result as unknown as PromiseLike<unknown>).then === "function"
-  ) {
-    throw new AsyncFunctionError(
-      "useStore selector",
-      "Do not return a Promise from the selector function."
-    );
-  }
-  refs.fresh = result;
-  // Build output with stable functions (preserve array vs object)
-  const output = (Array.isArray(result) ? [] : {}) as StableResult<T>;
-
-  for (const [key, value] of Object.entries(result)) {
-    if (typeof value === "function") {
-      // Get or create stable function wrapper
-      if (!refs.stableFns.has(key)) {
-        refs.stableFns.set(key, (...args: unknown[]) => {
-          // Run fresh selector and call the function
-          return (refs.fresh as any)?.[key]?.(...args);
-        });
-      }
-      (output as any)[key] = refs.stableFns.get(key);
-    } else {
-      (output as any)[key] = value;
-    }
-  }
+  // Scoped store lifecycle management
+  // Use layout effect for synchronous commit before paint
+  useIsomorphicLayoutEffect(() => {
+    scopeController.commit();
+    return () => {
+      scopeController.uncommit();
+    };
+  }, [scopeController]);
 
   // Compute subscription token based on tracked keys
   // Token changes only when the set of tracked keys changes
@@ -223,15 +241,6 @@ export function useStoreWithContainer<T extends object>(
     // Re-run only when tracked keys change, not on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackedKeysToken]);
-
-  // Scoped store lifecycle management
-  // Use layout effect for synchronous commit before paint
-  useIsomorphicLayoutEffect(() => {
-    scopeController.commit();
-    return () => {
-      scopeController.uncommit();
-    };
-  }, [scopeController]);
 
   return output;
 }
