@@ -652,8 +652,271 @@ This is useful for mutations that need to gather data from multiple stores befor
 | Search with cache             | Store-bound with `focus()` |
 | One-off API call              | Mixin (component-local)    |
 
+## Comparison with Other Libraries
+
+### Feature Matrix
+
+| Feature | Storion | RTK Query | React Query | Apollo Client |
+|---------|---------|-----------|-------------|---------------|
+| Custom logic in handlers | ✅ Full control | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited |
+| Multiple API calls per action | ✅ Native | ❌ Separate endpoints | ❌ Separate queries | ❌ Separate operations |
+| Works outside React | ✅ Yes | ⚠️ With toolkit | ❌ React-only | ⚠️ With client |
+| No hooks for combining logic | ✅ Yes | ❌ useQueries | ❌ useQueries | ❌ useQuery + useMutation |
+| Component-local state | ✅ Mixin pattern | ❌ Global cache | ⚠️ With options | ❌ Normalized cache |
+| Cancel on unmount | ✅ Automatic | ✅ Automatic | ✅ Automatic | ✅ Automatic |
+| Retry with strategies | ✅ Built-in | ✅ Built-in | ✅ Built-in | ⚠️ Via links |
+| Network-aware retry | ✅ Built-in | ⚠️ Manual | ⚠️ Via onlineManager | ❌ Manual |
+| TypeScript inference | ✅ Full | ✅ Full | ✅ Full | ✅ With codegen |
+| Bundle size | ~4KB | ~12KB | ~13KB | ~30KB+ |
+| GraphQL required | ❌ No | ❌ No | ❌ No | ✅ Yes |
+| Dependency injection | ✅ Built-in | ❌ No | ❌ No | ❌ No |
+
+### Key Advantages
+
+#### 1. Full Control Over Async Logic
+
+Unlike RTK Query, React Query, or Apollo where you define endpoints/queries declaratively, Storion lets you write any custom logic:
+
+```ts
+// RTK Query - limited to single endpoint transformation
+const api = createApi({
+  endpoints: (builder) => ({
+    getUser: builder.query({
+      query: (id) => `/users/${id}`,
+      transformResponse: (res) => res.data, // Limited transformation
+    }),
+  }),
+});
+
+// React Query - logic scattered across hooks
+function useUserWithPosts(userId) {
+  const user = useQuery(['user', userId], () => fetchUser(userId));
+  const posts = useQuery(['posts', userId], () => fetchPosts(userId), {
+    enabled: !!user.data,
+  });
+  // Must manually combine in component
+  return { user, posts };
+}
+
+// Storion - full control in one place
+const userQuery = async(focus("user"), async (ctx, userId: string) => {
+  // Any custom logic you need
+  const user = await fetchUser(userId, { signal: ctx.signal });
+  
+  // Conditional fetching
+  if (user.hasPremium) {
+    user.subscription = await fetchSubscription(user.id);
+  }
+  
+  // Transform, validate, combine
+  return {
+    ...user,
+    displayName: `${user.firstName} ${user.lastName}`,
+    isActive: user.lastSeen > Date.now() - 3600000,
+  };
+});
+```
+
+#### 2. Multiple API Calls Without Hook Composition
+
+Other libraries require multiple hooks and manual state management:
+
+```tsx
+// React Query - requires multiple hooks
+function Dashboard() {
+  const user = useQuery(['user'], fetchUser);
+  const posts = useQuery(['posts'], fetchPosts, { enabled: !!user.data });
+  const stats = useQuery(['stats'], fetchStats, { enabled: !!user.data });
+  
+  // Manual loading/error combination
+  const isLoading = user.isLoading || posts.isLoading || stats.isLoading;
+  const error = user.error || posts.error || stats.error;
+  
+  if (isLoading) return <Spinner />;
+  if (error) return <Error error={error} />;
+  
+  return <DashboardView user={user.data} posts={posts.data} stats={stats.data} />;
+}
+
+// Storion - single action, unified state
+const dashboardQuery = async(focus("dashboard"), async (ctx) => {
+  const [user, posts, stats] = await Promise.all([
+    fetchUser({ signal: ctx.signal }),
+    fetchPosts({ signal: ctx.signal }),
+    fetchStats({ signal: ctx.signal }),
+  ]);
+  
+  return { user, posts, stats, loadedAt: Date.now() };
+});
+
+// Component is simple
+function Dashboard() {
+  const { dashboard, fetch } = useStore(({ get }) => {
+    const [state, actions] = get(dashboardStore);
+    trigger(actions.fetchDashboard, []);
+    return { dashboard: state.dashboard, fetch: actions.fetchDashboard };
+  });
+  
+  if (dashboard.status === "pending") return <Spinner />;
+  if (dashboard.status === "error") return <Error error={dashboard.error} />;
+  
+  return <DashboardView {...dashboard.data} />;
+}
+```
+
+#### 3. Works Outside React
+
+Storion async actions work anywhere - Node.js, React Native, or vanilla JavaScript:
+
+```ts
+// Node.js script
+import { container } from "storion";
+import { userStore } from "./stores";
+
+const app = container();
+const { actions } = app.get(userStore);
+
+// Use directly without React
+await actions.fetchUsers();
+await actions.syncData();
+console.log(app.get(userStore).state.users);
+
+// Background job
+setInterval(() => {
+  actions.refreshCache();
+}, 60000);
+```
+
+```ts
+// React Native with same stores
+import { userStore } from "@myapp/stores"; // Shared package
+import { container } from "storion";
+
+// Use in native modules or background tasks
+const app = container();
+app.get(userStore).actions.syncOfflineData();
+```
+
+#### 4. Component-Local Mutations Without Boilerplate
+
+RTK Query and React Query use global caches, requiring workarounds for component-local state:
+
+```tsx
+// React Query - workaround for local state
+function DeleteButton({ itemId }) {
+  // mutation state is shared globally by default
+  const mutation = useMutation({
+    mutationFn: (id) => deleteItem(id),
+    // Must manually scope with mutationKey
+    mutationKey: ['delete', itemId],
+  });
+  
+  return <button onClick={() => mutation.mutate(itemId)}>Delete</button>;
+}
+
+// Storion - native component-local mutations
+const deleteItemMutation = async(async (ctx, id: string) => {
+  await fetch(`/api/items/${id}`, { method: "DELETE", signal: ctx.signal });
+});
+
+function DeleteButton({ itemId }) {
+  // Each component instance has its own state - automatically
+  const { isPending, remove } = useStore(({ mixin }) => {
+    const [state, actions] = mixin(deleteItemMutation);
+    return {
+      isPending: state.status === "pending",
+      remove: () => actions.dispatch(itemId),
+    };
+  });
+  
+  return <button onClick={remove} disabled={isPending}>Delete</button>;
+}
+```
+
+#### 5. Testable with Dependency Injection
+
+```ts
+// Production store
+const dataStore = store({
+  name: "data",
+  state: { items: async.fresh<Item[]>() },
+  setup({ get, focus }) {
+    const api = get(apiService); // Injected dependency
+    const itemsQuery = async(focus("items"), () => api.getItems());
+    return { fetchItems: itemsQuery.dispatch };
+  },
+});
+
+// Test with mock
+const testContainer = container();
+testContainer.set(apiService, () => ({
+  getItems: async () => [{ id: "1", name: "Test" }],
+}));
+
+const { actions } = testContainer.get(dataStore);
+await actions.fetchItems();
+expect(testContainer.get(dataStore).state.items.data).toHaveLength(1);
+```
+
+#### 6. Network-Aware Retry Built-In
+
+```ts
+import { networkRetryService } from "storion/network";
+
+const dataQuery = async(focus("data"), fetchData, {
+  // Automatically waits for reconnection on network errors
+  // Uses backoff strategy for other errors
+  retry: networkRetry.delay("backoff"),
+});
+```
+
+### When to Choose Storion
+
+| Scenario | Best Choice | Why |
+|----------|-------------|-----|
+| Complex data fetching logic | **Storion** | Full control over async handlers |
+| GraphQL API | Apollo Client | Native GraphQL support |
+| Simple REST caching | RTK Query / React Query | Battle-tested caching |
+| Cross-platform shared logic | **Storion** | Framework-agnostic stores |
+| Component-local mutations | **Storion** | Native mixin pattern |
+| Server-side rendering | All viable | All support SSR |
+| Offline-first apps | **Storion** | Built-in network module |
+| Micro-frontends | **Storion** | Dependency injection & isolation |
+
+### Migration Patterns
+
+#### From React Query
+
+```tsx
+// Before (React Query)
+const { data, isLoading, error } = useQuery(['user', id], () => fetchUser(id));
+
+// After (Storion)
+const { user } = useStore(({ get }) => {
+  const [state, actions] = get(userStore);
+  trigger(actions.fetchUser, [id], id);
+  return { user: state.user };
+});
+// status: user.status, data: user.data, error: user.error
+```
+
+#### From RTK Query
+
+```tsx
+// Before (RTK Query)
+const { data, isLoading, error } = useGetUserQuery(id);
+
+// After (Storion)
+const { user, fetchUser } = useStore(({ get }) => {
+  const [state, actions] = get(userStore);
+  trigger(actions.fetchUser, [id], id);
+  return { user: state.user, fetchUser: actions.fetchUser };
+});
+```
+
 ## See Also
 
 - [trigger()](/api/trigger) - Triggering async actions
 - [scoped()](/api/use-store#component-local-stores-with-scoped) - Component-local stores
 - [Async Guide](/guide/async) - Deep dive into async patterns
+- [Network Module](/api/network) - Network connectivity and retry

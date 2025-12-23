@@ -163,3 +163,18 @@ trigger(actions.fetch, [id], id);
 ```
 :::
 
+## Why Storion Async?
+
+Storion's async system offers unique advantages over React Query, RTK Query, and Apollo:
+
+| Advantage | Description |
+|-----------|-------------|
+| **Full control** | Write any custom logic in handlers - conditional fetching, data transformation, multiple API calls |
+| **No hook composition** | Combine multiple API calls in one action instead of multiple `useQuery` hooks |
+| **Framework agnostic** | Use the same stores in Node.js, React Native, or background tasks |
+| **Component-local mutations** | Native mixin pattern for form submissions without global cache pollution |
+| **Network-aware retry** | Built-in support for waiting on network reconnection |
+| **Dependency injection** | Easy testing with mock services |
+
+See the [detailed comparison](/api/async#comparison-with-other-libraries) for migration patterns and more.
+
