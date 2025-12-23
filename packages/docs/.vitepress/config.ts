@@ -7,11 +7,6 @@ export default defineConfig({
 
   base: "/storion/",
 
-  ignoreDeadLinks: [
-    // Ignore these until pages are created
-    /\/guide\/(actions|dependency-injection|middleware|devtools|meta)/,
-    /\/guide\/react\/(with-store|provider)/,
-  ],
 
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/storion/logo.svg" }],
@@ -72,10 +67,7 @@ export default defineConfig({
             { text: "Async State", link: "/guide/async" },
             { text: "Network", link: "/guide/network" },
             { text: "Network Layer Architecture", link: "/guide/network-layer" },
-            {
-              text: "Dependency Injection",
-              link: "/guide/dependency-injection",
-            },
+            { text: "Dependency Injection", link: "/guide/dependency-injection" },
             { text: "Middleware", link: "/guide/middleware" },
             { text: "Persistence", link: "/guide/persistence" },
             { text: "DevTools", link: "/guide/devtools" },

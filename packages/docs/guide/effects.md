@@ -132,6 +132,40 @@ effect((ctx) => {
 
 :::
 
+### Why `onCleanup()` Over Return?
+
+The `ctx.onCleanup()` pattern handles **partial failure** correctly:
+
+```ts
+// React pattern - cleanup doesn't run if setup fails midway
+useEffect(() => {
+  const ws = new WebSocket(url); // ✅ Created
+  const timer = setInterval(/*...*/); // ✅ Created
+  const result = riskyOperation(); // ❌ Throws!
+
+  return () => {
+    // Never runs! WebSocket and timer leak.
+    ws.close();
+    clearInterval(timer);
+  };
+}, []);
+
+// Storion pattern - each cleanup registered immediately
+effect((ctx) => {
+  const ws = new WebSocket(url);
+  ctx.onCleanup(() => ws.close()); // ✅ Registered
+
+  const timer = setInterval(/*...*/);
+  ctx.onCleanup(() => clearInterval(timer)); // ✅ Registered
+
+  riskyOperation(); // ❌ Throws!
+
+  // WebSocket and timer are still cleaned up!
+});
+```
+
+**Key advantage:** Register cleanup immediately after each resource is created. If later setup steps fail, earlier cleanups still run.
+
 ## Async Operations
 
 ::: danger Effects Must Be Synchronous
@@ -224,47 +258,12 @@ const userStore = store({
 
 ```ts
 effect(fn, {
-  // Run immediately on creation (default: true)
-  immediate: true,
-
-  // Debounce effect execution
-  debounce: 100, // ms
-
-  // Throttle effect execution
-  throttle: 100, // ms
-
   // Error handling strategy
-  onError: "throw", // 'throw' | 'ignore' | { retry: config }
+  onError: "throw", // 'throw' | 'ignore' | 'keepAlive' | { retry: config }
 });
 ```
 
-### Debouncing
-
-Useful for effects that respond to rapid changes:
-
-```ts
-effect(
-  () => {
-    // Only runs 300ms after last state.searchQuery change
-    api.search(state.searchQuery);
-  },
-  { debounce: 300 }
-);
-```
-
-### Throttling
-
-Useful for effects that shouldn't run too frequently:
-
-```ts
-effect(
-  () => {
-    // Runs at most once per 1000ms
-    analytics.track("scroll", { position: state.scrollY });
-  },
-  { throttle: 1000 }
-);
-```
+The only option is `onError` for controlling how errors are handled.
 
 ## Error Handling
 
@@ -297,33 +296,33 @@ effect(fn, { onError: "ignore" });
 ### Retry on Error
 
 ```ts
+// Retry with default backoff strategy (1s, 2s, 4s...)
+effect(fn, {
+  onError: { count: 3 },
+});
+
+// Retry with fixed delay
+effect(fn, {
+  onError: { count: 3, delay: 1000 },
+});
+
+// Retry with named strategy: "backoff" | "linear" | "fixed" | "fibonacci" | "immediate"
+effect(fn, {
+  onError: { count: 5, delay: "linear" }, // 1s, 2s, 3s, 4s, 5s
+});
+
+// Retry with custom delay function
 effect(fn, {
   onError: {
-    retry: {
-      maxAttempts: 3,
-      delay: 1000,
-      backoff: "exponential", // 1s, 2s, 4s...
-    },
+    count: 3,
+    delay: (attempt) => Math.min(100 * 2 ** attempt, 5000),
   },
 });
 ```
 
-## Nested Effects
-
-Effects can create child effects that are automatically disposed when the parent re-runs:
-
-```ts
-effect((ctx) => {
-  if (state.featureEnabled) {
-    // Child effect - disposed when parent re-runs
-    effect(() => {
-      console.log("Feature value:", state.featureValue);
-    });
-  }
-});
-```
-
-**Use case:** Conditional side effects that should only exist under certain conditions.
+::: tip Unified with async module
+Effect retry uses the same delay strategies as `abortable` wrappers: `"backoff"`, `"linear"`, `"fixed"`, `"fibonacci"`, `"immediate"`.
+:::
 
 ## Manual Refresh
 

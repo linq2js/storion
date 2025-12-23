@@ -26,11 +26,22 @@ Optional configuration.
 
 ```ts
 interface EffectOptions {
-  // Run immediately or wait for first change
-  immediate?: boolean; // default: true
-  
-  // Custom scheduler for batching
-  scheduler?: (run: () => void) => void;
+  /** Error handling strategy */
+  onError?: EffectErrorStrategy;
+}
+
+type EffectErrorStrategy =
+  | "failFast"    // Stop effect, incomplete deps
+  | "keepAlive"   // Keep last dependencies (default)
+  | EffectRetryConfig
+  | ((ctx: EffectErrorContext) => void);
+
+interface EffectRetryConfig {
+  /** Number of retry attempts */
+  count: number;
+  /** Delay: ms, strategy name, or custom function (default: "backoff") */
+  delay?: number | "backoff" | "linear" | "fixed" | "fibonacci" | "immediate"
+        | ((attempt: number) => number);
 }
 ```
 
@@ -66,11 +77,11 @@ interface EffectContext {
 ```ts
 import { effect } from 'storion';
 
-const [state, actions] = container.get(userStore);
+const instance = container.get(userStore);
 
 // Effect tracks state.name automatically
 const dispose = effect(() => {
-  console.log('User name changed:', state.name);
+  console.log('User name changed:', instance.state.name);
 });
 
 // Later: stop the effect
@@ -156,6 +167,35 @@ effect(() => {
   const fullName = `${state.firstName} ${state.lastName}`;
   document.title = fullName;
 });
+```
+
+## Error Handling
+
+```ts
+// Retry 3 times with default backoff strategy
+effect(
+  () => {
+    if (state.shouldFail) throw new Error("Failed");
+  },
+  { onError: { count: 3 } }
+);
+
+// Retry with named strategy
+effect(fn, { onError: { count: 5, delay: "linear" } });
+
+// Retry with fixed delay
+effect(fn, { onError: { count: 3, delay: 1000 } });
+
+// Custom error handler
+effect(fn, {
+  onError: ({ error, retry, retryCount }) => {
+    if (retryCount < 3) retry();
+    else console.error(error);
+  },
+});
+
+// Ignore errors
+effect(fn, { onError: "failFast" });
 ```
 
 ## See Also

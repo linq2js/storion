@@ -92,6 +92,39 @@ jobs:
           cp -r packages/chat/dist packages/docs/.vitepress/dist/demos/chat
           cp -r packages/expense-manager/dist packages/docs/.vitepress/dist/demos/expense
 
+      - name: Create 404.html for each demo (SPA fallback)
+        run: |
+          # Copy index.html as 404.html for each demo
+          # This allows GitHub Pages to serve the SPA for any sub-route
+          for demo in showcase pokemon chat expense; do
+            cp packages/docs/.vitepress/dist/demos/$demo/index.html packages/docs/.vitepress/dist/demos/$demo/404.html
+          done
+          
+          # Also create a root demos 404.html that redirects to the correct demo
+          cat > packages/docs/.vitepress/dist/demos/404.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Redirecting...</title>
+            <script>
+              // Redirect to the correct demo based on path
+              var path = window.location.pathname;
+              var demos = ['showcase', 'pokemon', 'chat', 'expense'];
+              for (var i = 0; i < demos.length; i++) {
+                if (path.indexOf('/demos/' + demos[i]) !== -1) {
+                  window.location.replace('/storion/demos/' + demos[i] + '/');
+                  break;
+                }
+              }
+            </script>
+          </head>
+          <body>
+            <p>Redirecting...</p>
+          </body>
+          </html>
+          EOF
+
       - name: Add .nojekyll file
         run: touch packages/docs/.vitepress/dist/.nojekyll
 

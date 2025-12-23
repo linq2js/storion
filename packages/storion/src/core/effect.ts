@@ -15,19 +15,29 @@ import {
 } from "./tracking";
 import { EffectRefreshError, AsyncFunctionError } from "../errors";
 import { createSafe } from "../async/safe";
+import { retryStrategy, type RetryStrategyName } from "../async/types";
 
 // =============================================================================
 // Effect Error Handling Types
 // =============================================================================
 
 /**
+ * Retry delay: milliseconds, strategy name, or custom function.
+ */
+export type EffectRetryDelay =
+  | number
+  | RetryStrategyName
+  | ((attempt: number) => number);
+
+/**
  * Retry configuration for effects.
+ * Unified with async module retry options.
  */
 export interface EffectRetryConfig {
-  /** Maximum number of retry attempts */
-  maxRetries: number;
-  /** Delay in ms between retries (or function for custom backoff) */
-  delay?: number | ((attempt: number) => number);
+  /** Number of retry attempts */
+  count: number;
+  /** Delay between retries: ms, strategy name, or custom function (default: "backoff") */
+  delay?: EffectRetryDelay;
 }
 
 /**
@@ -261,10 +271,20 @@ function resolveErrorStrategy(
  * Get delay for retry attempt.
  */
 function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
-  if (typeof config.delay === "function") {
-    return config.delay(attempt);
+  const { delay = "backoff" } = config;
+
+  // Named strategy
+  if (typeof delay === "string") {
+    return retryStrategy[delay](attempt);
   }
-  return config.delay ?? 100 * Math.pow(2, attempt); // Default: exponential backoff
+
+  // Custom function
+  if (typeof delay === "function") {
+    return delay(attempt);
+  }
+
+  // Fixed number
+  return delay;
 }
 
 /**
@@ -304,7 +324,7 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
  * // With retry on error
  * effect((ctx) => {
  *   fetchData();
- * }, { onError: { maxRetries: 3, delay: 1000 } });
+ * }, { onError: { count: 3, delay: 1000 } });
  *
  * @example
  * // Custom error handler
@@ -424,7 +444,7 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
     }
 
     const retryConfig = errorStrategy as EffectRetryConfig;
-    if (retryCount < retryConfig.maxRetries) {
+    if (retryCount < retryConfig.count) {
       const delay = getRetryDelay(retryConfig, retryCount);
       retryCount++;
       retryTimeout = setTimeout(() => {
@@ -432,10 +452,7 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
         execute();
       }, delay);
     } else {
-      console.error(
-        `Effect failed after ${retryConfig.maxRetries} retries:`,
-        error
-      );
+      console.error(`Effect failed after ${retryConfig.count} retries:`, error);
     }
   };
 

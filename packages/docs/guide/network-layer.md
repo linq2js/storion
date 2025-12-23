@@ -200,10 +200,11 @@ export const restService = service<RestService>(({ get }) => {
   );
 
   // Query fetch - for GET requests (idempotent, safe to retry)
+  // Order: timeout per attempt → retry transient errors → wait for network if offline
   const queryFetch = baseFetch
-    .use(network.offlineRetry())
-    .use(retry(3))
     .use(timeout(config.timeout))
+    .use(retry(3))
+    .use(network.offlineRetry())
     .use(circuitBreaker({ threshold: 5 }));
 
   // Mutation fetch - for POST/PUT/PATCH/DELETE
@@ -319,11 +320,11 @@ export const graphqlService = service<GraphqlService>(({ get }) => {
     }
   );
 
-  // Query fetch - with offline retry (runs last after other retries)
+  // Query fetch - timeout per attempt → retry → wait for network if offline
   const queryFetch = baseFetch
-    .use(network.offlineRetry())
-    .use(retry(3))
     .use(timeout(30000))
+    .use(retry(3))
+    .use(network.offlineRetry())
     .use(circuitBreaker({ threshold: 5 }));
 
   // Mutation fetch - no offline retry, no retry (not idempotent)

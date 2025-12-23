@@ -316,33 +316,178 @@ setup({ state, onDispose }) {
 
 ## Store Instance
 
-When you retrieve a store with `get()` or `container.get()`, you get a tuple:
+There are two ways to access stores:
+
+### Inside `setup()` or `useStore()` — Tuple
+
+The `get()` function returns a tuple for convenient destructuring:
 
 ```ts
-const [state, actions] = container.get(userStore);
+// Inside store setup
+setup({ get }) {
+  const [state, actions] = get(userStore);
+  // state.name, actions.setName()
+}
 
-// Read state (reactive)
-console.log(state.name);
-
-// Call actions
-actions.setName("Alice");
+// Inside useStore selector
+useStore(({ get }) => {
+  const [state, actions] = get(userStore);
+  return { name: state.name };
+});
 ```
 
-### Full Instance Access
+### From Container — Full Instance
 
-For advanced use cases, you can access the full instance:
+`container.get()` returns the full store instance:
 
 ```ts
 const instance = container.get(userStore);
 
 instance.state; // Reactive state proxy
 instance.actions; // Actions object
-instance.subscribe(fn); // Listen to any state change
+instance.subscribe(fn); // Listen to state changes
 instance.dehydrate(); // Serialize for persistence/SSR
 instance.hydrate(data); // Restore from serialized data
 instance.dirty; // Check if modified since setup
 instance.reset(); // Reset to initial state
 instance.dispose(); // Clean up resources
+```
+
+## Subscribing to Changes
+
+Store instances provide flexible subscription APIs for reacting to state changes outside of React components.
+
+### Subscribe to Any State Change
+
+```ts
+const instance = container.get(counterStore);
+
+// Called whenever ANY state property changes
+const unsubscribe = instance.subscribe((state, prevState) => {
+  console.log("State changed:", state);
+  console.log("Previous state:", prevState);
+});
+
+// Later: stop listening
+unsubscribe();
+```
+
+### Subscribe to Specific Properties
+
+Use a selector to only react when specific values change:
+
+```ts
+const instance = container.get(userStore);
+
+// Only called when `name` changes
+const unsubscribe = instance.subscribe(
+  (state) => state.name, // Selector
+  (name, prevName) => {
+    console.log(`Name changed: ${prevName} → ${name}`);
+  }
+);
+
+// Subscribe to multiple properties
+instance.subscribe(
+  (state) => [state.name, state.email] as const,
+  ([name, email], [prevName, prevEmail]) => {
+    console.log("Name or email changed");
+  }
+);
+
+// Subscribe to computed value
+instance.subscribe(
+  (state) => state.items.length,
+  (count, prevCount) => {
+    console.log(`Item count: ${prevCount} → ${count}`);
+  }
+);
+```
+
+### Subscribe to Action Dispatching
+
+Use `onDispatch` in store options to react to every action call:
+
+```ts
+const userStore = store({
+  name: "user",
+  state: { name: "", email: "" },
+  setup({ state }) {
+    return {
+      setName: (name: string) => {
+        state.name = name;
+      },
+      setEmail: (email: string) => {
+        state.email = email;
+      },
+    };
+  },
+
+  // Called after every action completes
+  onDispatch: (event) => {
+    console.log(`Action: ${event.name}`);
+    console.log(`Arguments:`, event.args);
+    console.log(`Duration: ${event.duration}ms`);
+    console.log(`State after:`, event.state);
+  },
+});
+```
+
+### Subscription Patterns
+
+| Pattern                         | Use Case                                         |
+| ------------------------------- | ------------------------------------------------ |
+| `subscribe(callback)`           | React to any state change (logging, persistence) |
+| `subscribe(selector, callback)` | React to specific values (derived state, sync)   |
+| `onDispatch` option             | Analytics, logging, debugging all actions        |
+
+### Example: Sync to External Service
+
+```ts
+const instance = container.get(settingsStore);
+
+// Sync settings to localStorage whenever they change
+instance.subscribe((state) => {
+  localStorage.setItem("settings", JSON.stringify(state));
+});
+
+// Only sync theme changes to CSS
+instance.subscribe(
+  (state) => state.theme,
+  (theme) => {
+    document.documentElement.dataset.theme = theme;
+  }
+);
+```
+
+### Example: Action Analytics
+
+```ts
+const cartStore = store({
+  name: "cart",
+  state: { items: [] as CartItem[] },
+  setup({ state }) {
+    return {
+      addItem: (item: CartItem) => {
+        state.items = [...state.items, item];
+      },
+      removeItem: (id: string) => {
+        state.items = state.items.filter((i) => i.id !== id);
+      },
+      checkout: async () => {
+        /* ... */
+      },
+    };
+  },
+
+  onDispatch: (event) => {
+    // Track all cart actions
+    analytics.track(`cart_${event.name}`, {
+      args: event.args,
+      itemCount: event.state.items.length,
+    });
+  },
+});
 ```
 
 ## Store Options Reference

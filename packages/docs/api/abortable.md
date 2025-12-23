@@ -84,8 +84,6 @@ interface AbortableContext {
   signal: AbortSignal;
   /** Safe execution utility */
   safe: SafeFn;
-  /** Get store or service instance */
-  get: ContainerContext["get"];
 }
 
 interface Abortable<TArgs, TResult> {
@@ -302,16 +300,33 @@ fn.use(retry(3)).use(logging("api"));
 **Retry + Network Awareness:**
 
 ```ts
-// ✅ RECOMMENDED: retry first, then wait for network
+// ✅ RECOMMENDED: retry → offlineRetry (offlineRetry is outer)
 fn.use(retry(3)).use(network.offlineRetry());
-// 1. Retries up to 3 times for transient errors
-// 2. If still failing AND offline, waits for network
-// 3. Retries once after reconnection
-
-// ❌ LESS EFFECTIVE: network check wraps retries
-fn.use(network.offlineRetry()).use(retry(3));
-// Waits for network, then retries - doesn't handle network drops during retries
 ```
+
+Why this order?
+
+1. `fn` executes, fails
+2. `retry` catches error, retries up to 3 times (handles transient server errors)
+3. If ALL retries exhausted AND final error is network + offline:
+   - `offlineRetry` waits for reconnection
+   - Retries once after network returns
+
+This is **simple and predictable**: quick retries for transient errors, then one final chance after network returns.
+
+```ts
+// ❌ AVOID: offlineRetry → retry (retry is outer)
+fn.use(network.offlineRetry()).use(retry(3));
+```
+
+Why avoid?
+
+1. `fn` executes, fails
+2. `offlineRetry` checks: network error + offline? Wait for network, retry
+3. `retry` sees result, may trigger 3 more attempts
+4. EACH attempt could trigger another network wait!
+
+This creates **unpredictable timing**: if network is flaky, you could wait multiple times (once per retry attempt that fails while offline).
 
 **Cache + Retry:**
 
@@ -327,13 +342,13 @@ fn.use(cache(60000)).use(retry(3));
 
 ### Common Patterns
 
-| Pattern | Order | Reason |
-|---------|-------|--------|
-| Timeout per attempt | `retry → timeout` | Each retry gets fresh timeout |
-| Global timeout | `timeout → retry` | All retries must fit in timeout |
-| Log final result | `retry → logging` | See only final outcome |
-| Log all attempts | `logging → retry` | Debug each try |
-| Offline resilience | `retry → offlineRetry` | Handle both transient and network errors |
+| Pattern             | Order                  | Reason                                   |
+| ------------------- | ---------------------- | ---------------------------------------- |
+| Timeout per attempt | `retry → timeout`      | Each retry gets fresh timeout            |
+| Global timeout      | `timeout → retry`      | All retries must fit in timeout          |
+| Log final result    | `retry → logging`      | See only final outcome                   |
+| Log all attempts    | `logging → retry`      | Debug each try                           |
+| Offline resilience  | `retry → offlineRetry` | Handle both transient and network errors |
 
 ## retry()
 
@@ -687,10 +702,10 @@ const result = await searchQuery({ keyword: "test" });
 
 **When to use each approach:**
 
-| Approach                 | Use Case                                         |
-| ------------------------ | ------------------------------------------------ |
-| `.as<T>()`               | Simple type assertion, most common case          |
-| Typed `next` in `map()`  | Need compile-time checks on inner function calls |
+| Approach                | Use Case                                         |
+| ----------------------- | ------------------------------------------------ |
+| `.as<T>()`              | Simple type assertion, most common case          |
+| Typed `next` in `map()` | Need compile-time checks on inner function calls |
 
 ---
 
@@ -699,4 +714,3 @@ const result = await searchQuery({ keyword: "test" });
 - [async](/api/async) - Async state management (`async.action()` and `async.mixin()`)
 - [Network Layer Guide](/guide/network-layer) - Building resilient network services
 - [Network Module](/api/network) - Network connectivity and offline retry
-

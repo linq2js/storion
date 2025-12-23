@@ -203,19 +203,6 @@ Resets the state back to idle.
 actions.reset();
 ```
 
-::: tip
-To extract data from async state, use the [`async.wait()`](#async-wait) utility function.
-:::
-
-## Fresh vs Stale Mode
-
-| Status    | Fresh Mode                     | Stale Mode               |
-| --------- | ------------------------------ | ------------------------ |
-| `idle`    | ❌ Throws `AsyncNotReadyError` | ✅ Returns initial data  |
-| `pending` | ❌ Throws promise (Suspense)   | ✅ Returns previous data |
-| `success` | ✅ Returns data                | ✅ Returns data          |
-| `error`   | ❌ Throws error                | ✅ Returns previous data |
-
 ## Usage in React
 
 ### With Status Checks
@@ -1139,13 +1126,27 @@ expect(testContainer.get(dataStore).state.items.data).toHaveLength(1);
 #### 6. Network-Aware Retry Built-In
 
 ```ts
+import { abortable, retry } from "storion/async";
 import { networkService } from "storion/network";
 
-const dataQuery = async.action(focus("data"), fetchData, {
-  // Automatically waits for reconnection on network errors
-  // Uses backoff strategy for other errors
-  retry: networkRetry.delay("backoff"),
-});
+setup({ get, focus }) {
+  const network = get(networkService);
+
+  // Define abortable function
+  const fetchData = abortable(async ({ signal }) => {
+    const res = await fetch("/api/data", { signal });
+    return res.json();
+  });
+
+  // Chain wrappers: retry transient errors, then wait for network
+  const robustFetch = fetchData
+    .use(retry(3))              // Retry up to 3 times with backoff
+    .use(network.offlineRetry()); // Wait for reconnection on network errors
+
+  const dataQuery = async.action(focus("data"), robustFetch);
+
+  return { fetchData: dataQuery.dispatch };
+}
 ```
 
 ### When to Choose Storion

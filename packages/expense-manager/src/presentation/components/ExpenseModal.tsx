@@ -41,10 +41,16 @@ export const ExpenseModal = memo(function ExpenseModal({
   const [category, setCategory] = useState<CategoryType>(
     selectedExpense?.category ?? "food"
   );
-  const [date, setDate] = useState(
-    selectedExpense?.date.toISOString().split("T")[0] ??
-      new Date().toISOString().split("T")[0]
-  );
+  const [date, setDate] = useState(() => {
+    if (selectedExpense) {
+      // Format existing expense date as local YYYY-MM-DD
+      const d = selectedExpense.date;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+    // Default to today in local timezone
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,11 +58,15 @@ export const ExpenseModal = memo(function ExpenseModal({
     setIsSubmitting(true);
 
     try {
+      // Parse date as local timezone (YYYY-MM-DD format)
+      const [year, month, day] = date.split("-").map(Number);
+      const localDate = new Date(year, month - 1, day);
+
       const input: CreateExpenseInput = {
         description,
         amount: parseFloat(amount),
         category,
-        date: new Date(date),
+        date: localDate,
       };
 
       if (isEdit && selectedExpense) {

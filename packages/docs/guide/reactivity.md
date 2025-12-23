@@ -33,18 +33,18 @@ function UserName() {
 
 Reactivity only works in specific contexts:
 
-| Context              | Tracked | Example                                  |
-| -------------------- | ------- | ---------------------------------------- |
-| `useStore` selector  | ✅      | `useStore(({ get }) => get(store)[0].x)` |
-| `effect` callback    | ✅      | `effect(() => console.log(state.x))`     |
-| `pick()` callback    | ✅      | `pick(() => state.items.length)`         |
-| Action bodies        | ❌      | `increment: () => state.count++`         |
-| Event handlers       | ❌      | `onClick={() => state.count}`            |
-| Async callbacks      | ❌      | `.then(data => state.x)`                 |
+| Context             | Tracked | Example                                  |
+| ------------------- | ------- | ---------------------------------------- |
+| `useStore` selector | ✅      | `useStore(({ get }) => get(store)[0].x)` |
+| `effect` callback   | ✅      | `effect(() => console.log(state.x))`     |
+| `pick()` callback   | ✅      | `pick(() => state.items.length)`         |
+| Action bodies       | ❌      | `increment: () => state.count++`         |
+| Event handlers      | ❌      | `onClick={() => state.count}`            |
+| Async callbacks     | ❌      | `.then(data => state.x)`                 |
 
 **Why actions aren't tracked:**
 
-Actions are meant to *change* state, not react to it. If actions were tracked, you'd create circular dependencies.
+Actions are meant to _change_ state, not react to it. If actions were tracked, you'd create circular dependencies.
 
 ## Tracking Granularity
 
@@ -124,12 +124,12 @@ const todoStore = store({
 
 **Available equality options:**
 
-| Value                 | Description                       |
-| --------------------- | --------------------------------- |
-| `"strict"` (default)  | `===` comparison                  |
-| `"shallow"`           | Compare properties one level deep |
-| `"deep"`              | Recursive comparison              |
-| `(a, b) => boolean`   | Custom comparison function        |
+| Value                | Description                       |
+| -------------------- | --------------------------------- |
+| `"strict"` (default) | `===` comparison                  |
+| `"shallow"`          | Compare properties one level deep |
+| `"deep"`             | Recursive comparison              |
+| `(a, b) => boolean`  | Custom comparison function        |
 
 ### Selector-Level Equality
 
@@ -161,10 +161,10 @@ const result = useStore(({ get }) => {
 
 ### Store vs Selector Equality
 
-| Level             | When it runs          | Use case                                             |
-| ----------------- | --------------------- | ---------------------------------------------------- |
-| **Store-level**   | On every state write  | Prevent unnecessary notifications to ALL subscribers |
-| **Selector-level**| On every selector run | Prevent re-renders for THIS component only           |
+| Level              | When it runs          | Use case                                             |
+| ------------------ | --------------------- | ---------------------------------------------------- |
+| **Store-level**    | On every state write  | Prevent unnecessary notifications to ALL subscribers |
+| **Selector-level** | On every selector run | Prevent re-renders for THIS component only           |
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -286,8 +286,8 @@ const { user, email } = useStore(({ get }) => {
 
 ```tsx
 // ❌ Destructuring outside selector - loses tracking
-const [state] = container.get(userStore);
-const { name } = state; // Not tracked!
+const instance = container.get(userStore);
+const { name } = instance.state; // Not tracked!
 
 function UserName() {
   return <span>{name}</span>; // Never re-renders
@@ -306,16 +306,17 @@ function UserName() {
 ### Pitfall 3: Returning Entire State
 
 ```tsx
-// ❌ Returns entire state - re-renders on ANY change
+// ❌ Returns state proxy - tracks nothing in selector!
 const { state } = useStore(({ get }) => {
   const [state] = get(userStore);
-  return { state }; // Tracks everything!
+  return { state }; // No properties read = no tracking
 });
+// Later: state.name access is OUTSIDE selector, not tracked
 
-// ✅ Return only what you need
+// ✅ Return only what you need - properties are tracked
 const { name, email } = useStore(({ get }) => {
   const [state] = get(userStore);
-  return { name: state.name, email: state.email };
+  return { name: state.name, email: state.email }; // Reads tracked
 });
 ```
 
@@ -345,14 +346,14 @@ const myStore = store({
 
 ## Summary
 
-| Concept             | Description                                          |
-| ------------------- | ---------------------------------------------------- |
-| **Auto-tracking**   | Reading state creates subscriptions automatically    |
-| **First-level**     | By default, tracks immediate properties              |
-| **pick()**          | Fine-grained tracking for nested values              |
-| **Equality**        | Customize how changes are detected                   |
-| **Batching**        | Multiple changes = one notification                  |
-| **untrack()**       | Read without subscribing                             |
+| Concept           | Description                                       |
+| ----------------- | ------------------------------------------------- |
+| **Auto-tracking** | Reading state creates subscriptions automatically |
+| **First-level**   | By default, tracks immediate properties           |
+| **pick()**        | Fine-grained tracking for nested values           |
+| **Equality**      | Customize how changes are detected                |
+| **Batching**      | Multiple changes = one notification               |
+| **untrack()**     | Read without subscribing                          |
 
 ## Next Steps
 

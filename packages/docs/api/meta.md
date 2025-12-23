@@ -5,14 +5,22 @@ Creates custom metadata types for cross-cutting concerns like persistence, valid
 ## Signature
 
 ```ts
-function meta<TValue = true>(): MetaType<TValue>
-function meta<TValue>(defaultValue: TValue): MetaType<TValue>
+// 1. Boolean flag meta - myMeta() returns true
+function meta(): MetaType<[], true>;
+
+// 2. Typed value meta - myMeta(value) returns value
+function meta<TValue>(): MetaType<[value: TValue], TValue>;
+
+// 3. Custom builder meta - myMeta(...args) returns builder result
+function meta<TValue, TArgs extends any[]>(
+  builder: (...args: TArgs) => TValue
+): MetaType<TArgs, TValue>;
 ```
 
 ## Basic Example
 
 ```ts
-import { meta } from 'storion';
+import { meta } from "storion";
 
 // Flag-style meta (value is true)
 const persist = meta();
@@ -62,39 +70,39 @@ const userStore = store({
 
 ```ts
 meta: [
-  persist.for(['name', 'email', 'preferences']),
-  validate.for(['email', 'phone'], 'required'),
-]
+  persist.for(["name", "email", "preferences"]),
+  validate.for(["email", "phone"], "required"),
+];
 ```
 
 ## Naming Conventions
 
 Follow these conventions for clear, consistent meta type names:
 
-| Category | Pattern | Examples |
-|----------|---------|----------|
-| Boolean flags | Adjective/past participle | `persisted`, `deprecated`, `hidden`, `cached` |
-| Exclusions | `not` + adjective | `notPersisted`, `notLogged`, `notCached` |
-| Storage targets | `in` + storage | `inSession`, `inLocal`, `inCloud`, `inIndexedDB` |
-| Validation | verb/noun | `validate`, `minLength`, `pattern`, `sanitize` |
-| Config values | noun | `priority`, `debounce`, `throttle`, `ttl` |
-| Features | `with` + feature or `-able` | `withDevtools`, `withHistory`, `loggable` |
+| Category        | Pattern                     | Examples                                         |
+| --------------- | --------------------------- | ------------------------------------------------ |
+| Boolean flags   | Adjective/past participle   | `persisted`, `deprecated`, `hidden`, `cached`    |
+| Exclusions      | `not` + adjective           | `notPersisted`, `notLogged`, `notCached`         |
+| Storage targets | `in` + storage              | `inSession`, `inLocal`, `inCloud`, `inIndexedDB` |
+| Validation      | verb/noun                   | `validate`, `minLength`, `pattern`, `sanitize`   |
+| Config values   | noun                        | `priority`, `debounce`, `throttle`, `ttl`        |
+| Features        | `with` + feature or `-able` | `withDevtools`, `withHistory`, `loggable`        |
 
 ```ts
 // ✅ Good naming
-const persisted = meta();           // Boolean flag
-const notPersisted = meta();        // Exclusion
-const inSession = meta();           // Storage target
-const inLocal = meta();             // Storage target
-const validate = meta<string>();    // Validation rule
-const priority = meta<number>();    // Config value
-const withDevtools = meta();        // Feature flag
+const persisted = meta(); // Boolean flag
+const notPersisted = meta(); // Exclusion
+const inSession = meta(); // Storage target
+const inLocal = meta(); // Storage target
+const validate = meta<string>(); // Validation rule
+const priority = meta<number>(); // Config value
+const withDevtools = meta(); // Feature flag
 
 // ❌ Avoid unclear names
-const p = meta();                   // Too short
-const persistMeta = meta();         // Redundant "Meta" suffix
-const PERSIST = meta();             // Not camelCase
-const sessionStore = meta();        // Conflicts with store naming
+const p = meta(); // Too short
+const persistMeta = meta(); // Redundant "Meta" suffix
+const PERSIST = meta(); // Not camelCase
+const sessionStore = meta(); // Conflicts with store naming
 ```
 
 ## Querying Meta
@@ -105,42 +113,49 @@ const sessionStore = meta();        // Conflicts with store naming
 function myMiddleware(): StoreMiddleware {
   return (ctx) => {
     const instance = ctx.next();
-    
+
     // Query meta using the context
     const persistInfo = ctx.meta(persist);
-    
+
     // Store-level value
     if (persistInfo.store) {
-      console.log('Store should be persisted');
+      console.log("Store should be persisted");
     }
-    
+
     // Field-level values
     for (const [field, value] of Object.entries(persistInfo.fields)) {
       console.log(`Field ${field} has persist value:`, value);
     }
-    
+
     return instance;
   };
 }
 ```
 
-### From Store Spec
+### From Store Instance
 
 ```ts
-// Get meta query from spec
-const validateInfo = userStore.meta(validate);
+// Get store instance
+const instance = container.get(userStore);
 
-// Single field
-const emailRule = validateInfo.single('email');
+// Query meta - returns MetaInfo with store and fields
+const validateInfo = instance.meta(validate);
+
+// Store-level value
+validateInfo.store;
+// Returns: string | undefined
+
+// Field-level values
+validateInfo.fields.email;
 // Returns: 'email' | undefined
 
-// All fields
-const allRules = validateInfo.all();
-// Returns: { email: 'email', phone: 'required' }
+validateInfo.fields.phone;
+// Returns: 'required' | undefined
 
-// Any matching
-const hasValidation = validateInfo.any();
-// Returns: true if any field has this meta
+// Iterate all fields
+for (const [field, rule] of Object.entries(validateInfo.fields)) {
+  console.log(`${field}: ${rule}`);
+}
 ```
 
 ## MetaType API
@@ -150,12 +165,18 @@ interface MetaType<TValue> {
   // Store-level meta
   (): MetaEntry<any, TValue>;
   (value: TValue): MetaEntry<any, TValue>;
-  
+
   // Field-level meta
   for<TField extends string>(field: TField): MetaEntry<TField, true>;
-  for<TField extends string>(field: TField, value: TValue): MetaEntry<TField, TValue>;
+  for<TField extends string>(
+    field: TField,
+    value: TValue
+  ): MetaEntry<TField, TValue>;
   for<TField extends string>(fields: TField[]): MetaEntry<TField, true>;
-  for<TField extends string>(fields: TField[], value: TValue): MetaEntry<TField, TValue>;
+  for<TField extends string>(
+    fields: TField[],
+    value: TValue
+  ): MetaEntry<TField, TValue>;
 }
 ```
 
@@ -165,18 +186,15 @@ The `MetaQuery` interface provides methods to query metadata:
 
 ```ts
 interface MetaQuery {
-  // Default: returns first matching value (same as single())
+  // Default call: returns first matching value for store and each field
   <TValue>(type: MetaType<TValue>): MetaInfo<TValue>;
-  
-  // Get first matching value
-  single<TValue>(type: MetaType<TValue>): MetaInfo<TValue>;
-  
-  // Get all matching values as arrays
+
+  // Get all matching values as arrays (when same meta applied multiple times)
   all<TValue>(type: MetaType<TValue>): AllMetaInfo<TValue>;
-  
+
   // Check if any of the types exist
   any(...types: MetaType<any>[]): boolean;
-  
+
   // Get field names with a specific meta type
   fields<TValue>(
     type: MetaType<TValue>,
@@ -185,13 +203,13 @@ interface MetaQuery {
 }
 
 interface MetaInfo<TValue> {
-  store: TValue | undefined;              // Store-level value
-  fields: Record<string, TValue>;         // Field-level values
+  store: TValue | undefined; // Store-level value
+  fields: Record<string, TValue | undefined>; // Field-level values
 }
 
 interface AllMetaInfo<TValue> {
-  store: TValue[];                        // All store-level values
-  fields: Record<string, TValue[]>;       // All field-level values
+  store: TValue[]; // All store-level values
+  fields: Record<string, TValue[]>; // All field-level values
 }
 ```
 
@@ -204,12 +222,9 @@ const inSession = meta();
 const inLocal = meta();
 
 const authStore = store({
-  name: 'auth',
-  state: { token: '', refreshToken: '', userId: '' },
-  meta: [
-    inSession.for(['token']),
-    inLocal.for(['refreshToken', 'userId']),
-  ],
+  name: "auth",
+  state: { token: "", refreshToken: "", userId: "" },
+  meta: [inSession.for(["token"]), inLocal.for(["refreshToken", "userId"])],
 });
 
 // In middleware
@@ -233,9 +248,9 @@ const persist = meta();
 
 // Usage
 meta: [
-  persist(),                    // persist entire store
-  persist.for('settings'),      // persist settings field only
-]
+  persist(), // persist entire store
+  persist.for("settings"), // persist settings field only
+];
 
 // In middleware
 const info = ctx.meta(persist);
@@ -247,15 +262,15 @@ if (info.store || Object.keys(info.fields).length > 0) {
 ### Validation Meta
 
 ```ts
-type ValidationRule = 'required' | 'email' | 'min:N' | 'max:N';
+type ValidationRule = "required" | "email" | "min:N" | "max:N";
 const validate = meta<ValidationRule>();
 
 // Usage
 meta: [
-  validate.for('email', 'email'),
-  validate.for('name', 'required'),
-  validate.for('password', 'min:8'),
-]
+  validate.for("email", "email"),
+  validate.for("name", "required"),
+  validate.for("password", "min:8"),
+];
 
 // Query
 const rules = userStore.meta(validate).all();
@@ -269,9 +284,9 @@ const devtools = meta<{ hidden?: boolean; label?: string }>();
 
 // Usage
 meta: [
-  devtools({ label: 'User Profile' }),
-  devtools.for('_internal', { hidden: true }),
-]
+  devtools({ label: "User Profile" }),
+  devtools.for("_internal", { hidden: true }),
+];
 ```
 
 ### Deprecated Fields
@@ -281,11 +296,11 @@ const deprecated = meta<{ message: string; since: string }>();
 
 // Usage
 meta: [
-  deprecated.for('oldField', {
-    message: 'Use newField instead',
-    since: '2.0.0',
+  deprecated.for("oldField", {
+    message: "Use newField instead",
+    since: "2.0.0",
   }),
-]
+];
 
 // In middleware - warn when accessing deprecated fields
 const deprecatedInfo = ctx.meta(deprecated);
@@ -299,13 +314,13 @@ for (const [field, info] of Object.entries(deprecatedInfo.fields)) {
 Attach meta to service factories:
 
 ```ts
-import { withMeta } from 'storion';
+import { withMeta } from "storion";
 
 const apiService = withMeta(
   (resolver) => ({
-    fetch: (url: string) => fetch(url).then(r => r.json()),
+    fetch: (url: string) => fetch(url).then((r) => r.json()),
   }),
-  [persist()]  // Meta entries
+  [persist()] // Meta entries
 );
 
 // Query in middleware
@@ -316,5 +331,4 @@ const info = ctx.meta(persist);
 
 - [notPersisted](/api/not-persisted) - Built-in persistence meta
 - [persist()](/api/persist-middleware) - Using meta for persistence
-- [Meta Guide](/guide/meta) - Deep dive into the meta system
-
+- [store()](/api/store) - Creating stores with meta

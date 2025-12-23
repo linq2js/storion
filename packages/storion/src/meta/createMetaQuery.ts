@@ -112,7 +112,7 @@ export function createMetaQuery(
   const query = Object.assign(
     <TValue>(type: AnyFunc): MetaInfo<any, TValue> =>
       single(type) as MetaInfo<any, TValue>,
-    { single, all, any, fields }
+    { all, any, fields }
   );
 
   return query;

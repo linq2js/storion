@@ -218,13 +218,16 @@ const app = container({
 | **Learning curve**     | Higher                  | Medium                  | Lower                |
 | **Flexibility**        | Configured              | Moderate                | Maximum              |
 
-**Choose Storion's approach when you:**
+### Design Philosophy
 
-- Want full control over storage implementation
-- Need different strategies per store (debounce times, storage backends)
-- Prefer explicit code over configuration
-- Want minimal abstraction overhead
-- Have specific serialization/encryption needs
+Storion's persist middleware follows the **"minimal core, maximum flexibility"** principle:
+
+- **No built-in storage adapters** — You implement `load`/`save`, giving full control over storage engine, encryption, compression
+- **No built-in debounce** — You add debounce in your handler, choosing the right timing per store
+- **No built-in migrations** — You handle migrations in `load`, with full access to raw data
+- **Direct storage access** — Purge/flush via direct storage calls (e.g., `localStorage.removeItem`)
+
+This means slightly more code to write, but **no fighting the abstraction** when you need custom behavior.
 
 ## Basic Example
 

@@ -258,7 +258,7 @@ describe("effect", () => {
             throw new Error(`Attempt ${runCount}`);
           }
         },
-        { onError: { maxRetries: 3, delay: 100 } }
+        { onError: { count: 3, delay: 100 } }
       );
 
       expect(runCount).toBe(1);
@@ -283,25 +283,25 @@ describe("effect", () => {
           runCount++;
           throw new Error(`Attempt ${runCount}`);
         },
-        { onError: { maxRetries: 3 } }
+        { onError: { count: 3 } }
       );
 
       expect(runCount).toBe(1);
 
-      // First retry: 100 * 2^0 = 100ms
-      await vi.advanceTimersByTimeAsync(100);
+      // First retry: backoff strategy = 1000 * 2^0 = 1000ms
+      await vi.advanceTimersByTimeAsync(1000);
       expect(runCount).toBe(2);
 
-      // Second retry: 100 * 2^1 = 200ms
-      await vi.advanceTimersByTimeAsync(200);
+      // Second retry: backoff strategy = 1000 * 2^1 = 2000ms
+      await vi.advanceTimersByTimeAsync(2000);
       expect(runCount).toBe(3);
 
-      // Third retry: 100 * 2^2 = 400ms
-      await vi.advanceTimersByTimeAsync(400);
+      // Third retry: backoff strategy = 1000 * 2^2 = 4000ms
+      await vi.advanceTimersByTimeAsync(4000);
       expect(runCount).toBe(4);
 
       // Max retries reached, no more retries
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(10000);
       expect(runCount).toBe(4);
 
       vi.useRealTimers();
@@ -319,7 +319,7 @@ describe("effect", () => {
             throw new Error(`Attempt ${runCount}`);
           }
         },
-        { onError: { maxRetries: 3, delay: customDelay } }
+        { onError: { count: 3, delay: customDelay } }
       );
 
       expect(runCount).toBe(1);
@@ -346,7 +346,7 @@ describe("effect", () => {
           runCount++;
           throw new Error("Always fails");
         },
-        { onError: { maxRetries: 2, delay: 50 } }
+        { onError: { count: 2, delay: 50 } }
       );
 
       // Initial run
@@ -557,7 +557,7 @@ describe("effect", () => {
               runCount++;
               throw new Error("Keep retrying");
             },
-            { onError: { maxRetries: 10, delay: 100 } }
+            { onError: { count: 10, delay: 100 } }
           );
         }
       );
@@ -590,7 +590,7 @@ describe("effect", () => {
             () => {
               throw new Error("Retry");
             },
-            { onError: { maxRetries: 5, delay: 100 } }
+            { onError: { count: 5, delay: 100 } }
           );
         }
       );
@@ -712,7 +712,7 @@ describe("effect", () => {
               throw new Error("Force re-run");
             }
           },
-          { onError: { maxRetries: 3, delay: 0 } }
+          { onError: { count: 3, delay: 0 } }
         );
 
         // Wait for retries
