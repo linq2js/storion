@@ -7,7 +7,7 @@ import { useStore } from "storion/react";
 import { async, type AsyncContext } from "storion/async";
 
 // ============================================================================
-// Define mutations using async() mixin pattern
+// Define mutations using async.mixin() pattern
 // These return selector mixins - no store needed!
 // ============================================================================
 
@@ -23,7 +23,7 @@ interface SubmitResult {
 }
 
 // Simulated API call - form submission
-const submitContactForm = async(
+const submitContactForm = async.mixin(
   async (ctx: AsyncContext, _data: ContactFormData): Promise<SubmitResult> => {
     // Simulate network delay (in real app, you'd use _data to send to server)
     await async.delay(1500);
@@ -44,7 +44,7 @@ const submitContactForm = async(
 );
 
 // Simulated delete mutation
-const deleteItem = async(
+const deleteItem = async.mixin(
   async (ctx: AsyncContext, itemId: string): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve, 800));
     if (ctx.signal.aborted) throw new Error("Cancelled");
@@ -54,7 +54,7 @@ const deleteItem = async(
 );
 
 // Simulated like/unlike mutation
-const toggleLike = async(
+const toggleLike = async.mixin(
   async (ctx: AsyncContext, _postId: string): Promise<boolean> => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     if (ctx.signal.aborted) throw new Error("Cancelled");
@@ -375,7 +375,7 @@ export const MutationDemo = memo(function MutationDemo() {
         </h4>
         <pre className="bg-zinc-900 rounded-xl p-4 text-sm text-zinc-300 overflow-x-auto">
           {`// Define mutation (no store needed!)
-const submitForm = async(async (ctx, data) => {
+const submitForm = async.mixin(async (ctx, data) => {
   const res = await fetch("/api/submit", {
     method: "POST",
     body: JSON.stringify(data),

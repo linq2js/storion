@@ -699,7 +699,7 @@ const userStore = store({
   },
   setup({ focus }) {
     // Use *Query for read operations
-    const currentUserQuery = async(
+    const currentUserQuery = async.action(
       focus("currentUser"),
       async (ctx, userId: string) => {
         const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
@@ -1856,7 +1856,7 @@ This behavior ensures that effects can recover when state returns to a valid con
 
 ```ts
 // Use *Query for read operations
-const userQuery = async(
+const userQuery = async.action(
   focus("user"),
   async (ctx) => {
     const res = await fetch("/api/user", { signal: ctx.signal });

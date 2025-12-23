@@ -6,9 +6,9 @@ Creates async state managers for handling loading, success, and error states.
 
 The async module provides two distinct APIs:
 
-| API              | Use Case                                   | State Scope      |
-| ---------------- | ------------------------------------------ | ---------------- |
-| `async.action()` | Store-bound async operations (queries)     | Global/shared    |
+| API              | Use Case                                     | State Scope   |
+| ---------------- | -------------------------------------------- | ------------- |
+| `async.action()` | Store-bound async operations (queries)       | Global/shared |
 | `async.mixin()`  | Component-local async operations (mutations) | Per-component |
 
 ## Naming Convention
@@ -87,7 +87,10 @@ function ContactForm() {
   const [state, { dispatch }] = useStore(({ mixin }) => mixin(submitMutation));
 
   return (
-    <button onClick={() => dispatch(formData)} disabled={state.status === "pending"}>
+    <button
+      onClick={() => dispatch(formData)}
+      disabled={state.status === "pending"}
+    >
       {state.status === "pending" ? "Submitting..." : "Submit"}
     </button>
   );
@@ -95,22 +98,6 @@ function ContactForm() {
 ```
 
 ---
-
-## Legacy: async()
-
-The original `async()` function is still available for backward compatibility. It auto-detects the mode based on the first argument:
-
-```ts
-// Store-bound (same as async.action)
-async(focus("user"), handler);
-
-// Component-local (same as async.mixin)
-async(handler);
-```
-
-::: tip Recommendation
-Prefer the explicit `async.action()` and `async.mixin()` APIs for clarity.
-:::
 
 ## Async State Types
 
@@ -452,7 +439,7 @@ async.action(focus("data"), async (ctx) => {
 Get another store's state and actions. Same as `StoreContext.get()`. Useful for cross-store mutations.
 
 ```ts
-const checkoutMutation = async(async (ctx, paymentMethod: string) => {
+const checkoutMutation = async.mixin(async (ctx, paymentMethod: string) => {
   // Access other stores
   const [user] = ctx.get(userStore);
   const [cart] = ctx.get(cartStore);
@@ -676,14 +663,14 @@ This is useful for mutations that need to gather data from multiple stores befor
 
 ### async.action() vs async.mixin()
 
-| Use Case                      | API              | Scope           |
-| ----------------------------- | ---------------- | --------------- |
-| Shared data (users, products) | `async.action()` | Global/shared   |
-| Form submission               | `async.mixin()`  | Per-component   |
-| Delete/Update mutation        | `async.mixin()`  | Per-component   |
-| Paginated lists               | `async.action()` | Global/shared   |
-| Search with cache             | `async.action()` | Global/shared   |
-| One-off API call              | `async.mixin()`  | Per-component   |
+| Use Case                      | API              | Scope         |
+| ----------------------------- | ---------------- | ------------- |
+| Shared data (users, products) | `async.action()` | Global/shared |
+| Form submission               | `async.mixin()`  | Per-component |
+| Delete/Update mutation        | `async.mixin()`  | Per-component |
+| Paginated lists               | `async.action()` | Global/shared |
+| Search with cache             | `async.action()` | Global/shared |
+| One-off API call              | `async.mixin()`  | Per-component |
 
 ## Comparison with Other Libraries
 

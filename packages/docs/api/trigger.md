@@ -114,6 +114,6 @@ function PokemonList() {
 ## See Also
 
 - [useStore()](/api/use-store) - React hook for accessing stores
-- [async()](/api/async) - Async state management
+- [async](/api/async) - Async state management
 - [Async Guide](/guide/async) - Working with async data
 

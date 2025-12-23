@@ -197,7 +197,7 @@ export interface AsyncContext {
    * Useful for implementing timeouts.
    *
    * @example
-   * async(focus, async (ctx) => {
+   * async.action(focus, async (ctx) => {
    *   // Timeout after 5 seconds
    *   setTimeout(ctx.cancel, 5000);
    *
@@ -306,7 +306,7 @@ export interface AsyncRetryOptions {
  * ```ts
  * import { retry, onError } from "storion/async";
  *
- * const userQuery = async(
+ * const userQuery = async.action(
  *   focus("user"),
  *   userService.getUser.use(retry(3)).use(onError(console.error))
  * );
@@ -344,7 +344,7 @@ export interface AsyncLastInvocation<
 // ===== Async Actions API =====
 
 /**
- * API returned from async() mixin.
+ * API returned from async.action() or async.mixin().
  */
 export interface AsyncActions<T, M extends AsyncMode, TArgs extends any[]> {
   /** Dispatch the async operation */

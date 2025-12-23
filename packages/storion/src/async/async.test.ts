@@ -39,7 +39,7 @@ describe("async", () => {
     it("should execute handler and update state to success", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         return "result";
       });
 
@@ -55,7 +55,7 @@ describe("async", () => {
     it("should handle sync handlers", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<number>());
 
-      const { dispatch } = async(focus, () => 42);
+      const { dispatch } = async.action(focus, () => 42);
 
       const result = await dispatch();
       expect(result).toBe(42);
@@ -66,7 +66,7 @@ describe("async", () => {
     it("should handle errors and update state", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         throw new Error("test error");
       });
 
@@ -81,7 +81,7 @@ describe("async", () => {
         return `${name}-${age}`;
       });
 
-      const { dispatch } = async(focus, handler);
+      const { dispatch } = async.action(focus, handler);
       const result = await dispatch("John", 30);
 
       expect(result).toBe("John-30");
@@ -95,7 +95,7 @@ describe("async", () => {
     it("should return cancellable promise", async () => {
       const [focus] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         await new Promise((resolve) => setTimeout(resolve, 100));
         return "done";
       });
@@ -112,7 +112,7 @@ describe("async", () => {
     it("should clear data during loading", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         return "done";
       });
@@ -125,7 +125,7 @@ describe("async", () => {
     it("should clear data on error", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         throw new Error("fail");
       });
 
@@ -141,7 +141,7 @@ describe("async", () => {
         async.stale<string>("initial")
       );
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         return "new";
       });
@@ -157,7 +157,7 @@ describe("async", () => {
         asyncState("stale", "success", "initial")
       );
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         throw new Error("fail");
       });
 
@@ -171,7 +171,7 @@ describe("async", () => {
         async.stale<string>("initial")
       );
 
-      const { dispatch } = async(focus, async () => "updated");
+      const { dispatch } = async.action(focus, async () => "updated");
 
       await dispatch();
       expect(getState().status).toBe("success");
@@ -183,7 +183,7 @@ describe("async", () => {
     it("should cancel ongoing request", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch, cancel } = async(focus, async (ctx) => {
+      const { dispatch, cancel } = async.action(focus, async (ctx) => {
         await new Promise((resolve) => setTimeout(resolve, 100));
         if (ctx.signal.aborted) {
           throw new DOMException("Aborted", "AbortError");
@@ -202,7 +202,7 @@ describe("async", () => {
       const [focus, { getState }] = createMockFocus(async.fresh<number>());
       const signals: AbortSignal[] = [];
 
-      const { dispatch } = async(focus, async (ctx, value: number) => {
+      const { dispatch } = async.action(focus, async (ctx, value: number) => {
         signals.push(ctx.signal);
         await new Promise((resolve) => setTimeout(resolve, 50));
         if (ctx.signal.aborted) {
@@ -227,7 +227,7 @@ describe("async", () => {
       const signals: AbortSignal[] = [];
       const completionOrder: number[] = [];
 
-      const { dispatch } = async(
+      const { dispatch } = async.action(
         focus,
         async (ctx, value: number, delay: number) => {
           signals.push(ctx.signal);
@@ -267,7 +267,7 @@ describe("async", () => {
         return id;
       });
 
-      const { dispatch } = async(focus, handler, { autoCancel: false });
+      const { dispatch } = async.action(focus, handler, { autoCancel: false });
 
       const promises = [dispatch("a"), dispatch("b"), dispatch("c")];
 
@@ -280,7 +280,7 @@ describe("async", () => {
     it("should allow cancellation from within handler via ctx.cancel()", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async (ctx) => {
+      const { dispatch } = async.action(focus, async (ctx) => {
         // Simulate timeout - cancel after 20ms
         setTimeout(ctx.cancel, 20);
 
@@ -307,7 +307,7 @@ describe("async", () => {
     it("should support timeout pattern with ctx.cancel()", async () => {
       const [focus] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async (ctx) => {
+      const { dispatch } = async.action(focus, async (ctx) => {
         // Timeout after 10ms
         const timeoutId = setTimeout(ctx.cancel, 10);
 
@@ -348,7 +348,7 @@ describe("async", () => {
 
       let resolveHandler: (value: string) => void;
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         return new Promise<string>((resolve) => {
           resolveHandler = resolve;
         });
@@ -384,7 +384,7 @@ describe("async", () => {
     it("should update state normally when not externally modified", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         return "handler-result";
       });
@@ -420,7 +420,7 @@ describe("async", () => {
 
       let rejectHandler: (error: Error) => void;
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         return new Promise<string>((_, reject) => {
           rejectHandler = reject;
         });
@@ -456,7 +456,7 @@ describe("async", () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
       let callCount = 0;
 
-      const { dispatch, refresh } = async(focus, async (_ctx, name: string) => {
+      const { dispatch, refresh } = async.action(focus, async (_ctx, name: string) => {
         callCount++;
         return `${name}-${callCount}`;
       });
@@ -471,7 +471,7 @@ describe("async", () => {
     it("should return undefined if no previous dispatch", () => {
       const [focus] = createMockFocus(async.fresh<string>());
 
-      const { refresh } = async(focus, async () => "done");
+      const { refresh } = async.action(focus, async () => "done");
 
       expect(refresh()).toBeUndefined();
     });
@@ -481,7 +481,7 @@ describe("async", () => {
     it("should reset fresh mode state to idle with undefined data", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch, reset } = async(focus, async () => "done");
+      const { dispatch, reset } = async.action(focus, async () => "done");
 
       await dispatch();
       expect(getState().status).toBe("success");
@@ -497,7 +497,7 @@ describe("async", () => {
         async.stale<string>("initial")
       );
 
-      const { dispatch, reset } = async(focus, async () => "updated");
+      const { dispatch, reset } = async.action(focus, async () => "updated");
 
       await dispatch();
       expect(getState().data).toBe("updated");
@@ -543,7 +543,7 @@ describe("async", () => {
     it("should throw promise for pending state (Suspense)", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      const { dispatch } = async(focus, async () => {
+      const { dispatch } = async.action(focus, async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         return "done";
       });
@@ -841,7 +841,7 @@ describe("async", () => {
       it("should serialize state after dispatch success", async () => {
         const [focus, { getState }] = createMockFocus(async.stale("initial"));
 
-        const { dispatch } = async(focus, async () => "updated");
+        const { dispatch } = async.action(focus, async () => "updated");
         await dispatch();
 
         const serialized = JSON.parse(JSON.stringify(getState()));
@@ -855,7 +855,7 @@ describe("async", () => {
       it("should serialize state during pending", async () => {
         const [focus, { getState }] = createMockFocus(async.stale("cached"));
 
-        const { dispatch } = async(focus, async () => {
+        const { dispatch } = async.action(focus, async () => {
           await new Promise((r) => setTimeout(r, 50));
           return "new";
         });
@@ -882,7 +882,7 @@ describe("async", () => {
 
         let resolvedValue: string | null = null;
 
-        const { dispatch } = async(focus, async (ctx) => {
+        const { dispatch } = async.action(focus, async (ctx) => {
           const result = await ctx.safe(Promise.resolve("test-value"));
           resolvedValue = result;
           return result;
@@ -898,7 +898,7 @@ describe("async", () => {
         let resolvedValue: string | null = null;
         let promiseSettled = false;
 
-        const { dispatch, cancel } = async(focus, async (ctx) => {
+        const { dispatch, cancel } = async.action(focus, async (ctx) => {
           const safePromise = ctx.safe(
             new Promise<string>((resolve) => {
               setTimeout(() => resolve("test-value"), 50);
@@ -944,7 +944,7 @@ describe("async", () => {
         let caughtError: Error | null = null;
         let promiseSettled = false;
 
-        const { dispatch, cancel } = async(focus, async (ctx) => {
+        const { dispatch, cancel } = async.action(focus, async (ctx) => {
           const safePromise = ctx.safe(
             new Promise<string>((_, reject) => {
               setTimeout(() => reject(new Error("test-error")), 50);
@@ -992,7 +992,7 @@ describe("async", () => {
         let callbackCalled = false;
         let callbackArg: string | null = null;
 
-        const { dispatch } = async(focus, async (ctx) => {
+        const { dispatch } = async.action(focus, async (ctx) => {
           const result = ctx.safe((arg: string) => {
             callbackCalled = true;
             callbackArg = arg;
@@ -1013,7 +1013,7 @@ describe("async", () => {
 
         let sum: number | null | undefined = null;
 
-        const { dispatch } = async(focus, async (ctx) => {
+        const { dispatch } = async.action(focus, async (ctx) => {
           sum = ctx.safe(
             (a: number, b: number, c: number) => a + b + c,
             1,
@@ -1032,7 +1032,7 @@ describe("async", () => {
 
         let result: string | undefined;
 
-        const { dispatch } = async(focus, async (ctx) => {
+        const { dispatch } = async.action(focus, async (ctx) => {
           result = await ctx.safe(async (x: number) => `result-${x}`, 42);
           return "done";
         });
@@ -1046,14 +1046,14 @@ describe("async", () => {
   describe("last()", () => {
     it("should return undefined if never dispatched", () => {
       const [focus] = createMockFocus(async.fresh<string>());
-      const actions = async(focus, async () => "result");
+      const actions = async.action(focus, async () => "result");
 
       expect(actions.last()).toBeUndefined();
     });
 
     it("should return invocation info after dispatch", async () => {
       const [focus] = createMockFocus(async.fresh<number>());
-      const actions = async<number, "fresh", [number, string]>(
+      const actions = async.action<number, "fresh", [number, string]>(
         focus,
         async (_ctx, num, str) => num + str.length
       );
@@ -1070,7 +1070,7 @@ describe("async", () => {
 
     it("should increment nth on each dispatch", async () => {
       const [focus] = createMockFocus(async.fresh<string>());
-      const actions = async<string, "fresh", [string]>(
+      const actions = async.action<string, "fresh", [string]>(
         focus,
         async (_ctx, msg) => msg
       );
@@ -1091,7 +1091,7 @@ describe("async", () => {
     it("should reflect current state (pending)", async () => {
       const [focus] = createMockFocus(async.fresh<string>());
       let resolvePromise: (value: string) => void;
-      const actions = async(focus, async () => {
+      const actions = async.action(focus, async () => {
         return new Promise<string>((resolve) => {
           resolvePromise = resolve;
         });
@@ -1116,7 +1116,7 @@ describe("async", () => {
 
     it("should reflect error state", async () => {
       const [focus] = createMockFocus(async.fresh<string>());
-      const actions = async(focus, async () => {
+      const actions = async.action(focus, async () => {
         throw new Error("test error");
       });
 
@@ -1135,7 +1135,7 @@ describe("async", () => {
     it("should work with stale mode and preserve data", async () => {
       const [focus] = createMockFocus(async.stale<string[]>(["initial"]));
       let resolvePromise: (value: string[]) => void;
-      const actions = async(focus, async () => {
+      const actions = async.action(focus, async () => {
         return new Promise<string[]>((resolve) => {
           resolvePromise = resolve;
         });
@@ -1172,7 +1172,7 @@ describe("async", () => {
         focus[1],
       ] as Focus<AsyncState<number, "fresh">>;
 
-      const actions = async(trackedFocus, async () => 42);
+      const actions = async.action(trackedFocus, async () => 42);
 
       // Before dispatch - last() returns undefined without calling getState
       expect(actions.last()).toBeUndefined();
@@ -1195,7 +1195,7 @@ describe("async", () => {
 
     it("should update state reference on subsequent dispatches", async () => {
       const [focus] = createMockFocus(async.fresh<string>());
-      const actions = async<string, "fresh", [string]>(
+      const actions = async.action<string, "fresh", [string]>(
         focus,
         async (_ctx, msg) => msg
       );
@@ -1223,8 +1223,8 @@ describe("async", () => {
         return `data-${id}`;
       });
 
-      // Use with async()
-      const { dispatch } = async(focus, fetchData);
+      // Use with async.action()
+      const { dispatch } = async.action(focus, fetchData);
 
       const result = await dispatch("123");
       expect(result).toBe("data-123");
@@ -1243,7 +1243,7 @@ describe("async", () => {
         return true;
       });
 
-      const { dispatch } = async(focus, fetchData);
+      const { dispatch } = async.action(focus, fetchData);
       await dispatch();
 
       expect(receivedSignal).toBeDefined();
@@ -1266,7 +1266,7 @@ describe("async", () => {
         return `data-${id}`;
       });
 
-      const { dispatch } = async(focus, fetchData);
+      const { dispatch } = async.action(focus, fetchData);
 
       // Start first request
       const promise1 = dispatch("first");
@@ -1295,7 +1295,7 @@ describe("async", () => {
       });
 
       // Create mixin
-      const mixin = async(fetchData);
+      const mixin = async.mixin(fetchData);
 
       // Mock selector context
       const mockContext = {
@@ -1993,14 +1993,14 @@ describe("asyncState()", () => {
 
   describe("mixin overload", () => {
     it("should return a selector mixin", () => {
-      const fetchData = async(async () => "result");
+      const fetchData = async.mixin(async () => "result");
 
       // The mixin should be a function
       expect(typeof fetchData).toBe("function");
     });
 
     it("should work with scoped() in selector context", () => {
-      const fetchData = async(async () => "result");
+      const fetchData = async.mixin(async () => "result");
 
       const testContainer = container();
 
@@ -2045,7 +2045,7 @@ describe("asyncState()", () => {
     });
 
     it("should dispatch and update state", async () => {
-      const fetchData = async(async () => {
+      const fetchData = async.mixin(async () => {
         await new Promise((r) => setTimeout(r, 10));
         return "fetched";
       });
@@ -2095,7 +2095,7 @@ describe("asyncState()", () => {
     });
 
     it("should support stale mode with initial state", async () => {
-      const fetchData = async(async () => "new-data", {
+      const fetchData = async.mixin(async () => "new-data", {
         initial: asyncState("stale", "idle", "old-data"),
       });
 
@@ -2132,7 +2132,7 @@ describe("asyncState()", () => {
     });
 
     it("should support handler with arguments", async () => {
-      const fetchUser = async(async (_ctx, userId: string) => {
+      const fetchUser = async.mixin(async (_ctx, userId: string) => {
         return { id: userId, name: `User ${userId}` };
       });
 
@@ -2189,7 +2189,7 @@ describe("asyncState()", () => {
           result: async.fresh<string>(),
         },
         setup: (ctx) => {
-          const fetchUser = async(ctx.focus("result"), async (ctx) => {
+          const fetchUser = async.action(ctx.focus("result"), async (ctx) => {
             const [state] = ctx.get(userStore);
             return state.name;
           });

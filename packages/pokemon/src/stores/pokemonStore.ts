@@ -68,7 +68,7 @@ export const pokemonStore = store<PokemonBookState, PokemonActions>({
   },
   setup: ({ state, focus, update }) => {
     // Async action for fetching Pokemon list
-    const listActions = async<PokemonListItem[], "stale", []>(
+    const listActions = async.action<PokemonListItem[], "stale", []>(
       focus("pokemonList"),
       async ({ signal }) => {
         const response = await fetchPokemonList(
@@ -84,7 +84,7 @@ export const pokemonStore = store<PokemonBookState, PokemonActions>({
     );
 
     // Async action for fetching selected Pokemon (stale mode keeps previous data)
-    const pokemonActions = async(
+    const pokemonActions = async.action(
       focus("selectedPokemon"),
       async ({ signal }, id) => {
         const pokemon = await fetchPokemon(id, signal);
@@ -97,7 +97,7 @@ export const pokemonStore = store<PokemonBookState, PokemonActions>({
     );
 
     // Async action for fetching Pokemon species (stale mode keeps previous data)
-    const speciesActions = async(
+    const speciesActions = async.action(
       focus("selectedSpecies"),
       async ({ signal }, id) => fetchPokemonSpecies(id, signal),
       { autoCancel: true }

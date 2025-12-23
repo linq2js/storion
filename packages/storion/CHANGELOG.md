@@ -16,11 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     return { value: state.value, setValue: actions.setValue };
   });
   ```
-- `async()` mixin overload for component-local async state (mutations, form submissions)
+- `async.mixin()` for component-local async state (mutations, form submissions)
 
   ```tsx
   // Define mutation - no store needed
-  const submitForm = async(async (ctx, data: FormData) => {
+  const submitForm = async.mixin(async (ctx, data: FormData) => {
     const res = await fetch("/api/submit", {
       method: "POST",
       body: JSON.stringify(data),
@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   ```tsx
   // Access other stores for cross-store mutations
-  const checkout = async(async (ctx, paymentMethod: string) => {
+  const checkout = async.mixin(async (ctx, paymentMethod: string) => {
     const [user] = ctx.get(userStore);
     const [cart] = ctx.get(cartStore);
     return fetch("/api/checkout", {

@@ -8,7 +8,7 @@ Create cancellable async functions with automatic signal management and composab
 
 - **Automatic `AbortSignal`** - Each call gets a cancellation signal
 - **Chainable wrappers** - Compose retry, timeout, caching, and more with `.use()`
-- **Integration with `async()`** - Pass directly to store-bound async state
+- **Integration with `async.action()`** - Pass directly to store-bound async state
 - **Type safety** - Full TypeScript inference through wrapper chains
 
 ## Signature
@@ -100,9 +100,9 @@ const getUserWithPosts = abortable(async ({ signal, safe }, userId: string) => {
 });
 ```
 
-## With async() Directly
+## With async.action() Directly
 
-The cleanest pattern - pass `Abortable` directly to `async()`:
+The cleanest pattern - pass `Abortable` directly to `async.action()`:
 
 ```ts
 const userStore = store({
@@ -561,7 +561,7 @@ const result = await searchQuery({ keyword: "test" });
 
 ## See Also
 
-- [async()](/api/async) - Store-bound async state management
+- [async](/api/async) - Async state management (`async.action()` and `async.mixin()`)
 - [Network Layer Guide](/guide/network-layer) - Building resilient network services
 - [Network Module](/api/network) - Network connectivity and offline retry
 
