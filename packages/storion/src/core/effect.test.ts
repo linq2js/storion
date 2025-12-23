@@ -990,65 +990,29 @@ describe("effect", () => {
       });
     });
 
-    describe("safe(callback)", () => {
-      it("should run callback if effect is still active", () => {
-        let safeCallback = fake<(value: string) => string | undefined>();
+    describe("safe(fn, ...args)", () => {
+      it("should call function and return result if effect is active", () => {
+        let result: string | undefined;
 
         effect((ctx) => {
-          safeCallback = ctx.safe((value: string) => value.toUpperCase());
+          result = ctx.safe((value: string) => value.toUpperCase(), "hello");
         });
 
-        const result = safeCallback?.("hello");
         expect(result).toBe("HELLO");
       });
 
-      it("should not run callback if effect is disposed", () => {
-        let safeCallback = fake<(value: string) => string | undefined>();
-        let dispose = fake<VoidFunction>();
+      it("should wrap promise result", async () => {
+        let resultPromise: Promise<string> | undefined;
 
-        withHooks(
-          {
-            scheduleEffect: (runEffect) => {
-              dispose = runEffect();
-            },
-          },
-          () => {
-            effect((ctx) => {
-              safeCallback = ctx.safe((value: string) => value.toUpperCase());
-            });
-          }
-        );
+        effect((ctx) => {
+          resultPromise = ctx.safe(
+            async (value: string) => value.toUpperCase(),
+            "hello"
+          );
+        });
 
-        dispose?.();
-
-        const result = safeCallback?.("hello");
-        expect(result).toBeUndefined();
-      });
-
-      it("should not run callback if effect has re-run", () => {
-        let firstCallback = fake<(value: string) => string | undefined>();
-        let secondCallback = fake<(value: string) => string | undefined>();
-        let runCount = 0;
-
-        withHooks(
-          {
-            scheduleEffect: (runEffect) => {
-              runEffect();
-            },
-          },
-          () => {
-            effect((ctx) => {
-              runCount++;
-              const cb = ctx.safe((value: string) => `run${runCount}:${value}`);
-              if (runCount === 1) {
-                firstCallback = cb;
-              }
-            });
-          }
-        );
-
-        expect(runCount).toBe(1);
-        expect(firstCallback?.("test")).toBe("run1:test");
+        expect(resultPromise).toBeInstanceOf(Promise);
+        expect(await resultPromise).toBe("HELLO");
       });
     });
 

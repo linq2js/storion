@@ -167,33 +167,30 @@ export interface AsyncContext {
   signal: AbortSignal;
 
   /**
-   * Wrap a promise to never resolve if the async operation is cancelled.
-   * Useful for nested async operations that should be cancelled together.
+   * Safely execute operations that should be cancelled together.
+   *
+   * Overloads:
+   * 1. `safe(promise)` - Wrap promise, never resolve/reject if cancelled
+   * 2. `safe(fn, ...args)` - Call function, wrap result if promise
+   * 3. `safe(abortableFn, ...args)` - Call with signal, wrap result if promise
    *
    * @example
-   * async(focus, async (ctx) => {
-   *   const data1 = await ctx.safe(fetch('/api/1'));
-   *   const data2 = await ctx.safe(fetch('/api/2'));
-   *   return { data1, data2 };
-   * });
+   * ```ts
+   * // Wrap a promise
+   * const data = await ctx.safe(fetch('/api/data'));
+   *
+   * // Call a normal function
+   * const result = await ctx.safe(myAsyncFn, arg1, arg2);
+   *
+   * // Call an abortable function (auto-injects signal)
+   * const user = await ctx.safe(getUser, userId);
+   * ```
    */
   safe<T>(promise: Promise<T>): Promise<T>;
-
-  /**
-   * Wrap a callback to not run if the async operation is cancelled.
-   * Useful for event handlers and timeouts.
-   *
-   * @example
-   * async(focus, async (ctx) => {
-   *   setTimeout(ctx.safe(() => {
-   *     // Only runs if not cancelled
-   *     doSomething();
-   *   }), 1000);
-   * });
-   */
-  safe<TArgs extends unknown[], TReturn>(
-    callback: (...args: TArgs) => TReturn
-  ): (...args: TArgs) => TReturn | undefined;
+  safe<TArgs extends any[], TResult>(
+    fn: (...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult extends Promise<infer U> ? Promise<U> : TResult;
 
   /**
    * Cancel the current async operation.

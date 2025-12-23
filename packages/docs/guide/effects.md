@@ -24,11 +24,14 @@ const userStore = store({
 
 ```ts
 effect((ctx) => {
-  // Access reactive state
-  const theme = state.theme;
+  // Run number (1-indexed)
+  console.log('Effect run:', ctx.nth);
+  
+  // AbortSignal for cancellation
+  fetch('/api/data', { signal: ctx.signal });
   
   // Cleanup on re-run or disposal
-  ctx.cleanup(() => {
+  ctx.onCleanup(() => {
     console.log('Cleaning up');
   });
   
@@ -36,6 +39,9 @@ effect((ctx) => {
   ctx.safe(fetchData()).then(data => {
     state.data = data;
   });
+  
+  // Call function with args
+  ctx.safe(processData, rawData, options);
   
   // Manual refresh
   // ctx.refresh(); // Re-run the effect
@@ -117,7 +123,7 @@ effect((ctx) => {
     state.count++;
   }, 1000);
 
-  ctx.cleanup(() => {
+  ctx.onCleanup(() => {
     clearInterval(timer);
   });
 });

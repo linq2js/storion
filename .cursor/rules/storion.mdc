@@ -152,11 +152,13 @@ const longLived = store({
 ### 7. Meta: Store-Level vs Field-Level
 
 **Meta overloads:**
+
 - `meta()` → `myMeta()` returns `boolean` (true)
 - `meta<TValue>()` → `myMeta(value: TValue)` returns `TValue`
 - `meta(builder)` → custom transformation
 
 **Usage:**
+
 - `myMeta()` or `myMeta(value)` for store-level meta
 - `myMeta.for("field")` or `myMeta.for("field", value)` for single field
 - `myMeta.for(["f1", "f2"])` for multiple fields
@@ -177,16 +179,16 @@ const userStore = store({
   name: "user",
   state: { name: "", password: "", token: "" },
   meta: [
-    persist(),                                    // ✅ store-level (value: true)
-    priority(1),                                  // ✅ store-level (value: 1)
-    persist.for("name"),                          // ✅ single field (value: true)
-    persist.for(["password", "token"]),           // ✅ multiple fields (value: true)
+    persist(), // ✅ store-level (value: true)
+    priority(1), // ✅ store-level (value: 1)
+    persist.for("name"), // ✅ single field (value: true)
+    persist.for(["password", "token"]), // ✅ multiple fields (value: true)
     validate.for(["email", "phone"], "required"), // ✅ multiple fields with value
   ],
 });
 
 // ❌ WRONG - don't pass field name as argument to flag meta
-meta: [persist("password")]  // This passes "password" as VALUE, not field!
+meta: [persist("password")]; // This passes "password" as VALUE, not field!
 ```
 
 ### 8. Store Type Inference and Documentation
@@ -198,14 +200,18 @@ meta: [persist("password")]  // This passes "password" as VALUE, not field!
 const userStore = store<UserState, UserActions>({
   name: "user",
   state: { name: "" },
-  setup() { return { setName: (n: string) => {} }; },
+  setup() {
+    return { setName: (n: string) => {} };
+  },
 });
 
 // ✅ CORRECT - let TypeScript infer
 const userStore = store({
   name: "user",
   state: { name: "" },
-  setup() { return { setName: (n: string) => {} }; },
+  setup() {
+    return { setName: (n: string) => {} };
+  },
 });
 ```
 
@@ -213,8 +219,12 @@ const userStore = store({
 
 ```ts
 // ❌ WRONG - separate interfaces
-interface UserState { name: string; }
-interface UserActions { setName(n: string): void; }
+interface UserState {
+  name: string;
+}
+interface UserActions {
+  setName(n: string): void;
+}
 
 // ✅ CORRECT - inline documentation
 const userStore = store({
@@ -301,6 +311,7 @@ function FormComponent() {
 ```
 
 **Key points:**
+
 - `scoped()` can only be called during selector execution (not in callbacks)
 - Returns `[state, actions, instance]` tuple
 - Each component gets its own isolated instance
@@ -365,7 +376,12 @@ function ContactForm() {
   });
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); submit(formData); }}>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(formData);
+      }}
+    >
       <button disabled={status === "pending"}>
         {status === "pending" ? "Submitting..." : "Submit"}
       </button>
@@ -378,7 +394,7 @@ function ContactForm() {
 const checkoutMutation = async(async (ctx, paymentMethod: string) => {
   const [user] = ctx.get(userStore);
   const [cart] = ctx.get(cartStore);
-  
+
   const res = await fetch("/api/checkout", {
     headers: { Authorization: `Bearer ${user.token}` },
     body: JSON.stringify({ items: cart.items, paymentMethod }),
@@ -389,9 +405,55 @@ const checkoutMutation = async(async (ctx, paymentMethod: string) => {
 ```
 
 **When to use:**
+
 - `async(focus, handler)` → shared/cached data (queries) → name as `*Query`
 - `async(handler)` → component-local (mutations, form submissions) → name as `*Mutation`
 - `ctx.get(store)` → access other stores' state within mixin handler
+
+### Abortable Functions
+
+Use `abortable()` to create functions that receive `AbortSignal` automatically:
+
+```ts
+import { abortable } from "storion/async";
+
+// Define abortable service methods
+const userService = {
+  getUser: abortable(async (signal, id: string) => {
+    const res = await fetch(`/api/users/${id}`, { signal });
+    return res.json();
+  }),
+};
+
+// ✅ BEST: Pass directly to async() - signal auto-injected
+const userQuery = async(focus("user"), userService.getUser);
+
+// Also works: via ctx.safe()
+const userQuery = async(focus("user"), (ctx, id: string) =>
+  ctx.safe(userService.getUser, id)
+);
+
+// Direct call (no signal)
+const user = await userService.getUser(id);
+
+// Explicit signal
+const user = await userService.getUser.withSignal(controller.signal, id);
+```
+
+### ctx.safe() Overloads
+
+`ctx.safe()` has multiple overloads for effect and async contexts:
+
+```ts
+// 1. Wrap promise - never resolve/reject if cancelled
+ctx.safe(fetchData());
+
+// 2. Call function with args - wrap result if promise
+ctx.safe(processData, arg1, arg2);
+
+// 3. Call abortable function - auto-inject signal
+ctx.safe(userService.getUser, userId);
+```
 
 ### Trigger Fetch
 
@@ -464,16 +526,16 @@ In VitePress, demo links must trigger full page navigation (not client-side rout
 ```vue
 <!-- In demos.md -->
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted } from "vue";
 
 onMounted(() => {
-  document.querySelectorAll('a[href*="/demos/"]').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault()
-      window.location.href = link.getAttribute('href')
-    })
-  })
-})
+  document.querySelectorAll('a[href*="/demos/"]').forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.location.href = link.getAttribute("href");
+    });
+  });
+});
 </script>
 ```
 
@@ -501,9 +563,9 @@ All demo builds should be copied to `packages/docs/.vitepress/dist/demos/`:
 
 ### Why These Rules?
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Back button doesn't work | Demo SPA captures all routes | `popstate` listener with reload |
-| Demo doesn't load on click | VitePress client-side routing | Force `window.location.href` |
-| 404 on refresh | GitHub Pages tries Jekyll | Add `.nojekyll` file |
-| Styles broken | Wrong asset paths | Correct Vite `base` path |
+| Issue                      | Cause                         | Solution                        |
+| -------------------------- | ----------------------------- | ------------------------------- |
+| Back button doesn't work   | Demo SPA captures all routes  | `popstate` listener with reload |
+| Demo doesn't load on click | VitePress client-side routing | Force `window.location.href`    |
+| 404 on refresh             | GitHub Pages tries Jekyll     | Add `.nojekyll` file            |
+| Styles broken              | Wrong asset paths             | Correct Vite `base` path        |

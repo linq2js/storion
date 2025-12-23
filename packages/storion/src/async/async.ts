@@ -30,6 +30,7 @@ import { untrack } from "../core/tracking";
 import { AsyncFunctionError } from "../errors";
 import { store } from "../core/store";
 import { createAsyncContext } from "./context";
+import { isAbortable, type AbortableFn } from "./abortable";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -174,6 +175,18 @@ export type AsyncMixinResult<T, M extends AsyncMode, TArgs extends any[]> = [
 // ===== Main async function =====
 
 /**
+ * Convert an AbortableFn to an AsyncHandler.
+ * Automatically calls fn.withSignal(ctx.signal, ...args).
+ */
+function wrapAbortableFn<T, TArgs extends any[]>(
+  fn: AbortableFn<TArgs, T | PromiseLike<T>>
+): AsyncHandler<T, TArgs> {
+  return (ctx: AsyncContext, ...args: TArgs) => {
+    return fn.withSignal(ctx.signal, ...args);
+  };
+}
+
+/**
  * Create async actions bound to a focus (lens) for async state management.
  * Use *Query naming for read operations, *Mutation for write operations.
  *
@@ -194,6 +207,23 @@ export type AsyncMixinResult<T, M extends AsyncMode, TArgs extends any[]> = [
 export function async<T, M extends AsyncMode, TArgs extends any[]>(
   focus: Focus<AsyncState<T, M>>,
   handler: AsyncHandler<T, TArgs>,
+  options?: AsyncOptions
+): AsyncActions<T, M, TArgs>;
+
+/**
+ * Create async actions with an AbortableFn (signal auto-injected).
+ *
+ * @example
+ * const getUser = abortable(async (signal, id: string) => {
+ *   const res = await fetch(`/api/users/${id}`, { signal });
+ *   return res.json();
+ * });
+ *
+ * const userQuery = async(focus('user'), getUser);
+ */
+export function async<T, M extends AsyncMode, TArgs extends any[]>(
+  focus: Focus<AsyncState<T, M>>,
+  abortableFn: AbortableFn<TArgs, T | PromiseLike<T>>,
   options?: AsyncOptions
 ): AsyncActions<T, M, TArgs>;
 
@@ -234,16 +264,50 @@ export function async<T, TArgs extends any[]>(
   options: AsyncMixinOptions<T, "stale"> & { initial: AsyncState<T, "stale"> }
 ): SelectorMixin<AsyncMixinResult<T, "stale", TArgs>>;
 
+/**
+ * Create an async selector mixin with an AbortableFn (signal auto-injected).
+ *
+ * @example
+ * const getUser = abortable(async (signal, id: string) => {
+ *   const res = await fetch(`/api/users/${id}`, { signal });
+ *   return res.json();
+ * });
+ *
+ * const userMixin = async(getUser);
+ */
+export function async<T, TArgs extends any[]>(
+  abortableFn: AbortableFn<TArgs, T | PromiseLike<T>>,
+  options?: AsyncMixinOptions<T, "fresh">
+): SelectorMixin<AsyncMixinResult<T, "fresh", TArgs>>;
+
+/**
+ * Create an async selector mixin with an AbortableFn and stale mode.
+ */
+export function async<T, TArgs extends any[]>(
+  abortableFn: AbortableFn<TArgs, T | PromiseLike<T>>,
+  options: AsyncMixinOptions<T, "stale"> & { initial: AsyncState<T, "stale"> }
+): SelectorMixin<AsyncMixinResult<T, "stale", TArgs>>;
+
 // Implementation
 export function async<T, M extends AsyncMode, TArgs extends any[]>(
-  focusOrHandler: Focus<AsyncState<T, M>> | AsyncHandler<T, TArgs>,
-  handlerOrOptions?: AsyncHandler<T, TArgs> | AsyncMixinOptions<T, M>,
+  focusOrHandler:
+    | Focus<AsyncState<T, M>>
+    | AsyncHandler<T, TArgs>
+    | AbortableFn<TArgs, T | PromiseLike<T>>,
+  handlerOrOptions?:
+    | AsyncHandler<T, TArgs>
+    | AbortableFn<TArgs, T | PromiseLike<T>>
+    | AsyncMixinOptions<T, M>,
   maybeOptions?: AsyncOptions
 ): AsyncActions<T, M, TArgs> | SelectorMixin<AsyncMixinResult<T, M, TArgs>> {
-  // Check if first argument is a handler (mixin mode) or focus (actions mode)
+  // Check if first argument is a handler/abortable (mixin mode) or focus (actions mode)
   if (typeof focusOrHandler === "function") {
-    // Mixin mode: async(handler, options?) => SelectorMixin
-    const handler = focusOrHandler as AsyncHandler<T, TArgs>;
+    // Mixin mode: async(handler, options?) or async(abortableFn, options?) => SelectorMixin
+    const handler = isAbortable(focusOrHandler)
+      ? wrapAbortableFn(
+          focusOrHandler as AbortableFn<TArgs, T | PromiseLike<T>>
+        )
+      : (focusOrHandler as AsyncHandler<T, TArgs>);
     const options = handlerOrOptions as AsyncMixinOptions<T, M> | undefined;
 
     // Determine initial state
@@ -278,9 +342,13 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     }) as SelectorMixin<AsyncMixinResult<T, M, TArgs>>;
   }
 
-  // Actions mode: async(focus, handler, options?) => AsyncActions
+  // Actions mode: async(focus, handler, options?) or async(focus, abortableFn, options?) => AsyncActions
   const focus = focusOrHandler as Focus<AsyncState<T, M>>;
-  const handler = handlerOrOptions as AsyncHandler<T, TArgs>;
+  const handler = isAbortable(handlerOrOptions)
+    ? wrapAbortableFn(
+        handlerOrOptions as AbortableFn<TArgs, T | PromiseLike<T>>
+      )
+    : (handlerOrOptions as AsyncHandler<T, TArgs>);
   const options = maybeOptions;
 
   return asyncWithFocus(focus, handler, options);

@@ -6,6 +6,7 @@ import type { StoreInstance } from "../types";
 import type { AsyncContext } from "./types";
 import { isSpec } from "../is";
 import { storeTuple } from "../utils/storeTuple";
+import { createSafe } from "./safe";
 
 /**
  * Create an AsyncContext for use in async handlers.
@@ -22,6 +23,12 @@ export function createAsyncContext(
   cancel: () => void,
   resolver: { get: (specOrFactory: any) => any }
 ): AsyncContext {
+  // Create safe function using shared utility
+  const safe = createSafe(
+    () => abortController.signal,
+    isCancelledOrAborted
+  );
+
   return {
     signal: abortController.signal,
 
@@ -34,35 +41,7 @@ export function createAsyncContext(
       return instance;
     },
 
-    safe<T>(promiseOrCallback: Promise<T> | ((...args: unknown[]) => T)): any {
-      if (promiseOrCallback instanceof Promise) {
-        // Wrap promise - never resolve/reject if cancelled
-        return new Promise<T>((resolve, reject) => {
-          promiseOrCallback.then(
-            (value) => {
-              if (!isCancelledOrAborted()) {
-                resolve(value);
-              }
-              // Never resolve/reject if cancelled - promise stays pending
-            },
-            (error) => {
-              if (!isCancelledOrAborted()) {
-                reject(error);
-              }
-              // Never resolve/reject if cancelled
-            }
-          );
-        });
-      }
-
-      // Wrap callback - don't run if cancelled
-      return (...args: unknown[]) => {
-        if (!isCancelledOrAborted()) {
-          return (promiseOrCallback as (...args: unknown[]) => T)(...args);
-        }
-        return undefined;
-      };
-    },
+    safe,
 
     cancel,
   };

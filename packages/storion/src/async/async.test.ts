@@ -1274,21 +1274,23 @@ describe("async", () => {
       });
     });
 
-    describe("callback wrapping", () => {
-      it("should call callback if not cancelled", async () => {
+    describe("safe(fn, ...args)", () => {
+      it("should call function with args if not cancelled", async () => {
         const [focus] = createMockFocus(async.fresh<string>());
 
         let callbackCalled = false;
         let callbackArg: string | null = null;
 
         const { dispatch } = async(focus, async (ctx) => {
-          const safeCallback = ctx.safe((arg: string) => {
-            callbackCalled = true;
-            callbackArg = arg;
-            return "callback-result";
-          });
+          const result = ctx.safe(
+            (arg: string) => {
+              callbackCalled = true;
+              callbackArg = arg;
+              return "callback-result";
+            },
+            "test-arg"
+          );
 
-          const result = safeCallback("test-arg");
           expect(result).toBe("callback-result");
           return "done";
         });
@@ -1298,55 +1300,40 @@ describe("async", () => {
         expect(callbackArg).toBe("test-arg");
       });
 
-      it("should not call callback if cancelled", async () => {
-        const [focus] = createMockFocus(async.fresh<string>());
-
-        let callbackCalled = false;
-
-        const { dispatch, cancel } = async(focus, async (ctx) => {
-          const safeCallback = ctx.safe(() => {
-            callbackCalled = true;
-            return "callback-result";
-          });
-
-          // Wait a bit before calling
-          await new Promise((r) => setTimeout(r, 50));
-
-          const result = safeCallback();
-          expect(result).toBeUndefined();
-          return "done";
-        });
-
-        const promise = dispatch();
-
-        // Cancel immediately
-        cancel();
-
-        try {
-          await promise;
-        } catch {
-          // Expected to throw
-        }
-
-        expect(callbackCalled).toBe(false);
-      });
-
-      it("should handle callback with multiple arguments", async () => {
+      it("should handle function with multiple arguments", async () => {
         const [focus] = createMockFocus(async.fresh<string>());
 
         let sum: number | null | undefined = null;
 
         const { dispatch } = async(focus, async (ctx) => {
-          const safeAdd = ctx.safe((a: number, b: number, c: number) => {
-            return a + b + c;
-          });
-
-          sum = safeAdd(1, 2, 3);
+          sum = ctx.safe(
+            (a: number, b: number, c: number) => a + b + c,
+            1,
+            2,
+            3
+          );
           return "done";
         });
 
         await dispatch();
         expect(sum).toBe(6);
+      });
+
+      it("should wrap async function result", async () => {
+        const [focus] = createMockFocus(async.fresh<string>());
+
+        let result: string | undefined;
+
+        const { dispatch } = async(focus, async (ctx) => {
+          result = await ctx.safe(
+            async (x: number) => `result-${x}`,
+            42
+          );
+          return "done";
+        });
+
+        await dispatch();
+        expect(result).toBe("result-42");
       });
     });
   });
@@ -1518,6 +1505,120 @@ describe("async", () => {
 
       // State objects should be different references
       expect(last1!.state).not.toBe(last2!.state);
+    });
+  });
+
+  describe("AbortableFn overloads", () => {
+    it("should work with abortable function in focus mode", async () => {
+      const { abortable } = await import("./abortable");
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+
+      // Create abortable function
+      const fetchData = abortable(
+        async (signal: AbortSignal | undefined, id: string) => {
+          return `data-${id}`;
+        }
+      );
+
+      // Use with async()
+      const { dispatch } = async(focus, fetchData);
+
+      const result = await dispatch("123");
+      expect(result).toBe("data-123");
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("data-123");
+    });
+
+    it("should pass signal to abortable function", async () => {
+      const { abortable } = await import("./abortable");
+      const [focus] = createMockFocus(async.fresh<boolean>());
+
+      let receivedSignal: AbortSignal | undefined;
+
+      const fetchData = abortable(
+        async (signal: AbortSignal | undefined) => {
+          receivedSignal = signal;
+          return true;
+        }
+      );
+
+      const { dispatch } = async(focus, fetchData);
+      await dispatch();
+
+      expect(receivedSignal).toBeDefined();
+      expect(receivedSignal).toBeInstanceOf(AbortSignal);
+    });
+
+    it("should cancel abortable function on new dispatch", async () => {
+      const { abortable } = await import("./abortable");
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+
+      let firstSignalAborted = false;
+
+      const fetchData = abortable(
+        async (signal: AbortSignal | undefined, id: string) => {
+          // Check if signal is aborted after a delay
+          await new Promise((r) => setTimeout(r, 50));
+          if (signal?.aborted) {
+            firstSignalAborted = true;
+            throw new Error("Aborted");
+          }
+          return `data-${id}`;
+        }
+      );
+
+      const { dispatch } = async(focus, fetchData);
+
+      // Start first request
+      const promise1 = dispatch("first");
+
+      // Start second request immediately (should cancel first)
+      const promise2 = dispatch("second");
+
+      // Wait for second to complete
+      const result = await promise2;
+      expect(result).toBe("data-second");
+
+      // First should have been cancelled
+      try {
+        await promise1;
+      } catch {
+        // Expected to throw due to cancellation
+      }
+    });
+
+    it("should work with abortable function in mixin mode", async () => {
+      const { abortable } = await import("./abortable");
+
+      // Create abortable function
+      const fetchData = abortable(
+        async (signal: AbortSignal | undefined, id: string) => {
+          return `mixin-data-${id}`;
+        }
+      );
+
+      // Create mixin
+      const mixin = async(fetchData);
+
+      // Mock selector context
+      const mockContext: SelectorContext = {
+        get: vi.fn(),
+        scoped: vi.fn((spec) => {
+          const app = container();
+          const instance = app.get(spec);
+          return storeTuple(instance);
+        }),
+        mixin: vi.fn(),
+        once: vi.fn(),
+        id: "test-id",
+      };
+
+      // Use mixin
+      const [state, actions] = mixin(mockContext);
+
+      // Dispatch
+      const result = await actions.dispatch("456");
+      expect(result).toBe("mixin-data-456");
     });
   });
 });

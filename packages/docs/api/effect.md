@@ -38,11 +38,26 @@ interface EffectOptions {
 
 ```ts
 interface EffectContext {
-  // Safely run async operations that can be cancelled
-  safe<T>(promise: Promise<T>): Promise<T | undefined>;
-  
-  // Check if effect is still active
-  active: boolean;
+  /** Run number (1-indexed), increments each time effect runs */
+  readonly nth: number;
+
+  /** AbortSignal that is aborted when effect is cleaned up */
+  readonly signal: AbortSignal;
+
+  /** Register cleanup function (LIFO order) */
+  onCleanup(listener: VoidFunction): VoidFunction;
+
+  /** Wrap promise to never resolve if stale */
+  safe<T>(promise: Promise<T>): Promise<T>;
+
+  /** Call function with args, wrap result if promise */
+  safe<TArgs extends any[], TResult>(
+    fn: (...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult extends Promise<infer U> ? Promise<U> : TResult;
+
+  /** Manually trigger re-run */
+  refresh(): void;
 }
 ```
 

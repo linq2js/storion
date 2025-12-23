@@ -4,9 +4,9 @@ Creates an async state manager for handling loading, success, and error states.
 
 ## Naming Convention
 
-| Type | Pattern | Example |
-|------|---------|---------|
-| Read operations | `*Query` | `userQuery`, `postsQuery` |
+| Type             | Pattern     | Example                                    |
+| ---------------- | ----------- | ------------------------------------------ |
+| Read operations  | `*Query`    | `userQuery`, `postsQuery`                  |
 | Write operations | `*Mutation` | `createUserMutation`, `submitFormMutation` |
 
 ## Signatures
@@ -162,7 +162,7 @@ function UserProfile({ userId }: { userId: string }) {
 // Wrap with Suspense
 <Suspense fallback={<Spinner />}>
   <UserProfile userId="123" />
-</Suspense>
+</Suspense>;
 ```
 
 ### With Stale Data
@@ -256,7 +256,10 @@ function UserProfile({ userId }: { userId: string }) {
 Configuration options for async operations.
 
 ```ts
-type AsyncRetryDelayFn = (attempt: number, error: Error) => number | Promise<void>;
+type AsyncRetryDelayFn = (
+  attempt: number,
+  error: Error
+) => number | Promise<void>;
 
 interface AsyncOptions {
   /** Error callback */
@@ -360,9 +363,13 @@ async(focus("user"), async (ctx, userId: string) => {
 });
 ```
 
-### safe(promise)
+### safe()
 
-Wrap a promise to never resolve/reject if the async operation is cancelled. Useful for nested async operations that should be cancelled together.
+Safely execute operations that should be cancelled together. Has multiple overloads:
+
+#### safe(promise)
+
+Wrap a promise to never resolve/reject if the async operation is cancelled.
 
 ```ts
 async(focus("data"), async (ctx) => {
@@ -374,30 +381,39 @@ async(focus("data"), async (ctx) => {
 });
 ```
 
-### safe(callback)
+#### safe(fn, ...args)
 
-Wrap a callback to not run if the async operation is cancelled. Useful for event handlers, timeouts, and deferred operations.
+Call a function with arguments. If the result is a promise, wrap it.
 
 ```ts
 async(focus("data"), async (ctx) => {
-  // Callback won't run if cancelled
-  setTimeout(
-    ctx.safe(() => {
-      console.log("Still active!");
-    }),
-    1000
-  );
+  // Call function with args, wrap result if promise
+  const result = await ctx.safe(fetchUser, userId);
 
-  // Safe callback for state updates
-  someEmitter.on(
-    "data",
-    ctx.safe((data) => {
-      // Only runs if not cancelled
-      processData(data);
-    })
-  );
+  // Works with sync functions too
+  const computed = ctx.safe(processData, rawData);
 
-  return await fetchData();
+  return result;
+});
+```
+
+#### safe(abortableFn, ...args)
+
+Call an [abortable function](#abortable) with the context's signal automatically injected.
+
+```ts
+import { abortable } from "storion/async";
+
+// Define abortable function
+const fetchUser = abortable(async (signal, id: string) => {
+  const res = await fetch(`/api/users/${id}`, { signal });
+  return res.json();
+});
+
+// In async handler - signal is auto-injected
+async(focus("user"), async (ctx, id: string) => {
+  const user = await ctx.safe(fetchUser, id);
+  return user;
 });
 ```
 
@@ -468,16 +484,112 @@ interface AsyncContext {
   /** Wrap promise to never resolve if cancelled */
   safe<T>(promise: Promise<T>): Promise<T>;
 
-  /** Wrap callback to not run if cancelled */
-  safe<TArgs, TReturn>(
-    callback: (...args: TArgs) => TReturn
-  ): (...args: TArgs) => TReturn | undefined;
+  /** Call function with args, wrap result if promise */
+  safe<TArgs extends any[], TResult>(
+    fn: (...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult extends Promise<infer U> ? Promise<U> : TResult;
 
   /** Cancel the current async operation */
   cancel(): void;
 
   /** Get store state/actions or service instance */
   get: StoreContext["get"];
+}
+```
+
+## abortable()
+
+Create a function that can receive an `AbortSignal` when called via `ctx.safe()` or directly with `async()`.
+
+### Signature
+
+```ts
+function abortable<TArgs extends any[], TResult>(
+  fn: (signal: AbortSignal | undefined, ...args: TArgs) => TResult
+): AbortableFn<TArgs, TResult>;
+
+interface AbortableFn<TArgs, TResult> {
+  /** Call without signal */
+  (...args: TArgs): TResult;
+
+  /** Call with explicit signal */
+  withSignal(signal: AbortSignal | undefined, ...args: TArgs): TResult;
+}
+```
+
+### Usage
+
+```ts
+import { abortable } from "storion/async";
+
+// Define abortable service methods
+const userService = {
+  getUser: abortable(async (signal, id: string) => {
+    const res = await fetch(`/api/users/${id}`, { signal });
+    return res.json();
+  }),
+
+  createUser: abortable(async (signal, data: CreateUserDto) => {
+    const res = await fetch("/api/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+      signal,
+    });
+    return res.json();
+  }),
+};
+```
+
+### Four Ways to Use
+
+```ts
+// 1. Direct call (no signal)
+const user = await userService.getUser("123");
+
+// 2. With explicit signal
+const controller = new AbortController();
+const user = await userService.getUser.withSignal(controller.signal, "123");
+
+// 3. Pass directly to async() - signal auto-injected
+const userQuery = async(focus("user"), userService.getUser);
+
+// 4. Via ctx.safe() in async handler
+const userQuery = async(focus("user"), (ctx, id: string) =>
+  ctx.safe(userService.getUser, id)
+);
+```
+
+### With async() Directly
+
+The cleanest pattern - pass `AbortableFn` directly to `async()`:
+
+```ts
+const userStore = store({
+  name: "user",
+  state: { user: async.fresh<User>() },
+  setup({ focus }) {
+    // AbortableFn passed directly - signal auto-injected
+    const userQuery = async(focus("user"), userService.getUser);
+
+    return {
+      fetchUser: userQuery.dispatch,
+    };
+  },
+});
+```
+
+### Type Checking
+
+Use `isAbortable()` to check if a function is abortable:
+
+```ts
+import { isAbortable } from "storion/async";
+
+if (isAbortable(fn)) {
+  fn.withSignal(signal, ...args);
+} else {
+  fn(...args);
 }
 ```
 
@@ -656,20 +768,20 @@ This is useful for mutations that need to gather data from multiple stores befor
 
 ### Feature Matrix
 
-| Feature | Storion | RTK Query | React Query | Apollo Client |
-|---------|---------|-----------|-------------|---------------|
-| Custom logic in handlers | ✅ Full control | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited |
-| Multiple API calls per action | ✅ Native | ❌ Separate endpoints | ❌ Separate queries | ❌ Separate operations |
-| Works outside React | ✅ Yes | ⚠️ With toolkit | ❌ React-only | ⚠️ With client |
-| No hooks for combining logic | ✅ Yes | ❌ useQueries | ❌ useQueries | ❌ useQuery + useMutation |
-| Component-local state | ✅ Mixin pattern | ❌ Global cache | ⚠️ With options | ❌ Normalized cache |
-| Cancel on unmount | ✅ Automatic | ✅ Automatic | ✅ Automatic | ✅ Automatic |
-| Retry with strategies | ✅ Built-in | ✅ Built-in | ✅ Built-in | ⚠️ Via links |
-| Network-aware retry | ✅ Built-in | ⚠️ Manual | ⚠️ Via onlineManager | ❌ Manual |
-| TypeScript inference | ✅ Full | ✅ Full | ✅ Full | ✅ With codegen |
-| Bundle size | ~4KB | ~12KB | ~13KB | ~30KB+ |
-| GraphQL required | ❌ No | ❌ No | ❌ No | ✅ Yes |
-| Dependency injection | ✅ Built-in | ❌ No | ❌ No | ❌ No |
+| Feature                       | Storion          | RTK Query             | React Query          | Apollo Client             |
+| ----------------------------- | ---------------- | --------------------- | -------------------- | ------------------------- |
+| Custom logic in handlers      | ✅ Full control  | ⚠️ Limited            | ⚠️ Limited           | ⚠️ Limited                |
+| Multiple API calls per action | ✅ Native        | ❌ Separate endpoints | ❌ Separate queries  | ❌ Separate operations    |
+| Works outside React           | ✅ Yes           | ⚠️ With toolkit       | ❌ React-only        | ⚠️ With client            |
+| No hooks for combining logic  | ✅ Yes           | ❌ useQueries         | ❌ useQueries        | ❌ useQuery + useMutation |
+| Component-local state         | ✅ Mixin pattern | ❌ Global cache       | ⚠️ With options      | ❌ Normalized cache       |
+| Cancel on unmount             | ✅ Automatic     | ✅ Automatic          | ✅ Automatic         | ✅ Automatic              |
+| Retry with strategies         | ✅ Built-in      | ✅ Built-in           | ✅ Built-in          | ⚠️ Via links              |
+| Network-aware retry           | ✅ Built-in      | ⚠️ Manual             | ⚠️ Via onlineManager | ❌ Manual                 |
+| TypeScript inference          | ✅ Full          | ✅ Full               | ✅ Full              | ✅ With codegen           |
+| Bundle size                   | ~4KB             | ~12KB                 | ~13KB                | ~30KB+                    |
+| GraphQL required              | ❌ No            | ❌ No                 | ❌ No                | ✅ Yes                    |
+| Dependency injection          | ✅ Built-in      | ❌ No                 | ❌ No                | ❌ No                     |
 
 ### Key Advantages
 
@@ -690,8 +802,8 @@ const api = createApi({
 
 // React Query - logic scattered across hooks
 function useUserWithPosts(userId) {
-  const user = useQuery(['user', userId], () => fetchUser(userId));
-  const posts = useQuery(['posts', userId], () => fetchPosts(userId), {
+  const user = useQuery(["user", userId], () => fetchUser(userId));
+  const posts = useQuery(["posts", userId], () => fetchPosts(userId), {
     enabled: !!user.data,
   });
   // Must manually combine in component
@@ -702,12 +814,12 @@ function useUserWithPosts(userId) {
 const userQuery = async(focus("user"), async (ctx, userId: string) => {
   // Any custom logic you need
   const user = await fetchUser(userId, { signal: ctx.signal });
-  
+
   // Conditional fetching
   if (user.hasPremium) {
     user.subscription = await fetchSubscription(user.id);
   }
-  
+
   // Transform, validate, combine
   return {
     ...user,
@@ -724,18 +836,20 @@ Other libraries require multiple hooks and manual state management:
 ```tsx
 // React Query - requires multiple hooks
 function Dashboard() {
-  const user = useQuery(['user'], fetchUser);
-  const posts = useQuery(['posts'], fetchPosts, { enabled: !!user.data });
-  const stats = useQuery(['stats'], fetchStats, { enabled: !!user.data });
-  
+  const user = useQuery(["user"], fetchUser);
+  const posts = useQuery(["posts"], fetchPosts, { enabled: !!user.data });
+  const stats = useQuery(["stats"], fetchStats, { enabled: !!user.data });
+
   // Manual loading/error combination
   const isLoading = user.isLoading || posts.isLoading || stats.isLoading;
   const error = user.error || posts.error || stats.error;
-  
+
   if (isLoading) return <Spinner />;
   if (error) return <Error error={error} />;
-  
-  return <DashboardView user={user.data} posts={posts.data} stats={stats.data} />;
+
+  return (
+    <DashboardView user={user.data} posts={posts.data} stats={stats.data} />
+  );
 }
 
 // Storion - single action, unified state
@@ -745,7 +859,7 @@ const dashboardQuery = async(focus("dashboard"), async (ctx) => {
     fetchPosts({ signal: ctx.signal }),
     fetchStats({ signal: ctx.signal }),
   ]);
-  
+
   return { user, posts, stats, loadedAt: Date.now() };
 });
 
@@ -756,10 +870,10 @@ function Dashboard() {
     trigger(actions.fetchDashboard, []);
     return { dashboard: state.dashboard, fetch: actions.fetchDashboard };
   });
-  
+
   if (dashboard.status === "pending") return <Spinner />;
   if (dashboard.status === "error") return <Error error={dashboard.error} />;
-  
+
   return <DashboardView {...dashboard.data} />;
 }
 ```
@@ -808,9 +922,9 @@ function DeleteButton({ itemId }) {
   const mutation = useMutation({
     mutationFn: (id) => deleteItem(id),
     // Must manually scope with mutationKey
-    mutationKey: ['delete', itemId],
+    mutationKey: ["delete", itemId],
   });
-  
+
   return <button onClick={() => mutation.mutate(itemId)}>Delete</button>;
 }
 
@@ -828,8 +942,12 @@ function DeleteButton({ itemId }) {
       remove: () => actions.dispatch(itemId),
     };
   });
-  
-  return <button onClick={remove} disabled={isPending}>Delete</button>;
+
+  return (
+    <button onClick={remove} disabled={isPending}>
+      Delete
+    </button>
+  );
 }
 ```
 
@@ -872,16 +990,16 @@ const dataQuery = async(focus("data"), fetchData, {
 
 ### When to Choose Storion
 
-| Scenario | Best Choice | Why |
-|----------|-------------|-----|
-| Complex data fetching logic | **Storion** | Full control over async handlers |
-| GraphQL API | Apollo Client | Native GraphQL support |
-| Simple REST caching | RTK Query / React Query | Battle-tested caching |
-| Cross-platform shared logic | **Storion** | Framework-agnostic stores |
-| Component-local mutations | **Storion** | Native mixin pattern |
-| Server-side rendering | All viable | All support SSR |
-| Offline-first apps | **Storion** | Built-in network module |
-| Micro-frontends | **Storion** | Dependency injection & isolation |
+| Scenario                    | Best Choice             | Why                              |
+| --------------------------- | ----------------------- | -------------------------------- |
+| Complex data fetching logic | **Storion**             | Full control over async handlers |
+| GraphQL API                 | Apollo Client           | Native GraphQL support           |
+| Simple REST caching         | RTK Query / React Query | Battle-tested caching            |
+| Cross-platform shared logic | **Storion**             | Framework-agnostic stores        |
+| Component-local mutations   | **Storion**             | Native mixin pattern             |
+| Server-side rendering       | All viable              | All support SSR                  |
+| Offline-first apps          | **Storion**             | Built-in network module          |
+| Micro-frontends             | **Storion**             | Dependency injection & isolation |
 
 ### Migration Patterns
 
@@ -889,7 +1007,7 @@ const dataQuery = async(focus("data"), fetchData, {
 
 ```tsx
 // Before (React Query)
-const { data, isLoading, error } = useQuery(['user', id], () => fetchUser(id));
+const { data, isLoading, error } = useQuery(["user", id], () => fetchUser(id));
 
 // After (Storion)
 const { user } = useStore(({ get }) => {

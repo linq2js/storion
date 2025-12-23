@@ -15,6 +15,7 @@ import {
   type Hooks,
 } from "./tracking";
 import { EffectRefreshError, AsyncFunctionError } from "../errors";
+import { createSafe } from "../async/safe";
 
 // =============================================================================
 // Effect Error Handling Types
@@ -120,36 +121,36 @@ export interface EffectContext {
   onCleanup(listener: VoidFunction): VoidFunction;
 
   /**
-   * Wrap a promise to never resolve if effect becomes stale.
-   * Useful for async operations that should be cancelled on re-run.
+   * Safely execute operations that should be cancelled if effect becomes stale.
+   *
+   * Overloads:
+   * 1. `safe(promise)` - Wrap promise, never resolve/reject if stale
+   * 2. `safe(fn, ...args)` - Call function, wrap result if promise
+   * 3. `safe(abortableFn, ...args)` - Call with signal, wrap result if promise
    *
    * @example
+   * ```ts
    * effect((ctx) => {
+   *   // Wrap a promise
    *   ctx.safe(fetchData()).then(data => {
-   *     // Only runs if effect hasn't re-run
    *     state.data = data;
    *   });
+   *
+   *   // Call a function
+   *   ctx.safe(processData, arg1, arg2);
+   *
+   *   // Call an abortable function (auto-injects signal)
+   *   ctx.safe(getUser, userId).then(user => {
+   *     state.user = user;
+   *   });
    * });
+   * ```
    */
   safe<T>(promise: Promise<T>): Promise<T>;
-
-  /**
-   * Wrap a callback to not run if effect is stale/disposed.
-   * Useful for event handlers and timeouts.
-   *
-   * @example
-   * effect((ctx) => {
-   *   const handler = ctx.safe((event) => {
-   *     // Only runs if effect is still active
-   *     state.value = event.target.value;
-   *   });
-   *   element.addEventListener('input', handler);
-   *   ctx.onCleanup(() => element.removeEventListener('input', handler));
-   * });
-   */
-  safe<TArgs extends unknown[], TReturn>(
-    callback: (...args: TArgs) => TReturn
-  ): (...args: TArgs) => TReturn | undefined;
+  safe<TArgs extends any[], TResult>(
+    fn: (...args: TArgs) => TResult,
+    ...args: TArgs
+  ): TResult extends Promise<infer U> ? Promise<U> : TResult;
 
   /**
    * Manually trigger a re-run of the effect.
@@ -200,27 +201,11 @@ function createEffectContext(
     }
   };
 
-  /**
-   * return a promise that never resolves or rejects if the effect is stale
-   * @param promise - The promise to wrap
-   * @returns The wrapped promise
-   */
-  function wrapPromise<T>(promise: PromiseLike<T>): PromiseLike<T> {
-    return new Promise<T>((resolve, reject) => {
-      promise.then(
-        (value) => {
-          if (!isStale) {
-            resolve(value);
-          }
-        },
-        (error) => {
-          if (!isStale) {
-            reject(error);
-          }
-        }
-      );
-    });
-  }
+  // Create safe function using shared utility
+  const safe = createSafe(
+    () => (abortController ? abortController.signal : undefined),
+    () => isStale
+  );
 
   const context: EffectContext = {
     nth,
@@ -241,29 +226,7 @@ function createEffectContext(
       return cleanupEmitter.on(listener);
     },
 
-    safe<T>(
-      promiseOrCallback: PromiseLike<T> | ((...args: unknown[]) => T)
-    ): any {
-      if (promiseOrCallback instanceof Promise) {
-        // Wrap promise
-        return wrapPromise(promiseOrCallback);
-      }
-
-      // Wrap callback
-      return (...args: unknown[]) => {
-        if (!isStale) {
-          const result = (promiseOrCallback as (...args: unknown[]) => T)(
-            ...args
-          );
-          if (isPromiseLike<T>(result)) {
-            return wrapPromise<T>(result);
-          }
-
-          return result;
-        }
-        return undefined;
-      };
-    },
+    safe,
 
     refresh() {
       if (!isStale) {

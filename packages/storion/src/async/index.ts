@@ -10,6 +10,8 @@
  */
 
 export { async, type AsyncMixinOptions, type AsyncMixinResult } from "./async";
+export { abortable, isAbortable, type AbortableFn } from "./abortable";
+export { createSafe, type SafeFn } from "./safe";
 export {
   AsyncNotReadyError,
   AsyncAggregateError,
