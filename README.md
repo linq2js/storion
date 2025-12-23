@@ -26,6 +26,10 @@
 
 ## Why Storion?
 
+**Simple at first. Powerful as you grow.**
+
+Start with basic stores and direct mutations. As your app grows, layer in async state, effects, dependency injection, and middleware — all without rewriting existing code.
+
 **Read state → Storion tracks it. State changes → Only affected components re-render.**
 
 No manual selectors. No over-rendering. Just write natural code.
