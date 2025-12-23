@@ -93,8 +93,8 @@ export interface NetworkRetryService {
  *     getPosts: () => fetch('/api/posts').then(r => r.json()),
  *   });
  *
- *   // Use with async() for full retry strategy
- *   const userAsync = async(focus("user"), api.getUser, {
+ *   // Use with async() for full retry strategy (use *Query for reads)
+ *   const userQuery = async(focus("user"), api.getUser, {
  *     retry: retryStrategy.backoff,
  *   });
  *

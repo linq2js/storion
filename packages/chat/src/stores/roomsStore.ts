@@ -110,8 +110,8 @@ export const roomsStore = store<RoomsState, RoomsActions>({
     const [authState] = get(authStore);
     const [routeState, routeActions] = get(routeStore);
 
-    // Async action for loading rooms
-    const roomsAsync = async(focus("rooms"), async () => {
+    // Async action for loading rooms (use *Query for read operations)
+    const roomsQuery = async(focus("rooms"), async () => {
       // Access reactive state (NOT calling get() here)
       if (!authState.currentUser) return [];
 
@@ -124,14 +124,14 @@ export const roomsStore = store<RoomsState, RoomsActions>({
       // Load Rooms Action
       // ========================
       loadRooms: async () => {
-        await roomsAsync.dispatch();
+        await roomsQuery.dispatch();
       },
 
       // ========================
       // Reset Action
       // ========================
       reset: () => {
-        roomsAsync.reset();
+        roomsQuery.reset();
       },
 
       // ========================
@@ -226,7 +226,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
         }
 
         // Refresh rooms list and navigate to the DM room
-        await roomsAsync.dispatch();
+        await roomsQuery.dispatch();
         routeActions.goToRoom(room.id);
       },
 

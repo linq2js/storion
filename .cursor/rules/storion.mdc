@@ -12,6 +12,9 @@ For detailed documentation, see `packages/storion/README.md` and `packages/stori
 - Store specs: `xxxStore` (e.g., `userStore`, `cartStore`)
 - Service factories: `xxxService` (e.g., `apiService`, `loggerService`)
 - Mixins: `xxxMixin` (e.g., `counterMixin`)
+- Async actions:
+  - Queries (read): `xxxQuery` (e.g., `userQuery`, `postsQuery`)
+  - Mutations (write): `xxxMutation` (e.g., `createUserMutation`, `updatePostMutation`)
 - Meta types:
   - Boolean flags: adjectives/past participles (`persisted`, `deprecated`, `hidden`)
   - Exclusions: `not` + adjective (`notPersisted`, `notLogged`)
@@ -313,11 +316,22 @@ const userStore = store({
     users: async.stale<User[]>([]), // keeps previous data
   },
   setup({ focus }) {
-    const userAsync = async(focus("user"), async (ctx, id: string) => {
+    // Use *Query for read operations
+    const userQuery = async(focus("user"), async (ctx, id: string) => {
       const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
       return res.json();
     });
-    return { fetchUser: userAsync.dispatch };
+
+    const usersQuery = async(focus("users"), async (ctx) => {
+      const res = await fetch("/api/users", { signal: ctx.signal });
+      return res.json();
+    });
+
+    return {
+      fetchUser: userQuery.dispatch,
+      fetchUsers: usersQuery.dispatch,
+      refreshUsers: usersQuery.refresh,
+    };
   },
 });
 ```
@@ -329,8 +343,8 @@ Use `async(handler)` without focus for component-local async state - ideal for f
 ```ts
 import { async } from "storion/async";
 
-// Define mutation - returns a selector mixin
-const submitForm = async(async (ctx, data: FormData) => {
+// Use *Mutation for write operations
+const submitFormMutation = async(async (ctx, data: FormData) => {
   const res = await fetch("/api/submit", {
     method: "POST",
     body: JSON.stringify(data),
@@ -342,7 +356,7 @@ const submitForm = async(async (ctx, data: FormData) => {
 // Use in component - state is component-local, auto-disposed
 function ContactForm() {
   const { status, error, submit } = useStore(({ mixin }) => {
-    const [state, actions] = mixin(submitForm);
+    const [state, actions] = mixin(submitFormMutation);
     return {
       status: state.status,
       error: state.error,
@@ -361,7 +375,7 @@ function ContactForm() {
 }
 
 // Access other stores via ctx.get() for cross-store mutations
-const checkout = async(async (ctx, paymentMethod: string) => {
+const checkoutMutation = async(async (ctx, paymentMethod: string) => {
   const [user] = ctx.get(userStore);
   const [cart] = ctx.get(cartStore);
   
@@ -375,8 +389,8 @@ const checkout = async(async (ctx, paymentMethod: string) => {
 ```
 
 **When to use:**
-- `async(focus, handler)` → shared/cached data (queries)
-- `async(handler)` → component-local (mutations, form submissions)
+- `async(focus, handler)` → shared/cached data (queries) → name as `*Query`
+- `async(handler)` → component-local (mutations, form submissions) → name as `*Mutation`
 - `ctx.get(store)` → access other stores' state within mixin handler
 
 ### Trigger Fetch

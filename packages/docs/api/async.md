@@ -2,6 +2,13 @@
 
 Creates an async state manager for handling loading, success, and error states.
 
+## Naming Convention
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Read operations | `*Query` | `userQuery`, `postsQuery` |
+| Write operations | `*Mutation` | `createUserMutation`, `submitFormMutation` |
+
 ## Signatures
 
 ### Store-bound (with focus)
@@ -59,7 +66,8 @@ const userStore = store({
     posts: async.stale<Post[]>([]),
   },
   setup({ focus }) {
-    const profileAsync = async(
+    // Use *Query for read operations
+    const profileQuery = async(
       focus("profile"),
       async (ctx, userId: string) => {
         const res = await fetch(`/api/users/${userId}`, {
@@ -69,7 +77,7 @@ const userStore = store({
       }
     );
 
-    const postsAsync = async(focus("posts"), async (ctx, userId: string) => {
+    const postsQuery = async(focus("posts"), async (ctx, userId: string) => {
       const res = await fetch(`/api/users/${userId}/posts`, {
         signal: ctx.signal,
       });
@@ -77,8 +85,9 @@ const userStore = store({
     });
 
     return {
-      fetchProfile: profileAsync.dispatch,
-      fetchPosts: postsAsync.dispatch,
+      fetchProfile: profileQuery.dispatch,
+      fetchPosts: postsQuery.dispatch,
+      refreshPosts: postsQuery.refresh,
     };
   },
 });
@@ -192,7 +201,8 @@ When `autoCancel: true` (the default), the `ctx.signal` is automatically aborted
 - The store is disposed (via `focus.context.onDispose`)
 
 ```ts
-const profileAsync = async(focus("profile"), async (ctx, userId: string) => {
+// Use *Query for read operations
+const profileQuery = async(focus("profile"), async (ctx, userId: string) => {
   // Use signal for fetch - automatically cancelled on new request or dispose
   const res = await fetch(`/api/users/${userId}`, {
     signal: ctx.signal,
@@ -205,7 +215,7 @@ const profileAsync = async(focus("profile"), async (ctx, userId: string) => {
 });
 
 // Disable auto-cancel for concurrent requests
-const multiAsync = async(
+const multiQuery = async(
   focus("results"),
   async (ctx, id: string) => {
     /* ... */
@@ -414,7 +424,7 @@ async(focus("data"), async (ctx) => {
 Get another store's state and actions. Same as `StoreContext.get()`. Useful for cross-store mutations.
 
 ```ts
-const checkout = async(async (ctx, paymentMethod: string) => {
+const checkoutMutation = async(async (ctx, paymentMethod: string) => {
   // Access other stores
   const [user] = ctx.get(userStore);
   const [cart] = ctx.get(cartStore);
@@ -485,8 +495,8 @@ The mixin overload creates **component-local async state** using `scoped()` inte
 ```ts
 import { async } from "storion/async";
 
-// Define the mutation - returns a selector mixin
-const submitForm = async(async (ctx, data: FormData) => {
+// Use *Mutation for write operations
+const submitFormMutation = async(async (ctx, data: FormData) => {
   const res = await fetch("/api/submit", {
     method: "POST",
     body: JSON.stringify(data),
@@ -499,7 +509,7 @@ const submitForm = async(async (ctx, data: FormData) => {
 // Usage in component
 function ContactForm() {
   const { status, error, submit } = useStore(({ mixin }) => {
-    const [state, actions] = mixin(submitForm);
+    const [state, actions] = mixin(submitFormMutation);
     return {
       status: state.status,
       error: state.error,
@@ -530,7 +540,7 @@ function ContactForm() {
 ### Delete Mutation
 
 ```ts
-const deleteItem = async(async (ctx, itemId: string) => {
+const deleteItemMutation = async(async (ctx, itemId: string) => {
   const res = await fetch(`/api/items/${itemId}`, {
     method: "DELETE",
     signal: ctx.signal,
@@ -540,7 +550,7 @@ const deleteItem = async(async (ctx, itemId: string) => {
 
 function ItemCard({ item }) {
   const { isDeleting, error, handleDelete } = useStore(({ mixin }) => {
-    const [state, actions] = mixin(deleteItem);
+    const [state, actions] = mixin(deleteItemMutation);
     return {
       isDeleting: state.status === "pending",
       error: state.status === "error" ? state.error : null,
@@ -580,8 +590,8 @@ const cartStore = store({
   setup: () => ({}),
 });
 
-// Mutation that uses data from multiple stores
-const checkout = async(async (ctx, paymentMethod: string) => {
+// Use *Mutation for write operations
+const checkoutMutation = async(async (ctx, paymentMethod: string) => {
   // Access other stores via ctx.get()
   const [user] = ctx.get(userStore);
   const [cart] = ctx.get(cartStore);
@@ -606,7 +616,7 @@ const checkout = async(async (ctx, paymentMethod: string) => {
 // Usage in component
 function CheckoutButton() {
   const { status, submit } = useStore(({ mixin }) => {
-    const [state, actions] = mixin(checkout);
+    const [state, actions] = mixin(checkoutMutation);
     return { status: state.status, submit: actions.dispatch };
   });
 

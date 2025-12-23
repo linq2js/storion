@@ -698,7 +698,8 @@ const userStore = store({
     userList: async.stale<User[]>([]),
   },
   setup({ focus }) {
-    const currentUserAsync = async(
+    // Use *Query for read operations
+    const currentUserQuery = async(
       focus("currentUser"),
       async (ctx, userId: string) => {
         const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
@@ -711,9 +712,9 @@ const userStore = store({
     );
 
     return {
-      fetchUser: currentUserAsync.dispatch,
-      cancelFetch: currentUserAsync.cancel,
-      refreshUser: currentUserAsync.refresh,
+      fetchUser: currentUserQuery.dispatch,
+      cancelFetch: currentUserQuery.cancel,
+      refreshUser: currentUserQuery.refresh,
     };
   },
 });
@@ -1199,7 +1200,8 @@ Creates async state management.
 ```ts
 import { async } from "storion/async";
 
-const userAsync = async(
+// Use *Query for read operations, *Mutation for write operations
+const userQuery = async(
   focus("user"),
   async (ctx, userId: string) => {
     const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
@@ -1213,10 +1215,10 @@ const userAsync = async(
 );
 
 // Actions
-userAsync.dispatch("123"); // Start async operation
-userAsync.cancel(); // Cancel current operation
-userAsync.refresh(); // Refetch with same args
-userAsync.reset(); // Reset to initial state
+userQuery.dispatch("123"); // Start async operation
+userQuery.cancel(); // Cancel current operation
+userQuery.refresh(); // Refetch with same args
+userQuery.reset(); // Reset to initial state
 ```
 
 **Options:**
@@ -1831,7 +1833,8 @@ This behavior ensures that effects can recover when state returns to a valid con
 ### Async Errors
 
 ```ts
-const userAsync = async(
+// Use *Query for read operations
+const userQuery = async(
   focus("user"),
   async (ctx) => {
     const res = await fetch("/api/user", { signal: ctx.signal });

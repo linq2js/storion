@@ -108,18 +108,18 @@ setup({ get, focus }) {
     getPosts: () => fetch("/api/posts").then((r) => r.json()),
   });
 
-  // Use with async() for full retry strategy
-  const userAsync = async(focus("user"), api.getUser, {
+  // Use with async() for full retry strategy (use *Query for reads)
+  const userQuery = async(focus("user"), api.getUser, {
     retry: "backoff",
   });
 
   // Or use delay() for network-aware retry
-  const dataAsync = async(focus("data"), fetchData, {
+  const dataQuery = async(focus("data"), fetchData, {
     retry: networkRetry.delay("backoff"),
   });
 
   return {
-    fetchUser: userAsync.dispatch,
+    fetchUser: userQuery.dispatch,
     // Direct call with retry
     quickFetch: (url: string) => networkRetry.call(fetch, url),
   };
@@ -158,13 +158,13 @@ const data = await networkRetry.call(fetch, "/api/data").then((r) => r.json());
 Get a delay function that waits for network reconnection on network errors.
 
 ```ts
-// Use with async() retry option
-const dataAsync = async(focus("data"), fetchData, {
+// Use with async() retry option (use *Query for reads)
+const dataQuery = async(focus("data"), fetchData, {
   retry: networkRetry.delay("backoff"),
 });
 
 // With custom delay for non-network errors
-const dataAsync = async(focus("data"), fetchData, {
+const dataQuery = async(focus("data"), fetchData, {
   retry: networkRetry.delay((attempt) => attempt * 1000),
 });
 ```

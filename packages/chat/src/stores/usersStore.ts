@@ -94,9 +94,9 @@ export const usersStore = store<UsersState, UsersActions>({
     // Get service instance via factory (cached by container)
     const users = get(indexedDBUsersService);
 
-    // Create async action for loading users
+    // Create async action for loading users (use *Query for read operations)
     // focus("users") creates a lens to the users field for the async helper
-    const usersAsync = async(focus("users"), async () => {
+    const usersQuery = async(focus("users"), async () => {
       return users.getAll();
     });
 
@@ -106,7 +106,7 @@ export const usersStore = store<UsersState, UsersActions>({
       // ========================
       loadUsers: async () => {
         // dispatch() triggers the async action and updates state automatically
-        await usersAsync.dispatch();
+        await usersQuery.dispatch();
       },
 
       // ========================
@@ -114,7 +114,7 @@ export const usersStore = store<UsersState, UsersActions>({
       // ========================
       reset: () => {
         // reset() clears the async state back to initial
-        usersAsync.reset();
+        usersQuery.reset();
       },
 
       // ========================

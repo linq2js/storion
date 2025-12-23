@@ -79,8 +79,8 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
     const [authState] = get(authStore);
     const [, roomsActions] = get(roomsStore);
 
-    // Async action for loading invitations
-    const invitationsAsync = async(focus("invitations"), async () => {
+    // Async action for loading invitations (use *Query for read operations)
+    const invitationsQuery = async(focus("invitations"), async () => {
       // Access reactive state (NOT calling get() here)
       if (!authState.currentUser) return [];
 
@@ -93,14 +93,14 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
       // Load Invitations Action
       // ========================
       loadInvitations: async () => {
-        await invitationsAsync.dispatch();
+        await invitationsQuery.dispatch();
       },
 
       // ========================
       // Reset Action
       // ========================
       reset: () => {
-        invitationsAsync.reset();
+        invitationsQuery.reset();
       },
 
       // ========================
@@ -150,7 +150,7 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
         // Refresh both rooms and invitations lists
         await Promise.all([
           roomsActions.loadRooms(),
-          invitationsAsync.dispatch(),
+          invitationsQuery.dispatch(),
         ]);
       },
 
@@ -165,7 +165,7 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
         sync.broadcast("INVITE_DECLINED", { invitationId });
 
         // Refresh invitations list
-        await invitationsAsync.dispatch();
+        await invitationsQuery.dispatch();
       },
     };
   },

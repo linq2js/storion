@@ -26,7 +26,8 @@ const apiStore = store({
   },
   setup({ focus, get }) {
     const networkRetry = get(networkRetryService);
-    const postAsync = async(
+    // Use *Query for read operations
+    const postQuery = async(
       focus("post"),
       async (ctx, postId: number) => {
         const response = await fetch(
@@ -49,11 +50,11 @@ const apiStore = store({
 
     return {
       /** Fetch a post by ID */
-      fetchPost: postAsync.dispatch,
+      fetchPost: postQuery.dispatch,
       /** Retry the last fetch */
-      retry: postAsync.refresh,
+      retry: postQuery.refresh,
       /** Reset to idle state */
-      reset: postAsync.reset,
+      reset: postQuery.reset,
     };
   },
 });

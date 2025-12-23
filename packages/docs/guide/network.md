@@ -19,7 +19,8 @@ const dataStore = store({
   setup({ get, focus }) {
     const [network] = get(networkStore);
 
-    const itemsAsync = async(focus("items"), async (ctx) => {
+    // Use *Query for read operations
+    const itemsQuery = async(focus("items"), async (ctx) => {
       // Check network before fetching
       if (!network.online) {
         throw new Error("No network connection");
@@ -28,7 +29,7 @@ const dataStore = store({
       return res.json();
     });
 
-    return { fetchItems: itemsAsync.dispatch };
+    return { fetchItems: itemsQuery.dispatch };
   },
 });
 ```
@@ -76,12 +77,13 @@ Use `networkRetryService.delay()` to create a retry function that waits for reco
 setup({ get, focus }) {
   const networkRetry = get(networkRetryService);
 
-  const dataAsync = async(focus("data"), fetchData, {
+  // Use *Query for read operations
+  const dataQuery = async(focus("data"), fetchData, {
     // Waits for reconnection on network errors, uses backoff for other errors
     retry: networkRetry.delay("backoff"),
   });
 
-  return { fetchData: dataAsync.dispatch };
+  return { fetchData: dataQuery.dispatch };
 }
 ```
 
@@ -104,11 +106,11 @@ setup({ get, focus }) {
       }).then((r) => r.json()),
   });
 
-  // Use wrapped functions with async()
-  const usersAsync = async(focus("users"), api.getUsers);
+  // Use wrapped functions with async() (use *Query for reads)
+  const usersQuery = async(focus("users"), api.getUsers);
 
   return {
-    fetchUsers: usersAsync.dispatch,
+    fetchUsers: usersQuery.dispatch,
     createUser: api.createUser,
   };
 }
@@ -248,7 +250,8 @@ const userStore = store({
   setup({ get, focus }) {
     const networkRetry = get(networkRetryService);
 
-    const usersAsync = async(
+    // Use *Query for read operations
+    const usersQuery = async(
       focus("users"),
       async (ctx) => {
         const res = await fetch("/api/users", { signal: ctx.signal });
@@ -261,8 +264,8 @@ const userStore = store({
     );
 
     return {
-      fetchUsers: usersAsync.dispatch,
-      refresh: usersAsync.refresh,
+      fetchUsers: usersQuery.dispatch,
+      refresh: usersQuery.refresh,
     };
   },
 });

@@ -175,17 +175,19 @@ export type AsyncMixinResult<T, M extends AsyncMode, TArgs extends any[]> = [
 
 /**
  * Create async actions bound to a focus (lens) for async state management.
+ * Use *Query naming for read operations, *Mutation for write operations.
  *
  * @example
  * const userStore = store({
  *   name: 'user',
  *   state: { user: async.fresh<User>() },
  *   setup({ focus }) {
- *     const userAsync = async(focus('user'), async (ctx, id: string) => {
+ *     // Use *Query for read operations
+ *     const userQuery = async(focus('user'), async (ctx, id: string) => {
  *       const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
  *       return res.json();
  *     });
- *     return { fetchUser: userAsync.dispatch };
+ *     return { fetchUser: userQuery.dispatch };
  *   },
  * });
  */

@@ -8,6 +8,15 @@ Storion provides first-class support for async state with automatic cancellation
 import { async } from 'storion/async';
 ```
 
+## Naming Convention
+
+Use semantic names for async actions:
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Read operations | `*Query` | `userQuery`, `postsQuery` |
+| Write operations | `*Mutation` | `createUserMutation`, `updatePostMutation` |
+
 ## Defining Async State
 
 ### Fresh Mode (Suspense-compatible)
@@ -21,13 +30,14 @@ const userStore = store({
     user: async.fresh<User>(),  // undefined during loading
   },
   setup({ focus }) {
-    const userAsync = async(focus('user'), async (ctx, id: string) => {
+    // Use *Query for read operations
+    const userQuery = async(focus('user'), async (ctx, id: string) => {
       const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
       return res.json();
     });
 
     return {
-      fetchUser: userAsync.dispatch,
+      fetchUser: userQuery.dispatch,
     };
   },
 });
@@ -41,12 +51,15 @@ const userStore = store({
     users: async.stale<User[]>([]),  // Shows [] while loading
   },
   setup({ focus }) {
-    const usersAsync = async(focus('users'), async (ctx) => {
+    const usersQuery = async(focus('users'), async (ctx) => {
       const res = await fetch('/api/users', { signal: ctx.signal });
       return res.json();
     });
 
-    return { fetchUsers: usersAsync.dispatch };
+    return {
+      fetchUsers: usersQuery.dispatch,
+      refreshUsers: usersQuery.refresh,
+    };
   },
 });
 ```
