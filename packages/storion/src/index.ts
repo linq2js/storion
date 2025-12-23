@@ -51,18 +51,7 @@ export {
 } from "./types";
 
 // Type guards
-export {
-  is,
-  isStorion,
-  getKind,
-  isSpec,
-  isContainer,
-  isStore,
-  isFocus,
-  isAction,
-  isStoreContext,
-  isSelectorContext,
-} from "./is";
+export { is } from "./is";
 
 // Core functions
 export { store } from "./core/store";
@@ -70,7 +59,7 @@ export { container } from "./core/container";
 export { batch, untrack } from "./core/tracking";
 
 // Resolver (factory-based DI)
-export { createResolver } from "./core/createResolver";
+export { createResolver as resolver } from "./core/createResolver";
 
 // Fine-grained reactivity
 export { pick } from "./core/pick";
@@ -104,9 +93,6 @@ export {
 
 // Trigger utility
 export { trigger, type TriggerOptions } from "./trigger";
-
-// Function wrapper utility
-export { wrapFn as wrapFn, unwrapFn, isWrappedFn } from "./core/fnWrapper";
 
 // Error classes
 export {

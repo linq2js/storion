@@ -30,31 +30,16 @@
 
 Start with basic stores and direct mutations. As your app grows, layer in async state, effects, dependency injection, and middleware — all without rewriting existing code.
 
-**Read state → Storion tracks it. State changes → Only affected components re-render.**
-
-No manual selectors. No over-rendering. Just write natural code.
-
-```tsx
-function Counter() {
-  const { count, inc } = useStore(({ get }) => {
-    const [state, actions] = get(counterStore);
-    return { count: state.count, inc: actions.inc };
-  });
-
-  return <button onClick={inc}>{count}</button>;
-}
-```
-
 ## Features
 
-| | |
-|---|---|
+|                      |                                          |
+| -------------------- | ---------------------------------------- |
 | 🎯 **Auto-tracking** | Dependencies tracked when you read state |
-| ⚡ **Fine-grained** | Only re-render what changed |
-| 🔒 **Type-safe** | Full TypeScript with excellent inference |
-| 📦 **Tiny** | ~4KB minified + gzipped |
-| ⏳ **Async** | First-class loading states with Suspense |
-| 🛠️ **DevTools** | Built-in debugging panel |
+| ⚡ **Fine-grained**  | Only re-render what changed              |
+| 🔒 **Type-safe**     | Full TypeScript with excellent inference |
+| 📦 **Tiny**          | ~4KB minified + gzipped                  |
+| ⏳ **Async**         | First-class loading states with Suspense |
+| 🛠️ **DevTools**      | Built-in debugging panel                 |
 
 ## Installation
 
@@ -63,6 +48,8 @@ npm install storion
 ```
 
 ## Quick Start
+
+**Read state → Storion tracks it. State changes → Only affected components re-render.**
 
 ```tsx
 import { store } from "storion";

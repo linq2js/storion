@@ -2,6 +2,67 @@
 
 Create cancellable async functions with automatic signal management and composable wrappers.
 
+## Why abortable()?
+
+You can handle cancellation without `abortable()`, but you need to manually pass the signal through every async call:
+
+```ts
+// ❌ Without abortable - manual signal threading
+async function getUserWithPosts(signal: AbortSignal, userId: string) {
+  // Must pass signal to EVERY async call
+  const userRes = await fetch(`/api/users/${userId}`, { signal });
+  const user = await userRes.json();
+
+  const postsRes = await fetch(`/api/posts?userId=${userId}`, { signal });
+  const posts = await postsRes.json();
+
+  // If you call another function, it needs signal too
+  const enriched = await enrichUser(signal, user);
+
+  return { user: enriched, posts };
+}
+
+// Every helper function needs signal parameter
+async function enrichUser(signal: AbortSignal, user: User) {
+  const prefsRes = await fetch(`/api/preferences/${user.id}`, { signal });
+  return { ...user, preferences: await prefsRes.json() };
+}
+
+// Calling requires creating AbortController
+const controller = new AbortController();
+const result = await getUserWithPosts(controller.signal, "123");
+```
+
+With `abortable()`, the signal is managed automatically:
+
+```ts
+// ✅ With abortable - automatic signal management
+const getUserWithPosts = abortable(async ({ signal, safe }, userId: string) => {
+  // signal is provided automatically
+  const userRes = await fetch(`/api/users/${userId}`, { signal });
+  const user = await userRes.json();
+
+  const postsRes = await fetch(`/api/posts?userId=${userId}`, { signal });
+  const posts = await postsRes.json();
+
+  // safe() auto-injects signal to other abortable functions
+  const enriched = await safe(enrichUser, user);
+
+  return { user: enriched, posts };
+});
+
+const enrichUser = abortable(async ({ signal }, user: User) => {
+  const prefsRes = await fetch(`/api/preferences/${user.id}`, { signal });
+  return { ...user, preferences: await prefsRes.json() };
+});
+
+// Direct call - AbortController created automatically
+const result = await getUserWithPosts("123");
+
+// Or pass to async.action() for automatic cancellation on re-fetch
+const userQuery = async.action(focus("user"), getUserWithPosts);
+```
+
 ## Overview
 
 `abortable()` wraps async functions to provide:
