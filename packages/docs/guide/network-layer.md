@@ -627,12 +627,15 @@ export const userStore = store({
     const users = get(userService);
 
     // Use *Query for read operations
-    const usersQuery = async(focus("users"), users.getUsers);
+    const usersQuery = async.action(focus("users"), users.getUsers);
 
-    const userQuery = async(focus("currentUser"), async (ctx, id: string) => {
-      // Abortable can be called with ctx.safe for signal injection
-      return ctx.safe(users.getUser, id);
-    });
+    const userQuery = async.action(
+      focus("currentUser"),
+      async (ctx, id: string) => {
+        // Abortable can be called with ctx.safe for signal injection
+        return ctx.safe(users.getUser, id);
+      }
+    );
 
     return {
       fetchUsers: usersQuery.dispatch,
@@ -662,8 +665,11 @@ export const productStore = store({
     const products = get(productService);
 
     // Use *Query for read operations
-    const productsQuery = async(focus("products"), products.getProducts);
-    const productQuery = async(focus("currentProduct"), products.getProduct);
+    const productsQuery = async.action(focus("products"), products.getProducts);
+    const productQuery = async.action(
+      focus("currentProduct"),
+      products.getProduct
+    );
 
     return {
       fetchProducts: productsQuery.dispatch,

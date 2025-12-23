@@ -1193,23 +1193,21 @@ cleanup();
 | ------------ | -------- | ------------------- |
 | `debugLabel` | `string` | Label for debugging |
 
-### async(focus, handler, options?)
+### async.action(focus, handler, options?)
 
-Creates async state management.
+Creates store-bound async state management for queries and shared data.
 
 ```ts
 import { async } from "storion/async";
 
-// Use *Query for read operations, *Mutation for write operations
-const userQuery = async(
+// Use *Query for read operations
+const userQuery = async.action(
   focus("user"),
   async (ctx, userId: string) => {
     const res = await fetch(`/api/users/${userId}`, { signal: ctx.signal });
     return res.json();
   },
   {
-    retry: { count: 3, delay: 1000 },
-    onError: (error) => console.error("Failed:", error),
     autoCancel: true, // Cancel previous request on new dispatch (default)
   }
 );
@@ -1219,6 +1217,30 @@ userQuery.dispatch("123"); // Start async operation
 userQuery.cancel(); // Cancel current operation
 userQuery.refresh(); // Refetch with same args
 userQuery.reset(); // Reset to initial state
+```
+
+### async.mixin(handler, options?)
+
+Creates component-local async state for mutations and form submissions.
+
+```ts
+import { async } from "storion/async";
+
+// Use *Mutation for write operations
+const submitMutation = async.mixin(async (ctx, data: FormData) => {
+  const res = await fetch("/api/submit", {
+    method: "POST",
+    body: JSON.stringify(data),
+    signal: ctx.signal,
+  });
+  return res.json();
+});
+
+// Usage in component
+function Form() {
+  const [state, { dispatch }] = useStore(({ mixin }) => mixin(submitMutation));
+  return <button onClick={() => dispatch(data)}>Submit</button>;
+}
 ```
 
 **Options:**

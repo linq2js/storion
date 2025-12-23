@@ -111,7 +111,7 @@ export const roomsStore = store<RoomsState, RoomsActions>({
     const [routeState, routeActions] = get(routeStore);
 
     // Async action for loading rooms (use *Query for read operations)
-    const roomsQuery = async(focus("rooms"), async () => {
+    const roomsQuery = async.action(focus("rooms"), async () => {
       // Access reactive state (NOT calling get() here)
       if (!authState.currentUser) return [];
 

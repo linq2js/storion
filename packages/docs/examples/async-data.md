@@ -25,7 +25,7 @@ export const userStore = store({
   },
   setup({ focus }) {
     // Create async managers (use *Query for read operations)
-    const currentUserQuery = async(
+    const currentUserQuery = async.action(
       focus('currentUser'),
       async (ctx, userId: string) => {
         const res = await fetch(`/api/users/${userId}`, {
@@ -36,7 +36,7 @@ export const userStore = store({
       }
     );
 
-    const usersQuery = async(
+    const usersQuery = async.action(
       focus('users'),
       async (ctx) => {
         const res = await fetch('/api/users', {
@@ -180,7 +180,7 @@ Requests are automatically cancelled when:
 - The store is disposed
 
 ```ts
-const userQuery = async(
+const userQuery = async.action(
   focus('user'),
   async (ctx, userId: string) => {
     // Use ctx.signal for fetch

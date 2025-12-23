@@ -19,7 +19,7 @@ import { pingService, onlineService } from "./services";
  * if (network.online) { ... }
  *
  * // Wait for connectivity in retry
- * async(focus('data'), handler, {
+ * async.action(focus('data'), handler, {
  *   retry: () => actions.waitForOnline(),
  * });
  *
@@ -76,7 +76,7 @@ export const networkStore = store({
      *
      * Useful with async retry:
      * ```ts
-     * async(focus('data'), handler, {
+     * async.action(focus('data'), handler, {
      *   retry: () => actions.waitForOnline(),
      * });
      * ```

@@ -49,7 +49,7 @@ export interface NetworkService {
  *     .use(retry(3))
  *     .use(network.offlineRetry());
  *
- *   const usersQuery = async(focus("users"), robustFetch);
+ *   const usersQuery = async.action(focus("users"), robustFetch);
  *
  *   return { fetchUsers: usersQuery.dispatch };
  * }

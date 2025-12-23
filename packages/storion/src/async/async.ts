@@ -884,6 +884,140 @@ export namespace async {
     return asyncState("stale", "idle", initialData as T);
   }
 
+  // ===== Action Creator (Store-bound) =====
+
+  /**
+   * Create async actions bound to a focus (lens) for async state management.
+   * Use *Query naming for read operations, *Mutation for write operations.
+   *
+   * @example
+   * const userStore = store({
+   *   name: 'user',
+   *   state: { user: async.fresh<User>() },
+   *   setup({ focus }) {
+   *     const userQuery = async.action(focus('user'), async (ctx, id: string) => {
+   *       const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
+   *       return res.json();
+   *     });
+   *     return { fetchUser: userQuery.dispatch };
+   *   },
+   * });
+   */
+  export function action<T, M extends AsyncMode, TArgs extends any[]>(
+    focus: Focus<AsyncState<T, M>>,
+    handler: AsyncHandler<T, TArgs>,
+    options?: AsyncOptions
+  ): AsyncActions<T, M, TArgs>;
+
+  /**
+   * Create async actions with an Abortable (signal auto-injected).
+   */
+  export function action<T, M extends AsyncMode, TArgs extends any[]>(
+    focus: Focus<AsyncState<T, M>>,
+    abortableFn: Abortable<TArgs, T>,
+    options?: AsyncOptions
+  ): AsyncActions<T, M, TArgs>;
+
+  // Implementation
+  export function action<T, M extends AsyncMode, TArgs extends any[]>(
+    focus: Focus<AsyncState<T, M>>,
+    handlerOrAbortable: AsyncHandler<T, TArgs> | Abortable<TArgs, T>,
+    options?: AsyncOptions
+  ): AsyncActions<T, M, TArgs> {
+    const handler = isAbortable(handlerOrAbortable)
+      ? wrapAbortable(handlerOrAbortable as Abortable<TArgs, T>)
+      : (handlerOrAbortable as AsyncHandler<T, TArgs>);
+    return asyncWithFocus(focus, handler, options);
+  }
+
+  // ===== Mixin Creator (Component-local) =====
+
+  /**
+   * Create an async selector mixin for component-local async state.
+   * Uses `scoped()` internally, so state is isolated per component and auto-disposed.
+   *
+   * @example
+   * const submitMutation = async.mixin(async (ctx, data: FormData) => {
+   *   const res = await fetch('/api/submit', {
+   *     method: 'POST',
+   *     body: JSON.stringify(data),
+   *     signal: ctx.signal,
+   *   });
+   *   return res.json();
+   * });
+   *
+   * function ContactForm() {
+   *   const [state, { dispatch }] = useStore(({ mixin }) => mixin(submitMutation));
+   *   return <button onClick={() => dispatch(formData)}>Submit</button>;
+   * }
+   */
+  export function mixin<T, TArgs extends any[]>(
+    handler: AsyncHandler<T, TArgs>,
+    options?: AsyncMixinOptions<T, "fresh">
+  ): SelectorMixin<AsyncMixinResult<T, "fresh", TArgs>>;
+
+  /**
+   * Create an async selector mixin with stale mode.
+   */
+  export function mixin<T, TArgs extends any[]>(
+    handler: AsyncHandler<T, TArgs>,
+    options: AsyncMixinOptions<T, "stale"> & { initial: AsyncState<T, "stale"> }
+  ): SelectorMixin<AsyncMixinResult<T, "stale", TArgs>>;
+
+  /**
+   * Create an async selector mixin with an Abortable (signal auto-injected).
+   */
+  export function mixin<T, TArgs extends any[]>(
+    abortableFn: Abortable<TArgs, T>,
+    options?: AsyncMixinOptions<T, "fresh">
+  ): SelectorMixin<AsyncMixinResult<T, "fresh", TArgs>>;
+
+  /**
+   * Create an async selector mixin with an Abortable and stale mode.
+   */
+  export function mixin<T, TArgs extends any[]>(
+    abortableFn: Abortable<TArgs, T>,
+    options: AsyncMixinOptions<T, "stale"> & { initial: AsyncState<T, "stale"> }
+  ): SelectorMixin<AsyncMixinResult<T, "stale", TArgs>>;
+
+  // Implementation
+  export function mixin<T, M extends AsyncMode, TArgs extends any[]>(
+    handlerOrAbortable: AsyncHandler<T, TArgs> | Abortable<TArgs, T>,
+    options?: AsyncMixinOptions<T, M>
+  ): SelectorMixin<AsyncMixinResult<T, M, TArgs>> {
+    const handler = isAbortable(handlerOrAbortable)
+      ? wrapAbortable(handlerOrAbortable as Abortable<TArgs, T>)
+      : (handlerOrAbortable as AsyncHandler<T, TArgs>);
+
+    // Determine initial state
+    const initialState =
+      options?.initial ?? (asyncState("fresh", "idle") as AsyncState<T, M>);
+
+    // Create a store spec for the async state
+    const asyncSpec = store({
+      name: options?.name ?? `async:${handler.name || "anonymous"}`,
+      state: { result: initialState },
+      meta: options?.meta,
+      setup(storeContext) {
+        const { focus } = storeContext;
+        const actions = asyncWithFocus(
+          focus("result") as Focus<AsyncState<T, M>>,
+          (asyncContext: AsyncContext, ...args: TArgs) => {
+            return handler(asyncContext, ...args);
+          },
+          options
+        ) as any;
+        return actions;
+      },
+    });
+
+    // Return a selector mixin that uses scoped()
+    return ((context: SelectorContext) => {
+      const [state, actions] = context.scoped(asyncSpec);
+      return [state.result, actions] as AsyncMixinResult<T, M, TArgs>;
+    }) as SelectorMixin<AsyncMixinResult<T, M, TArgs>>;
+  }
+
   // ===== Utility Methods =====
   export function delay<T = void>(
     ms: number,

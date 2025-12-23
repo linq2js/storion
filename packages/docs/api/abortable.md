@@ -77,11 +77,11 @@ const user = await userService.getUser("123");
 const controller = new AbortController();
 const user = await userService.getUser.with(controller.signal, "123");
 
-// 3. Pass directly to async() - signal auto-injected
-const userQuery = async(focus("user"), userService.getUser);
+// 3. Pass directly to async.action() - signal auto-injected
+const userQuery = async.action(focus("user"), userService.getUser);
 
 // 4. Via ctx.safe() in async handler
-const userQuery = async(focus("user"), (ctx, id: string) =>
+const userQuery = async.action(focus("user"), (ctx, id: string) =>
   ctx.safe(userService.getUser, id)
 );
 ```
@@ -110,7 +110,7 @@ const userStore = store({
   state: { user: async.fresh<User>() },
   setup({ focus }) {
     // Abortable passed directly - signal auto-injected
-    const userQuery = async(focus("user"), userService.getUser);
+    const userQuery = async.action(focus("user"), userService.getUser);
 
     return {
       fetchUser: userQuery.dispatch,
@@ -164,8 +164,8 @@ const robustGetUser = getUser
   .use(fallback(null)) // Return null on error
   .use(logging("getUser")); // Log calls for debugging
 
-// Use with async()
-const userQuery = async(focus("user"), robustGetUser);
+// Use with async.action()
+const userQuery = async.action(focus("user"), robustGetUser);
 ```
 
 **Available Wrappers:**

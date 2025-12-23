@@ -99,8 +99,8 @@ setup({ get, focus }) {
     .use(retry(3))
     .use(network.offlineRetry());
 
-  // Use with async()
-  const usersQuery = async(focus("users"), robustFetch);
+  // Use with async.action()
+  const usersQuery = async.action(focus("users"), robustFetch);
 
   return { fetchUsers: usersQuery.dispatch };
 }

@@ -20,7 +20,7 @@ const dataStore = store({
     const [network] = get(networkStore);
 
     // Use *Query for read operations
-    const itemsQuery = async(focus("items"), async (ctx) => {
+    const itemsQuery = async.action(focus("items"), async (ctx) => {
       // Check network before fetching
       if (!network.online) {
         throw new Error("No network connection");
@@ -91,8 +91,8 @@ setup({ get, focus }) {
     .use(retry(3))
     .use(network.offlineRetry());
 
-  // Use with async()
-  const dataQuery = async(focus("data"), robustFetch);
+  // Use with async.action()
+  const dataQuery = async.action(focus("data"), robustFetch);
 
   return { fetchData: dataQuery.dispatch };
 }
@@ -224,7 +224,7 @@ const userStore = store({
       .use(network.offlineRetry());
 
     // Use *Query for read operations
-    const usersQuery = async(focus("users"), robustFetchUsers);
+    const usersQuery = async.action(focus("users"), robustFetchUsers);
 
     return {
       fetchUsers: usersQuery.dispatch,

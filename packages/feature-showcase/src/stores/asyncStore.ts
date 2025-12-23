@@ -2,7 +2,7 @@
  * Async Store - Demonstrates async actions with storion/async
  *
  * Demonstrates:
- * - async() for creating async state
+ * - async.action() for store-bound async state
  * - abortable() for creating signal-aware functions
  * - retry() and catchError() wrappers
  * - dispatch, ensure, refresh, cancel, reset
@@ -69,10 +69,10 @@ export const asyncStore = store({
       .use(retry({ count: 2, delay: 500 }))
       .use(catchError((error) => console.error("User fetch failed:", error)));
 
-    const userQuery = async(focus("user"), robustFetchUser);
+    const userQuery = async.action(focus("user"), robustFetchUser);
 
     // Create async action for fetching posts (stale mode - keeps previous data)
-    const postsQuery = async(focus("posts"), fakeApi.fetchPosts);
+    const postsQuery = async.action(focus("posts"), fakeApi.fetchPosts);
 
     return {
       fetchUser: (userId: string) => {

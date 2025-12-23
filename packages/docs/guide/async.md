@@ -31,7 +31,7 @@ const userStore = store({
   },
   setup({ focus }) {
     // Use *Query for read operations
-    const userQuery = async(focus('user'), async (ctx, id: string) => {
+    const userQuery = async.action(focus('user'), async (ctx, id: string) => {
       const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
       return res.json();
     });
@@ -51,7 +51,7 @@ const userStore = store({
     users: async.stale<User[]>([]),  // Shows [] while loading
   },
   setup({ focus }) {
-    const usersQuery = async(focus('users'), async (ctx) => {
+    const usersQuery = async.action(focus('users'), async (ctx) => {
       const res = await fetch('/api/users', { signal: ctx.signal });
       return res.json();
     });
@@ -141,7 +141,7 @@ Requests are automatically cancelled when:
 Use `ctx.signal` in your fetch:
 
 ```ts
-async(focus('data'), async (ctx, query: string) => {
+async.action(focus('data'), async (ctx, query: string) => {
   const res = await fetch(`/api/search?q=${query}`, {
     signal: ctx.signal,  // Aborts on cancellation
   });

@@ -80,7 +80,7 @@ export const invitationsStore = store<InvitationsState, InvitationsActions>({
     const [, roomsActions] = get(roomsStore);
 
     // Async action for loading invitations (use *Query for read operations)
-    const invitationsQuery = async(focus("invitations"), async () => {
+    const invitationsQuery = async.action(focus("invitations"), async () => {
       // Access reactive state (NOT calling get() here)
       if (!authState.currentUser) return [];
 

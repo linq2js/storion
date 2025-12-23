@@ -45,7 +45,7 @@ const apiStore = store({
       .use(retry(3))
       .use(catchError((error) => console.error("API Error:", error)));
     // Use *Query for read operations
-    const postQuery = async(focus("post"), robustFetchPost);
+    const postQuery = async.action(focus("post"), robustFetchPost);
 
     return {
       /** Fetch a post by ID */

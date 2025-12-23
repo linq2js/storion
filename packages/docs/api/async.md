@@ -1,6 +1,15 @@
-# async()
+# async
 
-Creates an async state manager for handling loading, success, and error states.
+Creates async state managers for handling loading, success, and error states.
+
+## Overview
+
+The async module provides two distinct APIs:
+
+| API              | Use Case                                   | State Scope      |
+| ---------------- | ------------------------------------------ | ---------------- |
+| `async.action()` | Store-bound async operations (queries)     | Global/shared    |
+| `async.mixin()`  | Component-local async operations (mutations) | Per-component |
 
 ## Naming Convention
 
@@ -9,28 +18,99 @@ Creates an async state manager for handling loading, success, and error states.
 | Read operations  | `*Query`    | `userQuery`, `postsQuery`                  |
 | Write operations | `*Mutation` | `createUserMutation`, `submitFormMutation` |
 
-## Signatures
+---
 
-### Store-bound (with focus)
+## async.action()
+
+Create async actions bound to a focus (lens) for **store-bound** async state management.
+
+### Signature
 
 ```ts
-function async<TData, TArgs extends unknown[]>(
+function async.action<TData, TArgs extends unknown[]>(
   focus: Focus<AsyncState<TData>>,
   handler: (ctx: AsyncContext, ...args: TArgs) => Promise<TData>,
   options?: AsyncOptions
 ): AsyncActions<TData, TArgs>;
 ```
 
-### Selector Mixin (component-local)
+### Example
 
 ```ts
-function async<TData, TArgs extends unknown[]>(
+import { store } from "storion";
+import { async } from "storion/async";
+
+const userStore = store({
+  name: "user",
+  state: { user: async.fresh<User>() },
+  setup({ focus }) {
+    const userQuery = async.action(focus("user"), async (ctx, id: string) => {
+      const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
+      return res.json();
+    });
+
+    return { fetchUser: userQuery.dispatch };
+  },
+});
+```
+
+---
+
+## async.mixin()
+
+Create an async selector mixin for **component-local** async state. Uses `scoped()` internally, so state is isolated per component and auto-disposed on unmount.
+
+### Signature
+
+```ts
+function async.mixin<TData, TArgs extends unknown[]>(
   handler: (ctx: AsyncContext, ...args: TArgs) => Promise<TData>,
   options?: AsyncMixinOptions<TData>
 ): SelectorMixin<[AsyncState<TData>, AsyncActions<TData, TArgs>]>;
 ```
 
-The mixin overload is ideal for **mutations** and **form submissions** where state should be component-local and auto-disposed.
+### Example
+
+```ts
+import { async } from "storion/async";
+
+const submitMutation = async.mixin(async (ctx, data: FormData) => {
+  const res = await fetch("/api/submit", {
+    method: "POST",
+    body: JSON.stringify(data),
+    signal: ctx.signal,
+  });
+  return res.json();
+});
+
+function ContactForm() {
+  const [state, { dispatch }] = useStore(({ mixin }) => mixin(submitMutation));
+
+  return (
+    <button onClick={() => dispatch(formData)} disabled={state.status === "pending"}>
+      {state.status === "pending" ? "Submitting..." : "Submit"}
+    </button>
+  );
+}
+```
+
+---
+
+## Legacy: async()
+
+The original `async()` function is still available for backward compatibility. It auto-detects the mode based on the first argument:
+
+```ts
+// Store-bound (same as async.action)
+async(focus("user"), handler);
+
+// Component-local (same as async.mixin)
+async(handler);
+```
+
+::: tip Recommendation
+Prefer the explicit `async.action()` and `async.mixin()` APIs for clarity.
+:::
 
 ## Async State Types
 
@@ -67,7 +147,7 @@ const userStore = store({
   },
   setup({ focus }) {
     // Use *Query for read operations
-    const profileQuery = async(
+    const profileQuery = async.action(
       focus("profile"),
       async (ctx, userId: string) => {
         const res = await fetch(`/api/users/${userId}`, {
@@ -77,12 +157,15 @@ const userStore = store({
       }
     );
 
-    const postsQuery = async(focus("posts"), async (ctx, userId: string) => {
-      const res = await fetch(`/api/users/${userId}/posts`, {
-        signal: ctx.signal,
-      });
-      return res.json();
-    });
+    const postsQuery = async.action(
+      focus("posts"),
+      async (ctx, userId: string) => {
+        const res = await fetch(`/api/users/${userId}/posts`, {
+          signal: ctx.signal,
+        });
+        return res.json();
+      }
+    );
 
     return {
       fetchProfile: profileQuery.dispatch,
@@ -202,20 +285,23 @@ When `autoCancel: true` (the default), the `ctx.signal` is automatically aborted
 
 ```ts
 // Use *Query for read operations
-const profileQuery = async(focus("profile"), async (ctx, userId: string) => {
-  // Use signal for fetch - automatically cancelled on new request or dispose
-  const res = await fetch(`/api/users/${userId}`, {
-    signal: ctx.signal,
-  });
+const profileQuery = async.action(
+  focus("profile"),
+  async (ctx, userId: string) => {
+    // Use signal for fetch - automatically cancelled on new request or dispose
+    const res = await fetch(`/api/users/${userId}`, {
+      signal: ctx.signal,
+    });
 
-  // Check if cancelled before expensive operations
-  if (ctx.signal.aborted) return;
+    // Check if cancelled before expensive operations
+    if (ctx.signal.aborted) return;
 
-  return res.json();
-});
+    return res.json();
+  }
+);
 
 // Disable auto-cancel for concurrent requests
-const multiQuery = async(
+const multiQuery = async.action(
   focus("results"),
   async (ctx, id: string) => {
     /* ... */
@@ -276,7 +362,7 @@ The context object passed to async handler functions (store-bound mode).
 - The store is disposed (cleanup registered via `focus.context.onDispose`)
 
 ```ts
-async(focus("user"), async (ctx, userId: string) => {
+async.action(focus("user"), async (ctx, userId: string) => {
   // Pass signal to fetch for automatic cancellation
   const res = await fetch(`/api/users/${userId}`, {
     signal: ctx.signal,
@@ -298,7 +384,7 @@ Safely execute operations that should be cancelled together. Has multiple overlo
 Wrap a promise to never resolve/reject if the async operation is cancelled.
 
 ```ts
-async(focus("data"), async (ctx) => {
+async.action(focus("data"), async (ctx) => {
   // If cancelled, these promises will never resolve
   const data1 = await ctx.safe(fetch("/api/1").then((r) => r.json()));
   const data2 = await ctx.safe(fetch("/api/2").then((r) => r.json()));
@@ -312,7 +398,7 @@ async(focus("data"), async (ctx) => {
 Call a function with arguments. If the result is a promise, wrap it.
 
 ```ts
-async(focus("data"), async (ctx) => {
+async.action(focus("data"), async (ctx) => {
   // Call function with args, wrap result if promise
   const result = await ctx.safe(fetchUser, userId);
 
@@ -325,7 +411,7 @@ async(focus("data"), async (ctx) => {
 
 #### safe(Abortable, ...args)
 
-Call an [abortable function](#abortable) with the context's signal automatically injected.
+Call an [abortable function](/api/abortable) with the context's signal automatically injected.
 
 ```ts
 import { abortable } from "storion/async";
@@ -337,7 +423,7 @@ const fetchUser = abortable(async ({ signal }, id: string) => {
 });
 
 // In async handler - signal is auto-injected
-async(focus("user"), async (ctx, id: string) => {
+async.action(focus("user"), async (ctx, id: string) => {
   const user = await ctx.safe(fetchUser, id);
   return user;
 });
@@ -348,7 +434,7 @@ async(focus("user"), async (ctx, id: string) => {
 Manually cancel the current async operation. Useful for implementing custom timeouts.
 
 ```ts
-async(focus("data"), async (ctx) => {
+async.action(focus("data"), async (ctx) => {
   // Timeout after 5 seconds
   const timeoutId = setTimeout(ctx.cancel, 5000);
 
@@ -391,7 +477,7 @@ const checkoutMutation = async(async (ctx, paymentMethod: string) => {
 Get a service or factory instance.
 
 ```ts
-const submitOrder = async(async (ctx, order: Order) => {
+const submitOrder = async.mixin(async (ctx, order: Order) => {
   const api = ctx.get(apiService);
   const logger = ctx.get(loggerService);
 
@@ -430,7 +516,7 @@ For creating standalone cancellable functions with wrappers (retry, timeout, cac
 
 ## Component-Local Async (Mixin Pattern)
 
-The mixin overload creates **component-local async state** using `scoped()` internally. Perfect for:
+`async.mixin()` creates **component-local async state** using `scoped()` internally. Perfect for:
 
 - Form submissions
 - Mutations (create, update, delete)
@@ -443,7 +529,7 @@ The mixin overload creates **component-local async state** using `scoped()` inte
 import { async } from "storion/async";
 
 // Use *Mutation for write operations
-const submitFormMutation = async(async (ctx, data: FormData) => {
+const submitFormMutation = async.mixin(async (ctx, data: FormData) => {
   const res = await fetch("/api/submit", {
     method: "POST",
     body: JSON.stringify(data),
@@ -487,7 +573,7 @@ function ContactForm() {
 ### Delete Mutation
 
 ```ts
-const deleteItemMutation = async(async (ctx, itemId: string) => {
+const deleteItemMutation = async.mixin(async (ctx, itemId: string) => {
   const res = await fetch(`/api/items/${itemId}`, {
     method: "DELETE",
     signal: ctx.signal,
@@ -538,7 +624,7 @@ const cartStore = store({
 });
 
 // Use *Mutation for write operations
-const checkoutMutation = async(async (ctx, paymentMethod: string) => {
+const checkoutMutation = async.mixin(async (ctx, paymentMethod: string) => {
   // Access other stores via ctx.get()
   const [user] = ctx.get(userStore);
   const [cart] = ctx.get(cartStore);
@@ -588,16 +674,16 @@ This is useful for mutations that need to gather data from multiple stores befor
 | **Type-safe**            | Full TypeScript inference for args and result  |
 | **Store access**         | `ctx.get()` allows reading other stores' state |
 
-### Mixin vs Store-bound
+### async.action() vs async.mixin()
 
-| Use Case                      | Approach                   |
-| ----------------------------- | -------------------------- |
-| Shared data (users, products) | Store-bound with `focus()` |
-| Form submission               | Mixin (component-local)    |
-| Delete/Update mutation        | Mixin (component-local)    |
-| Paginated lists               | Store-bound with `focus()` |
-| Search with cache             | Store-bound with `focus()` |
-| One-off API call              | Mixin (component-local)    |
+| Use Case                      | API              | Scope           |
+| ----------------------------- | ---------------- | --------------- |
+| Shared data (users, products) | `async.action()` | Global/shared   |
+| Form submission               | `async.mixin()`  | Per-component   |
+| Delete/Update mutation        | `async.mixin()`  | Per-component   |
+| Paginated lists               | `async.action()` | Global/shared   |
+| Search with cache             | `async.action()` | Global/shared   |
+| One-off API call              | `async.mixin()`  | Per-component   |
 
 ## Comparison with Other Libraries
 
@@ -646,7 +732,7 @@ function useUserWithPosts(userId) {
 }
 
 // Storion - full control in one place
-const userQuery = async(focus("user"), async (ctx, userId: string) => {
+const userQuery = async.action(focus("user"), async (ctx, userId: string) => {
   // Any custom logic you need
   const user = await fetchUser(userId, { signal: ctx.signal });
 
@@ -688,7 +774,7 @@ function Dashboard() {
 }
 
 // Storion - single action, unified state
-const dashboardQuery = async(focus("dashboard"), async (ctx) => {
+const dashboardQuery = async.action(focus("dashboard"), async (ctx) => {
   const [user, posts, stats] = await Promise.all([
     fetchUser({ signal: ctx.signal }),
     fetchPosts({ signal: ctx.signal }),
@@ -764,7 +850,7 @@ function DeleteButton({ itemId }) {
 }
 
 // Storion - native component-local mutations
-const deleteItemMutation = async(async (ctx, id: string) => {
+const deleteItemMutation = async.mixin(async (ctx, id: string) => {
   await fetch(`/api/items/${id}`, { method: "DELETE", signal: ctx.signal });
 });
 
@@ -795,7 +881,7 @@ const dataStore = store({
   state: { items: async.fresh<Item[]>() },
   setup({ get, focus }) {
     const api = get(apiService); // Injected dependency
-    const itemsQuery = async(focus("items"), () => api.getItems());
+    const itemsQuery = async.action(focus("items"), () => api.getItems());
     return { fetchItems: itemsQuery.dispatch };
   },
 });
@@ -816,7 +902,7 @@ expect(testContainer.get(dataStore).state.items.data).toHaveLength(1);
 ```ts
 import { networkService } from "storion/network";
 
-const dataQuery = async(focus("data"), fetchData, {
+const dataQuery = async.action(focus("data"), fetchData, {
   // Automatically waits for reconnection on network errors
   // Uses backoff strategy for other errors
   retry: networkRetry.delay("backoff"),

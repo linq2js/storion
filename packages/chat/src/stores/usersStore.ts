@@ -96,7 +96,7 @@ export const usersStore = store<UsersState, UsersActions>({
 
     // Create async action for loading users (use *Query for read operations)
     // focus("users") creates a lens to the users field for the async helper
-    const usersQuery = async(focus("users"), async () => {
+    const usersQuery = async.action(focus("users"), async () => {
       return users.getAll();
     });
 

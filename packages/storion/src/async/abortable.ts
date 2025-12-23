@@ -145,7 +145,7 @@ function createAbortableContext(signal: AbortSignal): AbortableContext {
  * const user = await getUser.with(controller.signal, id);
  *
  * // In async handler (uses ctx.signal via ctx.safe)
- * const userQuery = async(focus("user"), async (ctx, id) => {
+ * const userQuery = async.action(focus("user"), async (ctx, id) => {
  *   return ctx.safe(getUser, id);
  * });
  *
