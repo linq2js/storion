@@ -3,17 +3,18 @@
  *
  * Demonstrates:
  * - async() for creating async state
+ * - abortable() for creating signal-aware functions
+ * - retry() and catchError() wrappers
  * - dispatch, ensure, refresh, cancel, reset
  * - fresh vs stale modes
- * - Error handling and retry
  * - Loading states
  */
 import { store } from "storion";
-import { async, type AsyncState } from "storion/async";
+import { async, abortable, retry, catchError, type AsyncState } from "storion/async";
 
-// Simulated API
+// Simulated API with abortable functions
 const fakeApi = {
-  fetchUser: async (id: string): Promise<User> => {
+  fetchUser: abortable(async ({}, id: string): Promise<User> => {
     await new Promise((r) => setTimeout(r, 1000 + Math.random() * 500));
     if (Math.random() < 0.1) throw new Error("Network error");
     return {
@@ -22,8 +23,8 @@ const fakeApi = {
       email: `user${id}@example.com`,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${id}`,
     };
-  },
-  fetchPosts: async (userId: string): Promise<Post[]> => {
+  }),
+  fetchPosts: abortable(async ({}, userId: string): Promise<Post[]> => {
     await new Promise((r) => setTimeout(r, 800 + Math.random() * 400));
     return Array.from({ length: 5 }, (_, i) => ({
       id: `${userId}-${i}`,
@@ -31,7 +32,7 @@ const fakeApi = {
       body: `This is the content of post ${i + 1}...`,
       likes: Math.floor(Math.random() * 100),
     }));
-  },
+  }),
 };
 
 interface User {
@@ -62,41 +63,35 @@ export const asyncStore = store({
     selectedUserId: "1",
   } satisfies AsyncDemoState,
   setup: ({ state, focus }) => {
-    // Create async action for fetching user (fresh mode)
+    // Create async action for fetching user (fresh mode) with retry and error handling
     const [, setUser] = focus("user");
-    const userActions = async<User, "fresh", [string]>(
-      focus("user"),
-      async (_ctx, userId) => fakeApi.fetchUser(userId),
-      {
-        retry: { count: 2, delay: 500 },
-        onError: (error) => console.error("User fetch failed:", error),
-      }
-    );
+    const robustFetchUser = fakeApi.fetchUser
+      .use(retry({ count: 2, delay: 500 }))
+      .use(catchError((error) => console.error("User fetch failed:", error)));
+
+    const userQuery = async(focus("user"), robustFetchUser);
 
     // Create async action for fetching posts (stale mode - keeps previous data)
-    const postsActions = async<Post[], "stale", [string]>(
-      focus("posts"),
-      async (_ctx, userId) => fakeApi.fetchPosts(userId)
-    );
+    const postsQuery = async(focus("posts"), fakeApi.fetchPosts);
 
     return {
       fetchUser: (userId: string) => {
         state.selectedUserId = userId;
-        return userActions.dispatch(userId);
+        return userQuery.dispatch(userId);
       },
-      refreshUser: () => userActions.refresh(),
-      cancelUser: () => userActions.cancel(),
+      refreshUser: () => userQuery.refresh(),
+      cancelUser: () => userQuery.cancel(),
       resetUser: () => {
         setUser(async.fresh<User>());
       },
 
-      fetchPosts: (userId: string) => postsActions.dispatch(userId),
-      refreshPosts: () => postsActions.refresh(),
+      fetchPosts: (userId: string) => postsQuery.dispatch(userId),
+      refreshPosts: () => postsQuery.refresh(),
 
       selectUser: (userId: string) => {
         state.selectedUserId = userId;
-        userActions.dispatch(userId);
-        postsActions.dispatch(userId);
+        userQuery.dispatch(userId);
+        postsQuery.dispatch(userId);
       },
     };
   },

@@ -3,13 +3,14 @@
  *
  * Provides platform-agnostic network state management:
  * - `networkStore` - Reactive store with `online` state and `waitForOnline()` action
+ * - `networkService` - Provides `offlineRetry()` wrapper for retry on reconnection
  * - `onlineService` - Customizable online/offline event subscription
  * - `pingService` - Customizable network reachability check
- * - `networkRetryService` - Wrap functions to wait for network reconnection on errors
  *
  * @example
  * ```ts
- * import { networkStore, networkRetryService, pingService, onlineService } from 'storion/network';
+ * import { networkStore, networkService } from 'storion/network';
+ * import { abortable, retry } from 'storion/async';
  *
  * // Use in React
  * const { online } = useStore(({ get }) => {
@@ -18,19 +19,16 @@
  * });
  *
  * // Use with async retry
- * async(focus('data'), handler, {
- *   retry: () => actions.waitForOnline(),
+ * const network = get(networkService);
+ * const fetchUsers = abortable(async ({ signal }) => {
+ *   const res = await fetch('/api/users', { signal });
+ *   return res.json();
  * });
  *
- * // Wrap functions to retry on network reconnection
- * const networkRetry = get(networkRetryService);
- * const api = networkRetry.wrap({
- *   getUser: (id: string) => fetch(`/api/users/${id}`).then(r => r.json()),
- *   getPosts: () => fetch('/api/posts').then(r => r.json()),
- * });
- *
- * // Or call directly
- * const data = await networkRetry.call(fetch, '/api/data');
+ * // Chain wrappers: retry 3 times, then wait for network
+ * const robustFetch = fetchUsers
+ *   .use(retry(3))
+ *   .use(network.offlineRetry());
  *
  * // Override for React Native
  * container.set(onlineService, () => ({
@@ -64,5 +62,5 @@ export { networkStore } from "./store";
 // Utils
 export { isNetworkError } from "./utils";
 
-// Retry service
-export { networkRetryService, type NetworkRetryService } from "./retry";
+// Network service
+export { networkService, type NetworkService } from "./retry";

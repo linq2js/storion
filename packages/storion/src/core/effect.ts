@@ -125,7 +125,7 @@ export interface EffectContext {
    * Overloads:
    * 1. `safe(promise)` - Wrap promise, never resolve/reject if stale
    * 2. `safe(fn, ...args)` - Call function, wrap result if promise
-   * 3. `safe(abortableFn, ...args)` - Call with signal, wrap result if promise
+   * 3. `safe(Abortable, ...args)` - Call with signal, wrap result if promise
    *
    * @example
    * ```ts

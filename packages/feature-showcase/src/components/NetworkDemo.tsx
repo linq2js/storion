@@ -4,8 +4,8 @@
  */
 import { memo, useState } from "react";
 import { store, useStore } from "storion/react";
-import { async } from "storion/async";
-import { networkRetryService, networkStore } from "storion/network";
+import { async, abortable, retry, catchError } from "storion/async";
+import { networkService, networkStore } from "storion/network";
 
 // =============================================================================
 // API Store - fetches data with network-aware retry
@@ -18,6 +18,18 @@ interface Post {
   userId: number;
 }
 
+// Define abortable API function
+const fetchPostApi = abortable(async ({ signal }, postId: number) => {
+  const response = await fetch(
+    `https://jsonplaceholder.typicode.com/posts/${postId}`,
+    { signal }
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.json() as Promise<Post>;
+});
+
 const apiStore = store({
   name: "api-demo",
   state: {
@@ -25,28 +37,15 @@ const apiStore = store({
     post: async.fresh<Post>(),
   },
   setup({ focus, get }) {
-    const networkRetry = get(networkRetryService);
+    const network = get(networkService);
+
+    // Chain wrappers: retry 3 times, log errors, wait for network
+    const robustFetchPost = fetchPostApi
+      .use(network.offlineRetry())
+      .use(retry(3))
+      .use(catchError((error) => console.error("API Error:", error)));
     // Use *Query for read operations
-    const postQuery = async(
-      focus("post"),
-      async (ctx, postId: number) => {
-        const response = await fetch(
-          `https://jsonplaceholder.typicode.com/posts/${postId}`,
-          { signal: ctx.signal }
-        );
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return response.json();
-      },
-      {
-        // Retry with network-aware delay
-        retry: networkRetry.delay(),
-        onError: (error) => {
-          console.error("API Error:", error);
-        },
-      }
-    );
+    const postQuery = async(focus("post"), robustFetchPost);
 
     return {
       /** Fetch a post by ID */

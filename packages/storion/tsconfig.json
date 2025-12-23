@@ -26,7 +26,8 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.spec.ts",
-    "**/*.spec.tsx"
+    "**/*.spec.tsx",
+    "**/*.typeCheck.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

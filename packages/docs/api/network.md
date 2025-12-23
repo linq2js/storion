@@ -7,11 +7,10 @@ Platform-agnostic network connectivity management with retry support.
 ```ts
 import {
   networkStore,
-  networkRetryService,
+  networkService,
   pingService,
   onlineService,
   isNetworkError,
-  retryStrategy,
 } from "storion/network";
 ```
 
@@ -64,123 +63,69 @@ function NetworkIndicator() {
 }
 ```
 
-## networkRetryService
+## networkService
 
-Service that wraps functions to wait for network reconnection on errors.
+Service that provides network-aware retry wrapper.
 
 ### Interface
 
 ```ts
-interface NetworkRetryService {
-  /** Wrap a single function */
-  wrap<TArgs extends any[], TReturn>(
-    fn: (...args: TArgs) => Promise<TReturn>
-  ): (...args: TArgs) => Promise<TReturn>;
-
-  /** Wrap multiple functions */
-  wrap<TMap extends Record<string, AsyncFn>>(map: TMap): TMap;
-
-  /** Call a function immediately with network retry */
-  call<TArgs extends any[], TReturn>(
-    fn: (...args: TArgs) => Promise<TReturn>,
-    ...args: TArgs
-  ): Promise<TReturn>;
-
-  /** Get a delay function for async retry option */
-  delay(
-    strategy?: RetryStrategyName | AsyncRetryDelayFn
-  ): AsyncRetryDelayFn;
-
-  /** Wait for reconnection if error is network-related */
-  waitIfOffline(error: unknown): Promise<void>;
+interface NetworkService {
+  /**
+   * AbortableWrapper that retries on network reconnection.
+   * If a network error occurs while offline, waits for reconnection and retries once.
+   */
+  offlineRetry<TArgs extends any[], TResult>(): AbortableWrapper<TArgs, TResult>;
 }
 ```
 
 ### Usage
 
 ```ts
+import { abortable, retry } from "storion/async";
+import { networkService } from "storion/network";
+
 setup({ get, focus }) {
-  const networkRetry = get(networkRetryService);
+  const network = get(networkService);
 
-  // Wrap API calls
-  const api = networkRetry.wrap({
-    getUser: (id: string) => fetch(`/api/users/${id}`).then((r) => r.json()),
-    getPosts: () => fetch("/api/posts").then((r) => r.json()),
+  // Define abortable function
+  const fetchUsers = abortable(async ({ signal }) => {
+    const res = await fetch("/api/users", { signal });
+    return res.json();
   });
 
-  // Use with async() for full retry strategy (use *Query for reads)
-  const userQuery = async(focus("user"), api.getUser, {
-    retry: "backoff",
-  });
+  // Chain wrappers: retry first, then wait for network
+  const robustFetch = fetchUsers
+    .use(retry(3))
+    .use(network.offlineRetry());
 
-  // Or use delay() for network-aware retry
-  const dataQuery = async(focus("data"), fetchData, {
-    retry: networkRetry.delay("backoff"),
-  });
+  // Use with async()
+  const usersQuery = async(focus("users"), robustFetch);
 
-  return {
-    fetchUser: userQuery.dispatch,
-    // Direct call with retry
-    quickFetch: (url: string) => networkRetry.call(fetch, url),
-  };
+  return { fetchUsers: usersQuery.dispatch };
 }
 ```
 
-### wrap()
+### offlineRetry()
 
-Wraps functions to automatically retry on network reconnection.
+Returns an `AbortableWrapper` for use with `.use()` pattern.
 
-```ts
-// Single function
-const fetchWithRetry = networkRetry.wrap((url: string) =>
-  fetch(url).then((r) => r.json())
-);
-
-// Multiple functions
-const api = networkRetry.wrap({
-  getUser: (id: string) => fetch(`/api/users/${id}`).then((r) => r.json()),
-  getPosts: () => fetch("/api/posts").then((r) => r.json()),
-});
-
-const user = await api.getUser("123");
-```
-
-### call()
-
-Call a function immediately with network retry logic.
+**Behavior:**
+- Executes the function normally
+- On network error **while offline**: waits for reconnection, then retries once
+- On network error **while online**: throws immediately (already online, nothing to wait for)
+- On non-network error: throws immediately
 
 ```ts
-const data = await networkRetry.call(fetch, "/api/data").then((r) => r.json());
-```
+const network = get(networkService);
 
-### delay()
+// Basic usage
+const robustFetch = fetchData.use(network.offlineRetry());
 
-Get a delay function that waits for network reconnection on network errors.
-
-```ts
-// Use with async() retry option (use *Query for reads)
-const dataQuery = async(focus("data"), fetchData, {
-  retry: networkRetry.delay("backoff"),
-});
-
-// With custom delay for non-network errors
-const dataQuery = async(focus("data"), fetchData, {
-  retry: networkRetry.delay((attempt) => attempt * 1000),
-});
-```
-
-### waitIfOffline()
-
-Wait for network reconnection if the error is network-related.
-
-```ts
-try {
-  await fetchData();
-} catch (error) {
-  await networkRetry.waitIfOffline(error);
-  // Retry after reconnection
-  await fetchData();
-}
+// Combined with retry wrapper
+const veryRobust = fetchData
+  .use(retry(3))              // Retry on any error up to 3 times
+  .use(network.offlineRetry()); // If still failing and offline, wait for reconnection
 ```
 
 ## pingService
@@ -301,61 +246,12 @@ try {
 }
 ```
 
-## retryStrategy
-
-Built-in retry delay strategies. Re-exported from `storion/async`.
-
-```ts
-const retryStrategy = {
-  /** Exponential backoff: 1s, 2s, 4s, 8s... (max 30s) */
-  backoff: (attempt: number) => number,
-
-  /** Linear: 1s, 2s, 3s, 4s... (max 30s) */
-  linear: (attempt: number) => number,
-
-  /** Fixed 1 second delay */
-  fixed: () => 1000,
-
-  /** Fibonacci: 1s, 1s, 2s, 3s, 5s, 8s... (max 30s) */
-  fibonacci: (attempt: number) => number,
-
-  /** Immediate retry (no delay) */
-  immediate: () => 0,
-
-  /** Add jitter (±30%) to any strategy */
-  withJitter: (strategy: (n: number) => number) => (attempt: number) => number,
-};
-```
-
-### Usage with async()
-
-```ts
-// Use strategy name directly
-async(focus("data"), fetchData, { retry: "backoff" });
-
-// Use strategy with count
-async(focus("data"), fetchData, {
-  retry: { count: 5, delay: "fibonacci" },
-});
-
-// Add jitter to reduce thundering herd
-async(focus("data"), fetchData, {
-  retry: {
-    count: 3,
-    delay: retryStrategy.withJitter(retryStrategy.backoff),
-  },
-});
-```
-
 ## Type Exports
 
 ```ts
 import type {
   PingService,
   OnlineService,
-  NetworkRetryService,
+  NetworkService,
 } from "storion/network";
-
-import type { RetryStrategyName, AsyncRetryDelayFn } from "storion/async";
 ```
-

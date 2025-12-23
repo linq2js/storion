@@ -4,8 +4,9 @@ import {
   pingService,
   onlineService,
   networkStore,
-  networkRetryService,
+  networkService,
 } from "./index";
+import { abortable } from "../async";
 
 describe("network", () => {
   let mockContainer: ReturnType<typeof container>;
@@ -236,133 +237,100 @@ describe("network", () => {
     });
   });
 
-  describe("networkRetryService", () => {
-    it("should wrap single function and call successfully", async () => {
-      mockContainer.set(onlineService, () => ({
-        isOnline: () => true,
-        subscribe: () => () => {},
-      }));
+  describe("networkService", () => {
+    describe("offlineRetry()", () => {
+      it("should execute successfully when online", async () => {
+        mockContainer.set(onlineService, () => ({
+          isOnline: () => true,
+          subscribe: () => () => {},
+        }));
 
-      const retry = mockContainer.get(networkRetryService);
-      const fn = vi.fn().mockResolvedValue("result");
+        const network = mockContainer.get(networkService);
+        const handler = vi.fn().mockResolvedValue("result");
 
-      const wrapped = retry.wrap(fn);
-      const result = await wrapped("arg1", "arg2");
+        const fn = abortable(async () => handler()).use(network.offlineRetry());
+        const result = await fn();
 
-      expect(result).toBe("result");
-      expect(fn).toHaveBeenCalledWith("arg1", "arg2");
-      expect(fn).toHaveBeenCalledTimes(1);
-    });
-
-    it("should wrap map of functions", async () => {
-      mockContainer.set(onlineService, () => ({
-        isOnline: () => true,
-        subscribe: () => () => {},
-      }));
-
-      const retry = mockContainer.get(networkRetryService);
-      const api = retry.wrap({
-        getUser: vi.fn().mockResolvedValue({ id: 1 }),
-        getPosts: vi.fn().mockResolvedValue([]),
+        expect(result).toBe("result");
+        expect(handler).toHaveBeenCalledTimes(1);
       });
 
-      const user = await api.getUser("123");
-      const posts = await api.getPosts();
+      it("should retry on network error when offline", async () => {
+        let capturedListener: ((online: boolean) => void) | null = null;
 
-      expect(user).toEqual({ id: 1 });
-      expect(posts).toEqual([]);
-    });
+        mockContainer.set(onlineService, () => ({
+          isOnline: () => false,
+          subscribe: (listener) => {
+            capturedListener = listener;
+            return () => {};
+          },
+        }));
 
-    it("should call function directly with call()", async () => {
-      mockContainer.set(onlineService, () => ({
-        isOnline: () => true,
-        subscribe: () => () => {},
-      }));
+        mockContainer.set(pingService, () => ({
+          ping: async () => true,
+        }));
 
-      const retry = mockContainer.get(networkRetryService);
-      const fn = vi.fn().mockResolvedValue("direct-result");
+        const network = mockContainer.get(networkService);
 
-      const result = await retry.call(fn, "a", "b");
+        // Simulate network error on first call, success on retry
+        const networkError = new TypeError("Failed to fetch");
+        let callCount = 0;
+        const handler = vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.reject(networkError);
+          }
+          return Promise.resolve("success-after-retry");
+        });
 
-      expect(result).toBe("direct-result");
-      expect(fn).toHaveBeenCalledWith("a", "b");
-    });
+        const fn = abortable(async () => handler()).use(network.offlineRetry());
+        const promise = fn();
 
-    it("should retry on network error when offline", async () => {
-      let capturedListener: ((online: boolean) => void) | null = null;
+        // Wait a bit, should not resolve yet
+        await new Promise((r) => setTimeout(r, 10));
+        expect(handler).toHaveBeenCalledTimes(1);
 
-      mockContainer.set(onlineService, () => ({
-        isOnline: () => false,
-        subscribe: (listener) => {
-          capturedListener = listener;
-          return () => {};
-        },
-      }));
+        // Simulate coming back online
+        capturedListener!(true);
+        await new Promise((r) => setTimeout(r, 10));
 
-      mockContainer.set(pingService, () => ({
-        ping: async () => true,
-      }));
-
-      const retry = mockContainer.get(networkRetryService);
-
-      // Simulate network error
-      const networkError = new TypeError("Failed to fetch");
-      let callCount = 0;
-      const fn = vi.fn().mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          return Promise.reject(networkError);
-        }
-        return Promise.resolve("success-after-retry");
+        const result = await promise;
+        expect(result).toBe("success-after-retry");
+        expect(handler).toHaveBeenCalledTimes(2);
       });
 
-      const wrapped = retry.wrap(fn);
-      const promise = wrapped();
+      it("should throw non-network errors immediately", async () => {
+        mockContainer.set(onlineService, () => ({
+          isOnline: () => true,
+          subscribe: () => () => {},
+        }));
 
-      // Wait a bit, should not resolve yet
-      await new Promise((r) => setTimeout(r, 10));
-      expect(fn).toHaveBeenCalledTimes(1);
+        const network = mockContainer.get(networkService);
+        const error = new Error("Some other error");
 
-      // Simulate coming back online
-      capturedListener!(true);
-      await new Promise((r) => setTimeout(r, 10));
+        const fn = abortable(async () => {
+          throw error;
+        }).use(network.offlineRetry());
 
-      const result = await promise;
-      expect(result).toBe("success-after-retry");
-      expect(fn).toHaveBeenCalledTimes(2);
-    });
+        await expect(fn()).rejects.toThrow("Some other error");
+      });
 
-    it("should throw non-network errors immediately", async () => {
-      mockContainer.set(onlineService, () => ({
-        isOnline: () => true,
-        subscribe: () => () => {},
-      }));
+      it("should throw network error if already online", async () => {
+        mockContainer.set(onlineService, () => ({
+          isOnline: () => true,
+          subscribe: () => () => {},
+        }));
 
-      const retry = mockContainer.get(networkRetryService);
-      const error = new Error("Some other error");
-      const fn = vi.fn().mockRejectedValue(error);
+        const network = mockContainer.get(networkService);
+        const error = new TypeError("Failed to fetch");
 
-      const wrapped = retry.wrap(fn);
+        const fn = abortable(async () => {
+          throw error;
+        }).use(network.offlineRetry());
 
-      await expect(wrapped()).rejects.toThrow("Some other error");
-      expect(fn).toHaveBeenCalledTimes(1);
-    });
-
-    it("should throw network error if already online", async () => {
-      mockContainer.set(onlineService, () => ({
-        isOnline: () => true,
-        subscribe: () => () => {},
-      }));
-
-      const retry = mockContainer.get(networkRetryService);
-      const error = new TypeError("Failed to fetch");
-      const fn = vi.fn().mockRejectedValue(error);
-
-      const wrapped = retry.wrap(fn);
-
-      // Should throw because we're online (no retry needed)
-      await expect(wrapped()).rejects.toThrow("Failed to fetch");
-      expect(fn).toHaveBeenCalledTimes(1);
+        // Should throw because we're online (no retry needed)
+        await expect(fn()).rejects.toThrow("Failed to fetch");
+      });
     });
   });
 });

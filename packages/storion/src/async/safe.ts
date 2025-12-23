@@ -5,7 +5,7 @@
  * Reused by both effect context and async context.
  */
 
-import { isAbortable, type AbortableFn } from "./abortable";
+import { isAbortable, type Abortable } from "./abortable";
 
 /**
  * Safe function type returned by createSafe.
@@ -13,7 +13,7 @@ import { isAbortable, type AbortableFn } from "./abortable";
  * Overloads:
  * 1. `safe(promise)` - Wrap promise, never resolve/reject if cancelled
  * 2. `safe(normalFn, ...args)` - Call function, wrap result if promise
- * 3. `safe(abortableFn, ...args)` - Call with signal, wrap result if promise
+ * 3. `safe(Abortable, ...args)` - Call with signal, wrap result if promise
  */
 export interface SafeFn {
   /**
@@ -46,7 +46,7 @@ export interface SafeFn {
    * const user = await ctx.safe(getUser, userId);
    */
   <TArgs extends any[], TResult>(
-    fn: AbortableFn<TArgs, TResult>,
+    fn: Abortable<TArgs, TResult>,
     ...args: TArgs
   ): TResult extends Promise<infer U> ? Promise<U> : TResult;
 }
@@ -112,7 +112,7 @@ export function createSafe(
    * The safe function implementation.
    */
   function safe<T, TArgs extends any[]>(
-    input: Promise<T> | ((...args: TArgs) => T) | AbortableFn<TArgs, T>,
+    input: Promise<T> | ((...args: TArgs) => T) | Abortable<TArgs, T>,
     ...args: TArgs
   ): any {
     // Check if cancelled before doing anything
@@ -129,10 +129,10 @@ export function createSafe(
       return wrapPromise(input);
     }
 
-    // Case 2: AbortableFn - call with signal and wrap result
+    // Case 2: Abortable - call with signal and wrap result
     if (isAbortable(input)) {
       const signal = getSignal();
-      const result = input.withSignal(signal, ...args);
+      const result = input.with(signal, ...args);
       return wrapResult(result);
     }
 
@@ -148,4 +148,3 @@ export function createSafe(
 
   return safe as SafeFn;
 }
-

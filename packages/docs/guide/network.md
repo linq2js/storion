@@ -5,7 +5,7 @@ Storion provides a network module for managing connectivity state and handling n
 ## Installation
 
 ```ts
-import { networkStore, networkRetryService } from "storion/network";
+import { networkStore, networkService } from "storion/network";
 ```
 
 ## Checking Network Status
@@ -69,69 +69,42 @@ async function syncData() {
 
 ## Network-Aware Retry
 
-### Basic Retry with Network Awareness
+### Using offlineRetry()
 
-Use `networkRetryService.delay()` to create a retry function that waits for reconnection:
+Use `networkService.offlineRetry()` to automatically retry on network reconnection:
 
 ```ts
-setup({ get, focus }) {
-  const networkRetry = get(networkRetryService);
+import { abortable, retry } from "storion/async";
+import { networkService } from "storion/network";
 
-  // Use *Query for read operations
-  const dataQuery = async(focus("data"), fetchData, {
-    // Waits for reconnection on network errors, uses backoff for other errors
-    retry: networkRetry.delay("backoff"),
+setup({ get, focus }) {
+  const network = get(networkService);
+
+  // Define abortable fetch function
+  const fetchData = abortable(async ({ signal }) => {
+    const res = await fetch("/api/data", { signal });
+    return res.json();
   });
+
+  // Chain wrappers: retry 3 times, then wait for network on error
+  const robustFetch = fetchData
+    .use(retry(3))
+    .use(network.offlineRetry());
+
+  // Use with async()
+  const dataQuery = async(focus("data"), robustFetch);
 
   return { fetchData: dataQuery.dispatch };
 }
 ```
 
-### Wrapping API Functions
+### How offlineRetry() Works
 
-Wrap your API functions to automatically retry on network reconnection:
+When a network error occurs **and** the device is offline:
+1. Waits for network reconnection
+2. Retries the operation once
 
-```ts
-setup({ get, focus }) {
-  const networkRetry = get(networkRetryService);
-
-  // Wrap all API calls
-  const api = networkRetry.wrap({
-    getUsers: () => fetch("/api/users").then((r) => r.json()),
-    getUser: (id: string) => fetch(`/api/users/${id}`).then((r) => r.json()),
-    createUser: (data: User) =>
-      fetch("/api/users", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }).then((r) => r.json()),
-  });
-
-  // Use wrapped functions with async() (use *Query for reads)
-  const usersQuery = async(focus("users"), api.getUsers);
-
-  return {
-    fetchUsers: usersQuery.dispatch,
-    createUser: api.createUser,
-  };
-}
-```
-
-### Manual Network Error Handling
-
-```ts
-async function submitForm(data: FormData) {
-  const networkRetry = get(networkRetryService);
-
-  try {
-    return await api.submit(data);
-  } catch (error) {
-    // Wait for reconnection if offline
-    await networkRetry.waitIfOffline(error);
-    // Retry once after reconnection
-    return await api.submit(data);
-  }
-}
-```
+If the error is not a network error, or the device is online, it throws immediately.
 
 ## Customizing Network Detection
 
@@ -188,58 +161,53 @@ Storion provides built-in retry strategies:
 | `fibonacci` | 1s, 1s, 2s, 3s, 5s, 8s... |
 | `immediate` | 0, 0, 0... |
 
-### Using Strategies
+### Using Strategies with Wrappers
 
 ```ts
-import { retryStrategy } from "storion/async";
+import { abortable, retry, retryStrategy } from "storion/async";
 
-// Use by name
-async(focus("data"), handler, { retry: "backoff" });
-
-// Use with custom count
-async(focus("data"), handler, {
-  retry: { count: 5, delay: "fibonacci" },
+const fetchData = abortable(async ({ signal }) => {
+  const res = await fetch("/api/data", { signal });
+  return res.json();
 });
+
+// Retry 3 times with backoff
+const robustFetch = fetchData.use(retry(3));
+
+// Retry 5 times with fibonacci delay
+const robustFetch2 = fetchData.use(retry({ count: 5, delay: "fibonacci" }));
 
 // Add jitter to prevent thundering herd
-async(focus("data"), handler, {
-  retry: {
-    count: 3,
-    delay: retryStrategy.withJitter(retryStrategy.backoff),
-  },
-});
+const robustFetch3 = fetchData.use(retry({
+  count: 3,
+  delay: retryStrategy.withJitter(retryStrategy.backoff),
+}));
 ```
 
-### Network-Aware Strategies
-
-Combine network detection with retry strategies:
+### Combining Retry with Network Awareness
 
 ```ts
-const networkRetry = get(networkRetryService);
+const network = get(networkService);
 
-// Network errors: wait for reconnection
-// Other errors: use backoff strategy
-async(focus("data"), handler, {
-  retry: networkRetry.delay("backoff"),
-});
-
-// Custom handling for different error types
-async(focus("data"), handler, {
-  retry: networkRetry.delay((attempt, error) => {
-    if (error.message.includes("rate limit")) {
-      return 60000; // Wait 1 minute for rate limits
-    }
-    return retryStrategy.backoff(attempt);
-  }),
-});
+// Chain wrappers: retry first, then wait for network
+const robustFetch = fetchData
+  .use(retry(3))              // Retry non-network errors
+  .use(network.offlineRetry()); // Wait for reconnection on network errors
 ```
 
 ## Complete Example
 
 ```tsx
 import { store, useStore, trigger } from "storion/react";
-import { async } from "storion/async";
-import { networkStore, networkRetryService } from "storion/network";
+import { async, abortable, retry } from "storion/async";
+import { networkStore, networkService } from "storion/network";
+
+// Define abortable API function
+const fetchUsers = abortable(async ({ signal }) => {
+  const res = await fetch("/api/users", { signal });
+  if (!res.ok) throw new Error("Failed to fetch");
+  return res.json() as Promise<User[]>;
+});
 
 // Store with network-aware async
 const userStore = store({
@@ -248,20 +216,15 @@ const userStore = store({
     users: async.stale<User[]>([]),
   },
   setup({ get, focus }) {
-    const networkRetry = get(networkRetryService);
+    const network = get(networkService);
+
+    // Wrap with retry and network-awareness
+    const robustFetchUsers = fetchUsers
+      .use(retry(3))
+      .use(network.offlineRetry());
 
     // Use *Query for read operations
-    const usersQuery = async(
-      focus("users"),
-      async (ctx) => {
-        const res = await fetch("/api/users", { signal: ctx.signal });
-        if (!res.ok) throw new Error("Failed to fetch");
-        return res.json();
-      },
-      {
-        retry: networkRetry.delay("backoff"),
-      }
-    );
+    const usersQuery = async(focus("users"), robustFetchUsers);
 
     return {
       fetchUsers: usersQuery.dispatch,
@@ -311,4 +274,3 @@ function UserList() {
 3. **Implement proper ping** - Don't rely solely on `navigator.onLine`
 4. **Add jitter to retries** - Prevent thundering herd after reconnection
 5. **Handle rate limits separately** - Use longer delays for rate limit errors
-

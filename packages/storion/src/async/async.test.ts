@@ -65,20 +65,14 @@ describe("async", () => {
 
     it("should handle errors and update state", async () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
-      const onError = vi.fn();
 
-      const { dispatch } = async(
-        focus,
-        async () => {
-          throw new Error("test error");
-        },
-        { onError }
-      );
+      const { dispatch } = async(focus, async () => {
+        throw new Error("test error");
+      });
 
       await expect(dispatch()).rejects.toThrow("test error");
       expect(getState().status).toBe("error");
       expect(getState().error?.message).toBe("test error");
-      expect(onError).toHaveBeenCalledWith(expect.any(Error));
     });
 
     it("should pass args to handler", async () => {
@@ -512,289 +506,6 @@ describe("async", () => {
       expect(getState().status).toBe("idle");
       expect(getState().data).toBe("updated"); // preserved in stale mode
       expect(getState().mode).toBe("stale");
-    });
-  });
-
-  describe("retry", () => {
-    it("should retry on failure", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (attempts < 3) {
-            throw new Error("fail");
-          }
-          return "success";
-        },
-        { retry: { count: 3, delay: "immediate" } }
-      );
-
-      const result = await dispatch();
-      expect(result).toBe("success");
-      expect(attempts).toBe(3);
-    });
-
-    it("should fail after all retries exhausted", async () => {
-      const [focus, { getState }] = createMockFocus(async.fresh<string>());
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          throw new Error("always fail");
-        },
-        { retry: { count: 2, delay: "immediate" } }
-      );
-
-      await expect(dispatch()).rejects.toThrow("always fail");
-      expect(getState().status).toBe("error");
-    });
-
-    it("should use numeric delay between retries", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-      const timestamps: number[] = [];
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          timestamps.push(Date.now());
-          attempts++;
-          if (attempts < 2) {
-            throw new Error("fail");
-          }
-          return "success";
-        },
-        { retry: { count: 2, delay: 50 } }
-      );
-
-      await dispatch();
-      expect(attempts).toBe(2);
-      // Second attempt should be ~50ms after first
-      expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(45);
-    });
-
-    it("should use delay function returning number", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-      const delayArgs: Array<{ attempt: number; error: Error }> = [];
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (attempts < 3) {
-            throw new Error(`fail-${attempts}`);
-          }
-          return "success";
-        },
-        {
-          retry: {
-            count: 3,
-            delay: (attempt, error) => {
-              delayArgs.push({ attempt, error });
-              return 10; // Short delay for test
-            },
-          },
-        }
-      );
-
-      await dispatch();
-      expect(attempts).toBe(3);
-      expect(delayArgs).toHaveLength(2);
-      expect(delayArgs[0].attempt).toBe(1);
-      expect(delayArgs[0].error.message).toBe("fail-1");
-      expect(delayArgs[1].attempt).toBe(2);
-      expect(delayArgs[1].error.message).toBe("fail-2");
-    });
-
-    it("should use delay function returning Promise<void>", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-      let customDelayResolved = false;
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (attempts < 2) {
-            throw new Error("fail");
-          }
-          return "success";
-        },
-        {
-          retry: {
-            count: 2,
-            delay: () => {
-              // Return a promise that resolves after custom logic
-              return new Promise<void>((resolve) => {
-                setTimeout(() => {
-                  customDelayResolved = true;
-                  resolve();
-                }, 30);
-              });
-            },
-          },
-        }
-      );
-
-      const result = await dispatch();
-      expect(result).toBe("success");
-      expect(attempts).toBe(2);
-      expect(customDelayResolved).toBe(true);
-    });
-
-    it("should support async delay for custom retry conditions", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-      let networkReady = false;
-
-      // Simulate network becoming ready after some time
-      setTimeout(() => {
-        networkReady = true;
-      }, 50);
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (!networkReady) {
-            throw new Error("network not ready");
-          }
-          return "connected";
-        },
-        {
-          retry: {
-            count: 5,
-            delay: () => {
-              // Wait for network to be ready (poll every 20ms)
-              return new Promise<void>((resolve) => {
-                const check = () => {
-                  if (networkReady) {
-                    resolve();
-                  } else {
-                    setTimeout(check, 20);
-                  }
-                };
-                check();
-              });
-            },
-          },
-        }
-      );
-
-      const result = await dispatch();
-      expect(result).toBe("connected");
-      expect(networkReady).toBe(true);
-    });
-
-    it("should use retry function directly (shorthand)", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-      const delayArgs: Array<{ attempt: number; error: Error }> = [];
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (attempts < 3) {
-            throw new Error(`fail-${attempts}`);
-          }
-          return "success";
-        },
-        {
-          // Direct function - retries indefinitely until success
-          retry: (attempt, error) => {
-            delayArgs.push({ attempt, error });
-            return 10;
-          },
-        }
-      );
-
-      const result = await dispatch();
-      expect(result).toBe("success");
-      expect(attempts).toBe(3);
-      expect(delayArgs).toHaveLength(2);
-      expect(delayArgs[0].attempt).toBe(1);
-      expect(delayArgs[1].attempt).toBe(2);
-    });
-
-    it("should use retry function with Promise<void> (shorthand)", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-      let ready = false;
-
-      setTimeout(() => {
-        ready = true;
-      }, 40);
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (!ready) {
-            throw new Error("not ready");
-          }
-          return "done";
-        },
-        {
-          // Direct function returning Promise<void>
-          retry: () =>
-            new Promise<void>((resolve) => {
-              const check = () => (ready ? resolve() : setTimeout(check, 10));
-              check();
-            }),
-        }
-      );
-
-      const result = await dispatch();
-      expect(result).toBe("done");
-      expect(ready).toBe(true);
-    });
-
-    it("should accept strategy name as retry option (shorthand)", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (attempts < 3) {
-            throw new Error("fail");
-          }
-          return "success";
-        },
-        // Strategy name directly - defaults to 3 retries
-        { retry: "immediate" }
-      );
-
-      const result = await dispatch();
-      expect(result).toBe("success");
-      expect(attempts).toBe(3);
-    });
-
-    it("should accept strategy name in delay option", async () => {
-      const [focus] = createMockFocus(async.fresh<string>());
-      let attempts = 0;
-
-      const { dispatch } = async(
-        focus,
-        async () => {
-          attempts++;
-          if (attempts < 2) {
-            throw new Error("fail");
-          }
-          return "done";
-        },
-        { retry: { count: 2, delay: "immediate" } }
-      );
-
-      const result = await dispatch();
-      expect(result).toBe("done");
-      expect(attempts).toBe(2);
     });
   });
 
@@ -1282,14 +993,11 @@ describe("async", () => {
         let callbackArg: string | null = null;
 
         const { dispatch } = async(focus, async (ctx) => {
-          const result = ctx.safe(
-            (arg: string) => {
-              callbackCalled = true;
-              callbackArg = arg;
-              return "callback-result";
-            },
-            "test-arg"
-          );
+          const result = ctx.safe((arg: string) => {
+            callbackCalled = true;
+            callbackArg = arg;
+            return "callback-result";
+          }, "test-arg");
 
           expect(result).toBe("callback-result");
           return "done";
@@ -1325,10 +1033,7 @@ describe("async", () => {
         let result: string | undefined;
 
         const { dispatch } = async(focus, async (ctx) => {
-          result = await ctx.safe(
-            async (x: number) => `result-${x}`,
-            42
-          );
+          result = await ctx.safe(async (x: number) => `result-${x}`, 42);
           return "done";
         });
 
@@ -1508,17 +1213,15 @@ describe("async", () => {
     });
   });
 
-  describe("AbortableFn overloads", () => {
+  describe("Abortable overloads", () => {
     it("should work with abortable function in focus mode", async () => {
       const { abortable } = await import("./abortable");
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
 
-      // Create abortable function
-      const fetchData = abortable(
-        async (signal: AbortSignal | undefined, id: string) => {
-          return `data-${id}`;
-        }
-      );
+      // Create abortable function with new context signature
+      const fetchData = abortable(async ({ signal }, id: string) => {
+        return `data-${id}`;
+      });
 
       // Use with async()
       const { dispatch } = async(focus, fetchData);
@@ -1535,12 +1238,10 @@ describe("async", () => {
 
       let receivedSignal: AbortSignal | undefined;
 
-      const fetchData = abortable(
-        async (signal: AbortSignal | undefined) => {
-          receivedSignal = signal;
-          return true;
-        }
-      );
+      const fetchData = abortable(async ({ signal }) => {
+        receivedSignal = signal;
+        return true;
+      });
 
       const { dispatch } = async(focus, fetchData);
       await dispatch();
@@ -1555,17 +1256,15 @@ describe("async", () => {
 
       let firstSignalAborted = false;
 
-      const fetchData = abortable(
-        async (signal: AbortSignal | undefined, id: string) => {
-          // Check if signal is aborted after a delay
-          await new Promise((r) => setTimeout(r, 50));
-          if (signal?.aborted) {
-            firstSignalAborted = true;
-            throw new Error("Aborted");
-          }
-          return `data-${id}`;
+      const fetchData = abortable(async ({ signal }, id: string) => {
+        // Check if signal is aborted after a delay
+        await new Promise((r) => setTimeout(r, 50));
+        if (signal?.aborted) {
+          firstSignalAborted = true;
+          throw new Error("Aborted");
         }
-      );
+        return `data-${id}`;
+      });
 
       const { dispatch } = async(focus, fetchData);
 
@@ -1590,28 +1289,26 @@ describe("async", () => {
     it("should work with abortable function in mixin mode", async () => {
       const { abortable } = await import("./abortable");
 
-      // Create abortable function
-      const fetchData = abortable(
-        async (signal: AbortSignal | undefined, id: string) => {
-          return `mixin-data-${id}`;
-        }
-      );
+      // Create abortable function with new context signature
+      const fetchData = abortable(async ({ signal }, id: string) => {
+        return `mixin-data-${id}`;
+      });
 
       // Create mixin
       const mixin = async(fetchData);
 
       // Mock selector context
-      const mockContext: SelectorContext = {
-        get: vi.fn(),
+      const mockContext = {
+        get: vi.fn() as any,
         scoped: vi.fn((spec) => {
           const app = container();
           const instance = app.get(spec);
           return storeTuple(instance);
-        }),
-        mixin: vi.fn(),
-        once: vi.fn(),
+        }) as any,
+        mixin: vi.fn() as any,
+        once: vi.fn() as any,
         id: "test-id",
-      };
+      } as SelectorContext;
 
       // Use mixin
       const [state, actions] = mixin(mockContext);

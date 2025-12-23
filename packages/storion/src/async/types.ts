@@ -172,7 +172,7 @@ export interface AsyncContext {
    * Overloads:
    * 1. `safe(promise)` - Wrap promise, never resolve/reject if cancelled
    * 2. `safe(fn, ...args)` - Call function, wrap result if promise
-   * 3. `safe(abortableFn, ...args)` - Call with signal, wrap result if promise
+   * 3. `safe(Abortable, ...args)` - Call with signal, wrap result if promise
    *
    * @example
    * ```ts
@@ -298,19 +298,21 @@ export interface AsyncRetryOptions {
 // ===== Mixin Options =====
 
 /**
- * Options for async mixin setup.
+ * Options for async state management.
+ *
+ * For retry, error handling, and other cross-cutting concerns,
+ * use the `use()` pattern with wrapper utilities:
+ *
+ * ```ts
+ * import { retry, onError } from "storion/async";
+ *
+ * const userQuery = async(
+ *   focus("user"),
+ *   userService.getUser.use(retry(3)).use(onError(console.error))
+ * );
+ * ```
  */
 export interface AsyncOptions {
-  /** Error callback */
-  onError?: (error: Error) => void;
-  /**
-   * Retry configuration:
-   * - number: retry count with default backoff delay
-   * - "backoff" | "linear" | "fixed" | "fibonacci" | "immediate": retry 3 times with named strategy
-   * - AsyncRetryDelayFn: custom delay function, retry until it returns a number (or Promise<void> to wait)
-   * - { count, delay }: full control over retry count and delay
-   */
-  retry?: number | RetryStrategyName | AsyncRetryDelayFn | AsyncRetryOptions;
   /** Auto-cancel previous request on new dispatch (default: true) */
   autoCancel?: boolean;
 }

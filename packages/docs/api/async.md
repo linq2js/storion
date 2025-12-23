@@ -256,86 +256,372 @@ function UserProfile({ userId }: { userId: string }) {
 Configuration options for async operations.
 
 ```ts
-type AsyncRetryDelayFn = (
-  attempt: number,
-  error: Error
-) => number | Promise<void>;
-
 interface AsyncOptions {
-  /** Error callback */
-  onError?: (error: Error) => void;
-
-  /**
-   * Retry configuration:
-   * - number: retry count with 1000ms default delay
-   * - AsyncRetryOptions: object with count and delay
-   * - AsyncRetryDelayFn: function only (retries indefinitely until success)
-   */
-  retry?: number | AsyncRetryOptions | AsyncRetryDelayFn;
-
   /** Auto-cancel previous request on new dispatch (default: true) */
   autoCancel?: boolean;
 }
+```
 
-interface AsyncRetryOptions {
-  /** Number of retry attempts */
-  count: number;
+For retry, error handling, timeout, and other cross-cutting concerns, use wrapper utilities with the `.use()` pattern. See [Wrappers](#wrappers) below.
 
-  /**
-   * Delay between retries:
-   * - number: fixed delay in milliseconds
-   * - function returning number: dynamic delay based on attempt/error
-   * - function returning Promise<void>: custom async delay (retry when promise resolves)
-   */
-  delay?: AsyncRetryDelayFn | number;
+## Wrappers
+
+Built-in wrapper utilities for composing cross-cutting behavior on `abortable()` functions. Use the `.use()` method to chain wrappers:
+
+```ts
+import {
+  abortable,
+  retry,
+  timeout,
+  fallback,
+  cache,
+  circuitBreaker,
+  logging,
+} from "storion/async";
+
+const getUser = abortable(async ({ signal }, id: string) => {
+  const res = await fetch(`/api/users/${id}`, { signal });
+  return res.json();
+});
+
+// Chain wrappers for resilient API calls
+const robustGetUser = getUser
+  .use(retry(3)) // Retry up to 3 times
+  .use(timeout(5000)) // Abort after 5s
+  .use(circuitBreaker()) // Fail fast after repeated errors
+  .use(cache(60000)) // Cache for 1 minute
+  .use(fallback(null)) // Return null on error
+  .use(logging("getUser")); // Log calls for debugging
+
+// Use with async()
+const userQuery = async(focus("user"), robustGetUser);
+```
+
+**Available Wrappers:**
+
+| Wrapper            | Purpose                                |
+| ------------------ | -------------------------------------- |
+| `retry()`          | Retry on failure with delay strategies |
+| `timeout()`        | Abort after timeout                    |
+| `catchError()`     | Handle errors without swallowing       |
+| `logging()`        | Log calls for debugging                |
+| `debounce()`       | Execute after delay with no new calls  |
+| `throttle()`       | Execute once per time window           |
+| `fallback()`       | Return default on error                |
+| `cache()`          | Memoize results with TTL               |
+| `rateLimit()`      | Queue excess calls                     |
+| `circuitBreaker()` | Fail fast after repeated errors        |
+| `map()`            | Simplified arg/result transformation   |
+
+### retry()
+
+Retry on failure with configurable count and delay strategy.
+
+```ts
+import { retry } from "storion/async";
+
+// Retry 3 times with default backoff
+fn.use(retry(3));
+
+// Retry 5 times with linear delay
+fn.use(retry({ count: 5, delay: "linear" }));
+
+// Custom delay function
+fn.use(retry({ count: 3, delay: (attempt) => attempt * 1000 }));
+
+// Wait for condition (Promise<void>)
+fn.use(retry({ count: 10, delay: () => waitForOnline() }));
+```
+
+**Retry Options:**
+
+```ts
+interface RetryOptions {
+  /** Number of retry attempts (default: 3) */
+  count?: number;
+  /** Delay strategy or custom function */
+  delay?:
+    | "backoff"
+    | "linear"
+    | "fixed"
+    | "fibonacci"
+    | "immediate"
+    | AsyncRetryDelayFn;
 }
 ```
 
-### Retry Examples
+**Built-in delay strategies:**
+
+| Strategy    | Formula              | Example delays (ms)    |
+| ----------- | -------------------- | ---------------------- |
+| `backoff`   | 1000 \* 2^attempt    | 1000, 2000, 4000, 8000 |
+| `linear`    | 1000 \* attempt      | 1000, 2000, 3000, 4000 |
+| `fixed`     | 1000                 | 1000, 1000, 1000, 1000 |
+| `fibonacci` | 1000 \* fib(attempt) | 1000, 1000, 2000, 3000 |
+| `immediate` | 0                    | 0, 0, 0, 0             |
+
+### catchError()
+
+Catch and handle errors with a callback (without swallowing them).
 
 ```ts
-// Simple retry count (1000ms default delay)
-async(focus("data"), handler, { retry: 3 });
+import { catchError } from "storion/async";
 
-// Fixed delay
-async(focus("data"), handler, {
-  retry: { count: 3, delay: 2000 },
-});
+fn.use(
+  catchError((error, ctx, ...args) => {
+    console.error("Failed:", error.message);
+    analytics.track("api_error", { error: error.message });
+  })
+);
+```
 
-// Exponential backoff
-async(focus("data"), handler, {
-  retry: {
-    count: 5,
-    delay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
-  },
-});
+### timeout()
 
-// Wait for network reconnection (with count limit)
-async(focus("data"), handler, {
-  retry: {
-    count: 10,
-    delay: () => waitForOnline(), // Returns Promise<void>
-  },
-});
+Abort after specified milliseconds.
 
-// Function shorthand - retry indefinitely until success
-async(focus("data"), handler, {
-  retry: () => waitForOnline(), // No count limit, retry until network available
-});
+```ts
+import { timeout } from "storion/async";
 
-// Custom retry condition
-async(focus("data"), handler, {
-  retry: {
-    count: 5,
-    delay: (attempt, error) => {
-      // Different delay based on error type
-      if (error.message.includes("rate limit")) {
-        return 5000; // Wait 5s for rate limits
-      }
-      return 1000 * attempt; // Linear backoff otherwise
-    },
-  },
-});
+// Abort after 5 seconds
+fn.use(timeout(5000));
+
+// With custom error message
+fn.use(timeout(5000, "Request timed out"));
+```
+
+### logging()
+
+Log function calls for debugging.
+
+```ts
+import { logging } from "storion/async";
+
+fn.use(logging("getUser"));
+// Logs: [getUser] calling with: ["123"]
+// Logs: [getUser] success: { id: "123", name: "John" }
+// Or:   [getUser] error: Error: Not found
+
+// Custom logger
+fn.use(logging("getUser", customLogger));
+```
+
+### debounce()
+
+Only execute after delay with no new calls.
+
+```ts
+import { debounce } from "storion/async";
+
+const debouncedSearch = search.use(debounce(300));
+```
+
+### throttle()
+
+Only execute once per time window.
+
+```ts
+import { throttle } from "storion/async";
+
+const throttledSave = save.use(throttle(1000));
+```
+
+### fallback()
+
+Return a fallback value on error instead of throwing.
+
+```ts
+import { fallback } from "storion/async";
+
+// Return null on error
+fn.use(fallback(null));
+
+// Return empty array on error
+fn.use(fallback([]));
+
+// Dynamic fallback based on error
+fn.use(fallback((error, ctx, ...args) => ({ error: error.message })));
+```
+
+::: tip
+Aborted operations (via `ctx.signal`) are **not** caught by fallback - cancellation errors are always propagated.
+:::
+
+### cache()
+
+Cache results with TTL. Results are cached by serialized arguments.
+
+```ts
+import { cache } from "storion/async";
+
+// Cache for 5 minutes
+fn.use(cache(5 * 60 * 1000));
+
+// Cache with custom key function
+fn.use(cache({ ttl: 60000, key: (user) => user.id }));
+```
+
+**Cache Options:**
+
+```ts
+interface CacheOptions {
+  /** Time-to-live in milliseconds */
+  ttl: number;
+  /** Custom key function (default: JSON.stringify of args) */
+  key?: (...args: any[]) => string;
+}
+```
+
+::: warning Shared State
+Cache is shared across all calls to the same cached function. Multiple components using the same cached function will share the same cache.
+:::
+
+### rateLimit()
+
+Rate limit calls - queue excess calls beyond the limit.
+
+```ts
+import { rateLimit } from "storion/async";
+
+// Max 10 calls per second
+fn.use(rateLimit({ limit: 10, window: 1000 }));
+
+// Max 100 calls per minute
+fn.use(rateLimit({ limit: 100, window: 60000 }));
+```
+
+**Rate Limit Options:**
+
+```ts
+interface RateLimitOptions {
+  /** Maximum number of calls allowed in the window */
+  limit: number;
+  /** Time window in milliseconds */
+  window: number;
+}
+```
+
+Requests that exceed the limit are **queued** and executed when slots become available. Queued requests respect abort signals - if aborted while waiting, they're removed from the queue.
+
+### circuitBreaker()
+
+Fail fast after repeated errors to prevent cascading failures.
+
+```ts
+import { circuitBreaker } from "storion/async";
+
+// Open after 5 failures, try again after 30s (defaults)
+fn.use(circuitBreaker());
+
+// Custom threshold and reset timeout
+fn.use(circuitBreaker({ threshold: 3, resetTimeout: 10000 }));
+```
+
+**Circuit Breaker Options:**
+
+```ts
+interface CircuitBreakerOptions {
+  /** Number of failures before opening circuit (default: 5) */
+  threshold?: number;
+  /** Time in ms before attempting to close circuit (default: 30000) */
+  resetTimeout?: number;
+}
+```
+
+**Circuit States:**
+
+| State       | Behavior                                     |
+| ----------- | -------------------------------------------- |
+| `closed`    | Normal operation, requests pass through      |
+| `open`      | Circuit tripped, requests fail immediately   |
+| `half-open` | Testing recovery, allows one request through |
+
+**State Transitions:**
+
+```
+closed → (failures >= threshold) → open
+open → (resetTimeout elapsed) → half-open
+half-open → (success) → closed
+half-open → (failure) → open
+```
+
+::: tip
+Aborted operations (via `ctx.signal`) are **not** counted as failures.
+:::
+
+### map()
+
+Create a simplified wrapper for argument/result transformations. Unlike regular wrappers, `map()` hides the `ctx` parameter, providing a simple `next(...args)` function.
+
+```ts
+import { map } from "storion/async";
+
+// Transform return type: User → string
+const getUserName = getUser.use(
+  map(async (next, id: string) => {
+    const user = await next(id);
+    return user.name;
+  })
+);
+
+// Change argument signature
+const getUserByEmail = getUser.use(
+  map(async (next, email: string) => {
+    const id = await lookupUserId(email);
+    return next(id);
+  })
+);
+
+// Combine multiple calls
+const getUserWithPosts = getUser.use(
+  map(async (next, id: string) => {
+    const [user, posts] = await Promise.all([next(id), fetchPosts(id)]);
+    return { ...user, posts };
+  })
+);
+```
+
+::: warning
+`map()` does not expose `ctx.signal`. If you need cancellation support inside the wrapper, use a regular wrapper instead.
+:::
+
+### Custom Wrappers
+
+Create your own wrappers using the `AbortableWrapper` type:
+
+```ts
+import type { AbortableWrapper, AbortableContext } from "storion/async";
+
+// Custom wrapper that adds authentication header
+function withAuth<TArgs extends any[], TResult>(
+  getToken: () => string
+): AbortableWrapper<TArgs, TResult> {
+  return (next) =>
+    async (ctx, ...args) => {
+      // Modify context or args before calling next
+      const token = getToken();
+      // ... use token somehow
+      return next(ctx, ...args);
+    };
+}
+
+// Use it
+const authFn = fn.use(withAuth(() => localStorage.getItem("token")!));
+```
+
+### Wrapper Execution Order
+
+Wrappers are applied in reverse order (last `.use()` runs first):
+
+```ts
+fn.use(wrapperA).use(wrapperB);
+// Execution: wrapperB → wrapperA → fn
+```
+
+This allows outer wrappers to catch errors from inner wrappers:
+
+```ts
+fn.use(retry(3)).use(logging("fn")); // logging sees retry errors
+fn.use(logging("fn")).use(retry(3)); // logging sees final success/error
 ```
 
 ## AsyncContext
@@ -397,7 +683,7 @@ async(focus("data"), async (ctx) => {
 });
 ```
 
-#### safe(abortableFn, ...args)
+#### safe(Abortable, ...args)
 
 Call an [abortable function](#abortable) with the context's signal automatically injected.
 
@@ -405,7 +691,7 @@ Call an [abortable function](#abortable) with the context's signal automatically
 import { abortable } from "storion/async";
 
 // Define abortable function
-const fetchUser = abortable(async (signal, id: string) => {
+const fetchUser = abortable(async ({ signal }, id: string) => {
   const res = await fetch(`/api/users/${id}`, { signal });
   return res.json();
 });
@@ -500,21 +786,33 @@ interface AsyncContext {
 
 ## abortable()
 
-Create a function that can receive an `AbortSignal` when called via `ctx.safe()` or directly with `async()`.
+Create a function that receives an `AbortableContext` with `signal` and `safe` utilities.
 
 ### Signature
 
 ```ts
 function abortable<TArgs extends any[], TResult>(
-  fn: (signal: AbortSignal | undefined, ...args: TArgs) => TResult
-): AbortableFn<TArgs, TResult>;
+  fn: (ctx: AbortableContext, ...args: TArgs) => Promise<TResult>
+): Abortable<TArgs, TResult>;
 
-interface AbortableFn<TArgs, TResult> {
-  /** Call without signal */
-  (...args: TArgs): TResult;
+interface AbortableContext {
+  /** AbortSignal for cancellation */
+  signal: AbortSignal;
+  /** Safe execution utility (same as AsyncContext.safe) */
+  safe: SafeFn;
+}
+
+interface Abortable<TArgs, TResult> {
+  /** Call without signal (creates new AbortController) */
+  (...args: TArgs): Promise<TResult>;
 
   /** Call with explicit signal */
-  withSignal(signal: AbortSignal | undefined, ...args: TArgs): TResult;
+  with(signal: AbortSignal | undefined, ...args: TArgs): Promise<TResult>;
+
+  /** Apply wrapper, returns new Abortable */
+  use<TNewArgs, TNewResult>(
+    wrapper: (next: Handler) => Handler
+  ): Abortable<TNewArgs, TNewResult>;
 }
 ```
 
@@ -525,12 +823,12 @@ import { abortable } from "storion/async";
 
 // Define abortable service methods
 const userService = {
-  getUser: abortable(async (signal, id: string) => {
+  getUser: abortable(async ({ signal }, id: string) => {
     const res = await fetch(`/api/users/${id}`, { signal });
     return res.json();
   }),
 
-  createUser: abortable(async (signal, data: CreateUserDto) => {
+  createUser: abortable(async ({ signal }, data: CreateUserDto) => {
     const res = await fetch("/api/users", {
       method: "POST",
       body: JSON.stringify(data),
@@ -544,12 +842,12 @@ const userService = {
 ### Four Ways to Use
 
 ```ts
-// 1. Direct call (no signal)
+// 1. Direct call (creates new AbortController)
 const user = await userService.getUser("123");
 
 // 2. With explicit signal
 const controller = new AbortController();
-const user = await userService.getUser.withSignal(controller.signal, "123");
+const user = await userService.getUser.with(controller.signal, "123");
 
 // 3. Pass directly to async() - signal auto-injected
 const userQuery = async(focus("user"), userService.getUser);
@@ -560,16 +858,65 @@ const userQuery = async(focus("user"), (ctx, id: string) =>
 );
 ```
 
+### Chainable Wrappers with use()
+
+Apply wrappers that preserve the `Abortable` interface:
+
+```ts
+// Define reusable wrapper
+const withRetry =
+  <TArgs extends any[], TResult>(count = 3) =>
+  (next: (ctx: AbortableContext, ...args: TArgs) => Promise<TResult>) =>
+  async (ctx: AbortableContext, ...args: TArgs): Promise<TResult> => {
+    let lastError: Error;
+    for (let i = 0; i < count; i++) {
+      try {
+        return await next(ctx, ...args);
+      } catch (e) {
+        lastError = e as Error;
+        if (ctx.signal.aborted) throw e;
+      }
+    }
+    throw lastError!;
+  };
+
+// Apply wrapper
+const getUserWithRetry = userService.getUser.use(withRetry(3));
+
+// Chain multiple wrappers
+const getUser = userService.getUser
+  .use(withRetry(3))
+  .use(withLogging("getUser"));
+
+// Still has Abortable interface
+await getUser("123");
+await getUser.with(controller.signal, "123");
+```
+
+### Nested Abortable Calls
+
+Use `ctx.safe` to call other abortable functions:
+
+```ts
+const getUserWithPosts = abortable(async ({ signal, safe }, userId: string) => {
+  // safe() auto-injects signal to abortable functions
+  const user = await safe(userService.getUser, userId);
+  const posts = await safe(postService.getPosts, userId);
+
+  return { user, posts };
+});
+```
+
 ### With async() Directly
 
-The cleanest pattern - pass `AbortableFn` directly to `async()`:
+The cleanest pattern - pass `Abortable` directly to `async()`:
 
 ```ts
 const userStore = store({
   name: "user",
   state: { user: async.fresh<User>() },
   setup({ focus }) {
-    // AbortableFn passed directly - signal auto-injected
+    // Abortable passed directly - signal auto-injected
     const userQuery = async(focus("user"), userService.getUser);
 
     return {
@@ -587,7 +934,7 @@ Use `isAbortable()` to check if a function is abortable:
 import { isAbortable } from "storion/async";
 
 if (isAbortable(fn)) {
-  fn.withSignal(signal, ...args);
+  fn.with(signal, ...args);
 } else {
   fn(...args);
 }
@@ -979,7 +1326,7 @@ expect(testContainer.get(dataStore).state.items.data).toHaveLength(1);
 #### 6. Network-Aware Retry Built-In
 
 ```ts
-import { networkRetryService } from "storion/network";
+import { networkService } from "storion/network";
 
 const dataQuery = async(focus("data"), fetchData, {
   // Automatically waits for reconnection on network errors

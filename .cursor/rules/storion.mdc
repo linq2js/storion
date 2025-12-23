@@ -417,9 +417,9 @@ Use `abortable()` to create functions that receive `AbortSignal` automatically:
 ```ts
 import { abortable } from "storion/async";
 
-// Define abortable service methods
+// Define abortable service methods (ctx has signal and safe)
 const userService = {
-  getUser: abortable(async (signal, id: string) => {
+  getUser: abortable(async ({ signal }, id: string) => {
     const res = await fetch(`/api/users/${id}`, { signal });
     return res.json();
   }),
@@ -433,11 +433,19 @@ const userQuery = async(focus("user"), (ctx, id: string) =>
   ctx.safe(userService.getUser, id)
 );
 
-// Direct call (no signal)
+// Direct call (creates new AbortController)
 const user = await userService.getUser(id);
 
 // Explicit signal
-const user = await userService.getUser.withSignal(controller.signal, id);
+const user = await userService.getUser.with(controller.signal, id);
+
+// Chainable wrappers with use()
+import { retry, catchError, timeout } from "storion/async";
+
+const robustGetUser = userService.getUser
+  .use(retry(3))
+  .use(catchError(console.error))
+  .use(timeout(5000));
 ```
 
 ### ctx.safe() Overloads

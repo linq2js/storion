@@ -2,16 +2,45 @@
  * Async module for Storion
  *
  * Provides utilities for handling async operations (queries/mutations)
- * with built-in cancellation, retry, and state management.
+ * with built-in cancellation and state management.
  *
  * Two modes:
  * - fresh: data is undefined during loading/error (only show fresh data)
  * - stale: data is preserved during loading/error (stale-while-revalidate)
+ *
+ * Use wrappers for cross-cutting concerns:
+ * ```ts
+ * import { retry, onError, timeout } from "storion/async";
+ *
+ * const getUser = userService.getUser
+ *   .use(retry(3))
+ *   .use(onError(console.error))
+ *   .use(timeout(5000));
+ * ```
  */
 
 export { async, type AsyncMixinOptions, type AsyncMixinResult } from "./async";
-export { abortable, isAbortable, type AbortableFn } from "./abortable";
+export {
+  abortable,
+  isAbortable,
+  type Abortable,
+  type AbortableContext,
+  type AbortableWrapper,
+  type IdentityWrapper,
+} from "./abortable";
 export { createSafe, type SafeFn } from "./safe";
+
+// Wrapper utilities
+export {
+  retry,
+  catchError,
+  timeout,
+  logging,
+  debounce,
+  throttle,
+  type RetryOptions,
+} from "./wrappers";
+
 export {
   AsyncNotReadyError,
   AsyncAggregateError,
@@ -33,8 +62,6 @@ export {
   type AsyncContext,
   type AsyncHandler,
   type AsyncOptions,
-  type AsyncRetryOptions,
-  type AsyncRetryDelayFn,
   type AsyncActions,
   type AsyncLastInvocation,
   type CancellablePromise,

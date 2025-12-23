@@ -71,6 +71,7 @@ export default defineConfig({
           items: [
             { text: "Async State", link: "/guide/async" },
             { text: "Network", link: "/guide/network" },
+            { text: "Network Layer Architecture", link: "/guide/network-layer" },
             {
               text: "Dependency Injection",
               link: "/guide/dependency-injection",

@@ -13,8 +13,6 @@ import type {
   AsyncActions,
   AsyncLastInvocation,
   CancellablePromise,
-  AsyncRetryOptions,
-  AsyncRetryDelayFn,
   InferAsyncData,
   SettledResult,
   MapAsyncData,
@@ -30,7 +28,7 @@ import { untrack } from "../core/tracking";
 import { AsyncFunctionError } from "../errors";
 import { store } from "../core/store";
 import { createAsyncContext } from "./context";
-import { isAbortable, type AbortableFn } from "./abortable";
+import { isAbortable, type Abortable } from "./abortable";
 
 // ===== Global Promise Cache for Suspense =====
 
@@ -91,58 +89,6 @@ function stateToJSON<T>(
   return null;
 }
 
-// ===== Helper: Get retry config =====
-
-import { retryStrategy, type RetryStrategyName } from "./types";
-
-type RetryOption =
-  | number
-  | RetryStrategyName
-  | AsyncRetryDelayFn
-  | AsyncRetryOptions
-  | undefined;
-
-const STRATEGY_NAMES = new Set<string>([
-  "backoff",
-  "linear",
-  "fixed",
-  "fibonacci",
-  "immediate",
-]);
-
-function isStrategyName(value: unknown): value is RetryStrategyName {
-  return typeof value === "string" && STRATEGY_NAMES.has(value);
-}
-
-function getRetryCount(retry: RetryOption): number {
-  if (typeof retry === "number") return retry;
-  if (typeof retry === "function") return Infinity; // Retry until delay function signals stop
-  if (isStrategyName(retry)) return 3; // Default 3 retries for named strategies
-  if (retry && typeof retry === "object") return retry.count;
-  return 0;
-}
-
-function getRetryDelay(
-  retry: RetryOption,
-  attempt: number,
-  error: Error
-): number | Promise<void> {
-  // Number: use default backoff strategy
-  if (typeof retry === "number") return retryStrategy.backoff(attempt);
-  // Function: custom delay
-  if (typeof retry === "function") return retry(attempt, error);
-  // Strategy name: use named strategy
-  if (isStrategyName(retry)) return retryStrategy[retry](attempt);
-  // Object with delay
-  if (retry && typeof retry === "object") {
-    const { delay } = retry;
-    if (typeof delay === "function") return delay(attempt, error);
-    if (isStrategyName(delay)) return retryStrategy[delay](attempt);
-    return delay ?? retryStrategy.backoff(attempt);
-  }
-  return retryStrategy.backoff(attempt);
-}
-
 // ===== Async Mixin Options =====
 
 /**
@@ -175,14 +121,14 @@ export type AsyncMixinResult<T, M extends AsyncMode, TArgs extends any[]> = [
 // ===== Main async function =====
 
 /**
- * Convert an AbortableFn to an AsyncHandler.
- * Automatically calls fn.withSignal(ctx.signal, ...args).
+ * Convert an Abortable to an AsyncHandler.
+ * Automatically calls fn.with(ctx.signal, ...args).
  */
-function wrapAbortableFn<T, TArgs extends any[]>(
-  fn: AbortableFn<TArgs, T | PromiseLike<T>>
+function wrapAbortable<T, TArgs extends any[]>(
+  fn: Abortable<TArgs, T>
 ): AsyncHandler<T, TArgs> {
-  return (ctx: AsyncContext, ...args: TArgs) => {
-    return fn.withSignal(ctx.signal, ...args);
+  return (ctx: AsyncContext, ...args: TArgs): T | PromiseLike<T> => {
+    return fn.with(ctx.signal, ...args) as T | PromiseLike<T>;
   };
 }
 
@@ -211,10 +157,10 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
 ): AsyncActions<T, M, TArgs>;
 
 /**
- * Create async actions with an AbortableFn (signal auto-injected).
+ * Create async actions with an Abortable (signal auto-injected).
  *
  * @example
- * const getUser = abortable(async (signal, id: string) => {
+ * const getUser = abortable(async ({ signal }, id: string) => {
  *   const res = await fetch(`/api/users/${id}`, { signal });
  *   return res.json();
  * });
@@ -223,7 +169,7 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
  */
 export function async<T, M extends AsyncMode, TArgs extends any[]>(
   focus: Focus<AsyncState<T, M>>,
-  abortableFn: AbortableFn<TArgs, T | PromiseLike<T>>,
+  Abortable: Abortable<TArgs, T>,
   options?: AsyncOptions
 ): AsyncActions<T, M, TArgs>;
 
@@ -265,10 +211,10 @@ export function async<T, TArgs extends any[]>(
 ): SelectorMixin<AsyncMixinResult<T, "stale", TArgs>>;
 
 /**
- * Create an async selector mixin with an AbortableFn (signal auto-injected).
+ * Create an async selector mixin with an Abortable (signal auto-injected).
  *
  * @example
- * const getUser = abortable(async (signal, id: string) => {
+ * const getUser = abortable(async ({ signal }, id: string) => {
  *   const res = await fetch(`/api/users/${id}`, { signal });
  *   return res.json();
  * });
@@ -276,15 +222,15 @@ export function async<T, TArgs extends any[]>(
  * const userMixin = async(getUser);
  */
 export function async<T, TArgs extends any[]>(
-  abortableFn: AbortableFn<TArgs, T | PromiseLike<T>>,
+  Abortable: Abortable<TArgs, T>,
   options?: AsyncMixinOptions<T, "fresh">
 ): SelectorMixin<AsyncMixinResult<T, "fresh", TArgs>>;
 
 /**
- * Create an async selector mixin with an AbortableFn and stale mode.
+ * Create an async selector mixin with an Abortable and stale mode.
  */
 export function async<T, TArgs extends any[]>(
-  abortableFn: AbortableFn<TArgs, T | PromiseLike<T>>,
+  Abortable: Abortable<TArgs, T>,
   options: AsyncMixinOptions<T, "stale"> & { initial: AsyncState<T, "stale"> }
 ): SelectorMixin<AsyncMixinResult<T, "stale", TArgs>>;
 
@@ -293,20 +239,18 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
   focusOrHandler:
     | Focus<AsyncState<T, M>>
     | AsyncHandler<T, TArgs>
-    | AbortableFn<TArgs, T | PromiseLike<T>>,
+    | Abortable<TArgs, T>,
   handlerOrOptions?:
     | AsyncHandler<T, TArgs>
-    | AbortableFn<TArgs, T | PromiseLike<T>>
+    | Abortable<TArgs, T>
     | AsyncMixinOptions<T, M>,
   maybeOptions?: AsyncOptions
 ): AsyncActions<T, M, TArgs> | SelectorMixin<AsyncMixinResult<T, M, TArgs>> {
   // Check if first argument is a handler/abortable (mixin mode) or focus (actions mode)
   if (typeof focusOrHandler === "function") {
-    // Mixin mode: async(handler, options?) or async(abortableFn, options?) => SelectorMixin
+    // Mixin mode: async(handler, options?) or async(Abortable, options?) => SelectorMixin
     const handler = isAbortable(focusOrHandler)
-      ? wrapAbortableFn(
-          focusOrHandler as AbortableFn<TArgs, T | PromiseLike<T>>
-        )
+      ? wrapAbortable(focusOrHandler as Abortable<TArgs, T>)
       : (focusOrHandler as AsyncHandler<T, TArgs>);
     const options = handlerOrOptions as AsyncMixinOptions<T, M> | undefined;
 
@@ -342,12 +286,10 @@ export function async<T, M extends AsyncMode, TArgs extends any[]>(
     }) as SelectorMixin<AsyncMixinResult<T, M, TArgs>>;
   }
 
-  // Actions mode: async(focus, handler, options?) or async(focus, abortableFn, options?) => AsyncActions
+  // Actions mode: async(focus, handler, options?) or async(focus, Abortable, options?) => AsyncActions
   const focus = focusOrHandler as Focus<AsyncState<T, M>>;
   const handler = isAbortable(handlerOrOptions)
-    ? wrapAbortableFn(
-        handlerOrOptions as AbortableFn<TArgs, T | PromiseLike<T>>
-      )
+    ? wrapAbortable(handlerOrOptions as Abortable<TArgs, T>)
     : (handlerOrOptions as AsyncHandler<T, TArgs>);
   const options = maybeOptions;
 
@@ -438,127 +380,98 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
         return currentState.__requestId !== requestId;
       };
 
-      // Execute with retry logic
-      const retryCount = getRetryCount(options?.retry);
+      // Execute the handler
+      const execute = async (): Promise<T> => {
+        try {
+          // Create async context
+          const isCancelledOrAborted = () =>
+            isCancelled || abortController.signal.aborted;
+          const asyncContext = createAsyncContext(
+            abortController,
+            isCancelledOrAborted,
+            cancel,
+            focus._resolver
+          );
 
-      const executeWithRetry = async (): Promise<T> => {
-        let lastError: Error | null = null;
+          // Execute handler - always async via invoke
+          const result = await promiseTry(() => handler(asyncContext, ...args));
 
-        for (let attempt = 0; attempt <= retryCount; attempt++) {
-          try {
-            // Create async context
-            const isCancelledOrAborted = () =>
-              isCancelled || abortController.signal.aborted;
-            const asyncContext = createAsyncContext(
-              abortController,
-              isCancelledOrAborted,
-              cancel,
-              focus._resolver
-            );
-
-            // Execute handler - always async via invoke
-            const result = await promiseTry(() =>
-              handler(asyncContext, ...args)
-            );
-
-            // Check if cancelled
-            if (isCancelled) {
-              throw new DOMException("Aborted", "AbortError");
-            }
-
-            // Check if state was externally modified (e.g., devtools rollback)
-            if (isStateExternallyModified()) {
-              // State was changed externally, don't overwrite
-              // Still return result to the caller
-              return result;
-            }
-
-            // Success - update state (preserve mode)
-            setState({
-              status: "success",
-              mode,
-              data: result,
-              error: undefined,
-              timestamp: Date.now(),
-              __requestId: requestId,
-              toJSON: stateToJSON,
-            } as AsyncState<T, M>);
-
-            // Clear lastCancel since we're done
-            if (lastCancel === cancel) {
-              lastCancel = null;
-            }
-
-            return result;
-          } catch (error) {
-            // If aborted, rethrow immediately
-            if (isCancelled || abortController.signal.aborted) {
-              throw error instanceof Error
-                ? error
-                : new DOMException("Aborted", "AbortError");
-            }
-
-            lastError =
-              error instanceof Error ? error : new Error(String(error));
-
-            // If more retries available, wait and retry
-            if (attempt < retryCount) {
-              const delay = getRetryDelay(
-                options?.retry,
-                attempt + 1,
-                lastError
-              );
-              // Support both number (ms) and Promise<void> for custom delay logic
-              if (typeof delay === "number") {
-                await new Promise((resolve) => setTimeout(resolve, delay));
-              } else {
-                await delay;
-              }
-              continue;
-            }
+          // Check if cancelled
+          if (isCancelled) {
+            throw new DOMException("Aborted", "AbortError");
           }
+
+          // Check if state was externally modified (e.g., devtools rollback)
+          if (isStateExternallyModified()) {
+            // State was changed externally, don't overwrite
+            // Still return result to the caller
+            return result;
+          }
+
+          // Success - update state (preserve mode)
+          setState({
+            status: "success",
+            mode,
+            data: result,
+            error: undefined,
+            timestamp: Date.now(),
+            __requestId: requestId,
+            toJSON: stateToJSON,
+          } as AsyncState<T, M>);
+
+          // Clear lastCancel since we're done
+          if (lastCancel === cancel) {
+            lastCancel = null;
+          }
+
+          return result;
+        } catch (error) {
+          // If aborted, rethrow immediately
+          if (isCancelled || abortController.signal.aborted) {
+            throw error instanceof Error
+              ? error
+              : new DOMException("Aborted", "AbortError");
+          }
+
+          const errorObj =
+            error instanceof Error ? error : new Error(String(error));
+
+          // Abort the signal to cancel any pending ctx.safe() operations
+          if (!abortController.signal.aborted) {
+            abortController.abort();
+          }
+
+          // Check if state was externally modified before setting error state
+          if (isStateExternallyModified()) {
+            // State was changed externally, don't overwrite
+            // Still throw error to the caller
+            throw errorObj;
+          }
+
+          // Update state with error
+          // In stale mode, keep data; in fresh mode, data is undefined
+          setState({
+            status: "error",
+            mode,
+            data: mode === "stale" ? staleData : undefined,
+            error: errorObj,
+            timestamp: undefined,
+            __requestId: requestId,
+            toJSON: stateToJSON,
+          } as AsyncState<T, M>);
+
+          // Clear lastCancel since we're done
+          if (lastCancel === cancel) {
+            lastCancel = null;
+          }
+
+          throw errorObj;
         }
-
-        // All retries exhausted - abort the signal to cancel any pending ctx.safe() operations
-        if (!abortController.signal.aborted) {
-          abortController.abort();
-        }
-
-        // Check if state was externally modified before setting error state
-        if (isStateExternallyModified()) {
-          // State was changed externally, don't overwrite
-          // Still throw error to the caller
-          throw lastError;
-        }
-
-        // All retries exhausted - update state with error
-        // In stale mode, keep data; in fresh mode, data is undefined
-        setState({
-          status: "error",
-          mode,
-          data: mode === "stale" ? staleData : undefined,
-          error: lastError!,
-          timestamp: undefined,
-          __requestId: requestId,
-          toJSON: stateToJSON,
-        } as AsyncState<T, M>);
-
-        // Clear lastCancel since we're done
-        if (lastCancel === cancel) {
-          lastCancel = null;
-        }
-
-        // Call error callback
-        if (options?.onError && lastError) {
-          options.onError(lastError);
-        }
-
-        throw lastError;
       };
 
       // Start execution and race with cancellation
       // This ensures dispatch() rejects immediately on cancel, even if handler is stuck
-      const executionPromise = executeWithRetry();
+      const executionPromise = execute();
       const promise = Promise.race([executionPromise, cancelPromise]);
 
       // Store execution promise in cache for Suspense support
