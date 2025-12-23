@@ -247,19 +247,93 @@ const userQuery = async.action(focus("user"), robustGetUser);
 
 ## Wrapper Execution Order
 
-Wrappers are applied in reverse order (last `.use()` runs first):
+::: warning Order Matters
+The order in which you chain wrappers significantly affects behavior. Wrappers execute in **reverse order** — the last `.use()` runs first, wrapping the previous ones.
+:::
 
 ```ts
 fn.use(wrapperA).use(wrapperB);
-// Execution: wrapperB → wrapperA → fn
+// Execution order: wrapperB → wrapperA → fn
+// wrapperB is the outermost, fn is the innermost
 ```
 
-This allows outer wrappers to catch errors from inner wrappers:
+### Why Order Matters
+
+Think of wrappers as layers around your function. The outer layer handles things first:
+
+```
+┌─────────────────────────────────────────┐
+│  wrapperB (outermost - runs first)      │
+│  ┌───────────────────────────────────┐  │
+│  │  wrapperA                         │  │
+│  │  ┌─────────────────────────────┐  │  │
+│  │  │  fn (your function)         │  │  │
+│  │  └─────────────────────────────┘  │  │
+│  └───────────────────────────────────┘  │
+└─────────────────────────────────────────┘
+```
+
+### Practical Examples
+
+**Retry + Timeout:**
 
 ```ts
-fn.use(retry(3)).use(logging("fn")); // logging sees retry errors
-fn.use(logging("fn")).use(retry(3)); // logging sees final success/error
+// ✅ CORRECT: timeout applies to each retry attempt
+fn.use(retry(3)).use(timeout(5000));
+// Each attempt has 5s to complete, 3 attempts total
+
+// ❌ WRONG: timeout applies to all retries combined
+fn.use(timeout(5000)).use(retry(3));
+// All 3 attempts must complete within 5s total
 ```
+
+**Retry + Logging:**
+
+```ts
+// Log every attempt (including retries)
+fn.use(logging("api")).use(retry(3));
+// Logs: attempt 1, attempt 2 (if retry), attempt 3 (if retry)
+
+// Log only final result
+fn.use(retry(3)).use(logging("api"));
+// Logs: only the final success or failure after all retries
+```
+
+**Retry + Network Awareness:**
+
+```ts
+// ✅ RECOMMENDED: retry first, then wait for network
+fn.use(retry(3)).use(network.offlineRetry());
+// 1. Retries up to 3 times for transient errors
+// 2. If still failing AND offline, waits for network
+// 3. Retries once after reconnection
+
+// ❌ LESS EFFECTIVE: network check wraps retries
+fn.use(network.offlineRetry()).use(retry(3));
+// Waits for network, then retries - doesn't handle network drops during retries
+```
+
+**Cache + Retry:**
+
+```ts
+// ✅ CORRECT: cache the successful result
+fn.use(retry(3)).use(cache(60000));
+// Retries happen, then successful result is cached
+
+// ❌ WRONG: cache may store failed attempts
+fn.use(cache(60000)).use(retry(3));
+// Cache happens first, may interfere with retry logic
+```
+
+### Common Patterns
+
+| Pattern | Order | Reason |
+|---------|-------|--------|
+| Timeout per attempt | `retry → timeout` | Each retry gets fresh timeout |
+| Global timeout | `timeout → retry` | All retries must fit in timeout |
+| Log final result | `retry → logging` | See only final outcome |
+| Log all attempts | `logging → retry` | Debug each try |
+| Offline resilience | `retry → offlineRetry` | Handle both transient and network errors |
 
 ## retry()
 

@@ -83,6 +83,14 @@ export interface Abortable<TArgs extends any[], TResult> {
     ) => AbortableFn<TNewArgs, TNewResult>
   ): Abortable<TNewArgs, TNewResult>;
 
+  /**
+   * Type assertion for return type.
+   *
+   * @example
+   * ```ts
+   * const getUser = userService.getUser.as<User>();
+   * ```
+   */
   as<TNewResult, TNewArgs extends any[] = TArgs>(): Abortable<
     TNewArgs,
     TNewResult

@@ -128,20 +128,20 @@ export interface RequestOptions {
 
 // REST service interface - returns untyped, caller casts with .as<T>()
 export interface RestService {
-  get: AbortableFn<[path: string, options?: RequestOptions], unknown>;
-  post: AbortableFn<
+  get: Abortable<[path: string, options?: RequestOptions], unknown>;
+  post: Abortable<
     [path: string, body: unknown, options?: RequestOptions],
     unknown
   >;
-  put: AbortableFn<
+  put: Abortable<
     [path: string, body: unknown, options?: RequestOptions],
     unknown
   >;
-  patch: AbortableFn<
+  patch: Abortable<
     [path: string, body: unknown, options?: RequestOptions],
     unknown
   >;
-  delete: AbortableFn<[path: string, options?: RequestOptions], unknown>;
+  delete: Abortable<[path: string, options?: RequestOptions], unknown>;
 }
 
 // Error class for API errors
@@ -259,7 +259,7 @@ import { service } from "storion";
 import { abortable, retry, timeout, circuitBreaker } from "storion/async";
 import { networkService } from "storion/network";
 import { graphqlConfigs } from "../configs/graphqlConfigs";
-import type { AbortableContext, AbortableFn } from "storion/async";
+import type { AbortableContext, Abortable } from "storion/async";
 
 // GraphQL types
 export interface GraphqlVariables {
@@ -277,11 +277,8 @@ export interface GraphqlResponse {
 
 // Service interface - returns untyped, caller casts with .as<T>()
 export interface GraphqlService {
-  query: AbortableFn<[query: string, variables?: GraphqlVariables], unknown>;
-  mutate: AbortableFn<
-    [mutation: string, variables?: GraphqlVariables],
-    unknown
-  >;
+  query: Abortable<[query: string, variables?: GraphqlVariables], unknown>;
+  mutate: Abortable<[mutation: string, variables?: GraphqlVariables], unknown>;
 }
 
 export class GraphqlError extends Error {
@@ -367,7 +364,7 @@ const getUser = rest.get
 // The type flows correctly:
 // - rest.get returns unknown
 // - .as<User>() asserts the return type
-// - getUser: AbortableFn<[id: string], User>
+// - getUser: Abortable<[id: string], User>
 ```
 
 **Why this approach?**
