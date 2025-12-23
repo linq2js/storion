@@ -17,6 +17,7 @@ The async module provides two distinct APIs:
 | ---------------- | ----------- | ------------------------------------------ |
 | Read operations  | `*Query`    | `userQuery`, `postsQuery`                  |
 | Write operations | `*Mutation` | `createUserMutation`, `submitFormMutation` |
+| Other operations | `*Action`   | `uploadAction`, `downloadAction`           |
 
 ---
 
@@ -163,27 +164,48 @@ const userStore = store({
 });
 ```
 
-## AsyncManager Methods
+## AsyncActions Methods
 
-### dispatch()
+The object returned by `async.action()` or `async.mixin()` includes these methods:
 
-Triggers the async operation.
+### dispatch(...args)
 
-```ts
-actions.fetchProfile("user-123");
-```
-
-### wait()
-
-Gets the data, throwing if not ready (for Suspense).
+Triggers the async operation with the given arguments. Returns a cancellable promise.
 
 ```ts
-// In fresh mode: throws if pending/error
-const data = state.profile.wait();
-
-// In stale mode: returns previous data during pending
-const data = state.posts.wait();
+const promise = actions.fetchProfile("user-123");
+// Can cancel later
+promise.cancel();
 ```
+
+### refresh()
+
+Re-dispatches with the last used arguments. Returns `undefined` if no previous dispatch.
+
+```ts
+// Re-fetch with same userId
+actions.refresh();
+```
+
+### cancel()
+
+Cancels the current ongoing operation.
+
+```ts
+actions.cancel();
+```
+
+### reset()
+
+Resets the state back to idle.
+
+```ts
+actions.reset();
+```
+
+::: tip
+To extract data from async state, use the [`async.wait()`](#async-wait) utility function.
+:::
 
 ## Fresh vs Stale Mode
 
@@ -223,7 +245,7 @@ function UserProfile({ userId }: { userId: string }) {
     trigger(actions.fetchProfile, [userId], userId);
 
     // Throws promise during pending → triggers Suspense
-    return { user: state.profile.wait() };
+    return { user: async.wait(state.profile) };
   });
 
   return <div>{user.name}</div>;
@@ -245,7 +267,7 @@ function PostList({ userId }: { userId: string }) {
 
     return {
       // Always returns data (empty array initially)
-      posts: state.posts.wait(),
+      posts: async.wait(state.posts),
       isRefreshing: state.posts.status === "pending",
     };
   });
@@ -500,6 +522,236 @@ interface AsyncContext {
 ::: tip
 For creating standalone cancellable functions with wrappers (retry, timeout, caching), see [abortable()](/api/abortable).
 :::
+
+---
+
+## Utility Functions
+
+The `async` namespace provides utility functions for working with async states.
+
+### async.wait()
+
+Extract data from an async state, throwing if not ready. Designed for use with React Suspense or `async.derive()`.
+
+```ts
+function async.wait<T>(state: AsyncState<T>): T;
+```
+
+**Behavior:**
+
+| Status    | Fresh Mode                     | Stale Mode                   |
+| --------- | ------------------------------ | ---------------------------- |
+| `idle`    | ❌ Throws `AsyncNotReadyError` | ✅ Returns stale data if any |
+| `pending` | ❌ Throws promise (Suspense)   | ✅ Returns stale data if any |
+| `success` | ✅ Returns data                | ✅ Returns data              |
+| `error`   | ❌ Throws error                | ✅ Returns stale data if any |
+
+**Example:**
+
+```ts
+import { async } from "storion/async";
+
+// In fresh mode: throws if pending/error
+const userData = async.wait(state.user);
+
+// In stale mode: returns previous data during pending
+const posts = async.wait(state.posts);
+
+// With Suspense boundary
+function UserProfile() {
+  const user = useStore(({ get }) => {
+    const [state] = get(userStore);
+    return async.wait(state.user); // Suspends if pending
+  });
+  return <div>{user.name}</div>;
+}
+```
+
+### async.all()
+
+Wait for all async states to be ready. Returns a tuple of all data values.
+
+```ts
+function async.all<T extends AsyncState<any>[]>(
+  ...states: T
+): [Data<T[0]>, Data<T[1]>, ...];
+```
+
+**Example:**
+
+```ts
+// Wait for multiple async states
+const [user, posts, comments] = async.all(
+  state.user,
+  state.posts,
+  state.comments
+);
+
+// Use in derive()
+async.derive(focus("combined"), () => {
+  const [a, b, c] = async.all(state.a, state.b, state.c);
+  return { a, b, c };
+});
+```
+
+### async.race()
+
+Returns the first successful result from a record of async states.
+
+```ts
+function async.race<T extends Record<string, AsyncState<any>>>(
+  states: T
+): [key: keyof T, data: Data<T[keyof T]>];
+```
+
+**Example:**
+
+```ts
+// Race multiple data sources
+const [winner, data] = async.race({
+  cache: state.cachedData,
+  network: state.networkData,
+  fallback: state.fallbackData,
+});
+
+console.log(`First ready: ${winner}`, data);
+```
+
+### async.any()
+
+Returns the first ready data from multiple states (like `Promise.any`).
+
+```ts
+function async.any<T extends AsyncState<any>[]>(
+  ...states: T
+): Data<T[number]>;
+```
+
+**Example:**
+
+```ts
+// Get data from first available source
+const userData = async.any(
+  state.primarySource,
+  state.secondarySource,
+  state.fallbackSource
+);
+```
+
+### async.settled()
+
+Returns settled results for all states (never throws). Useful for handling mixed success/error states.
+
+```ts
+interface SettledResult<T> {
+  status: "success" | "error" | "pending" | "idle";
+  data?: T;
+  error?: Error;
+}
+
+function async.settled<T extends AsyncState<any>[]>(
+  ...states: T
+): SettledResult<Data<T[number]>>[];
+```
+
+**Example:**
+
+```ts
+// Get all results regardless of status
+const results = async.settled(state.a, state.b, state.c);
+
+for (const result of results) {
+  if (result.status === "success") {
+    console.log("Data:", result.data);
+  } else if (result.status === "error") {
+    console.log("Error:", result.error);
+    // In stale mode, may still have data
+    if (result.data) console.log("Stale data:", result.data);
+  }
+}
+```
+
+### async.delay()
+
+Creates a cancellable promise that resolves after a delay.
+
+```ts
+function async.delay<T = void>(
+  ms: number,
+  resolvedValue?: T
+): CancellablePromise<T>;
+```
+
+**Example:**
+
+```ts
+// Simple delay
+await async.delay(1000);
+
+// Delay with resolved value
+const result = await async.delay(500, "done");
+
+// Cancellable delay
+const delayed = async.delay(5000);
+delayed.cancel(); // Cancels the delay
+```
+
+### async.derive()
+
+Derive an async state from other async states using a synchronous computation. The computation function uses `async.wait()` to extract data, which automatically handles pending states.
+
+```ts
+function async.derive<T>(
+  focus: Focus<AsyncState<T>>,
+  computeFn: () => T
+): VoidFunction; // Returns dispose function
+```
+
+**Key behaviors:**
+
+- If `computeFn` throws a promise (via `async.wait`), sets focus to pending
+- If `computeFn` throws an error, sets focus to error state
+- If `computeFn` returns a value, sets focus to success state
+- Must be synchronous - do not use async/await inside
+
+**Example:**
+
+```ts
+// Basic derivation
+async.derive(focus("fullName"), () => {
+  const user = async.wait(state.user);
+  return `${user.firstName} ${user.lastName}`;
+});
+
+// Derive from multiple sources
+async.derive(focus("summary"), () => {
+  const [user, posts] = async.all(state.user, state.posts);
+  return {
+    userName: user.name,
+    postCount: posts.length,
+  };
+});
+
+// Conditional dependencies
+async.derive(focus("content"), () => {
+  const type = async.wait(state.contentType);
+  if (type === "article") {
+    return async.wait(state.article);
+  } else {
+    return async.wait(state.video);
+  }
+});
+
+// Cleanup when done
+const dispose = async.derive(focus("derived"), () => {
+  return async.wait(state.source) * 2;
+});
+
+// Later: stop the derivation
+dispose();
+```
+
+---
 
 ## Component-Local Async (Mixin Pattern)
 

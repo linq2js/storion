@@ -93,26 +93,7 @@ function Counter() {
 }
 ```
 
-## Async State
-
-```tsx
-import { async } from "storion/async";
-
-const userStore = store({
-  name: "user",
-  state: { user: async.fresh<User>() },
-  setup({ focus }) {
-    const userQuery = async.action(focus("user"), async (ctx, id: string) => {
-      const res = await fetch(`/api/users/${id}`, { signal: ctx.signal });
-      return res.json();
-    });
-
-    return { fetchUser: userQuery.dispatch };
-  },
-});
-```
-
-## Learn More
+## Documentation
 
 📚 **[Full Documentation](https://linq2js.github.io/storion/)** — Guides, examples, and API reference
 
@@ -121,6 +102,33 @@ const userStore = store({
 - [Async State](https://linq2js.github.io/storion/guide/async.html)
 - [API Reference](https://linq2js.github.io/storion/api/store.html)
 - [Live Demos](https://linq2js.github.io/storion/demos.html)
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [`storion`](./packages/storion) | Core library |
+| [`docs`](./packages/docs) | Documentation site |
+| [`feature-showcase`](./packages/feature-showcase) | Feature demo app |
+| [`pokemon`](./packages/pokemon) | Pokemon demo app |
+| [`chat`](./packages/chat) | Chat demo app |
+| [`expense-manager`](./packages/expense-manager) | Expense manager demo |
+
+## Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build core library
+pnpm --filter storion build
+
+# Run tests
+pnpm --filter storion test
+
+# Start docs dev server
+pnpm --filter storion-docs dev
+```
 
 ## License
 
@@ -131,3 +139,4 @@ MIT © [linq2js](https://github.com/linq2js)
 <p align="center">
   <sub>Built with ❤️ for the React community</sub>
 </p>
+

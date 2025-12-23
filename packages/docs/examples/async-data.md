@@ -112,8 +112,8 @@ function UserProfileContent({ userId }: { userId: string }) {
     
     trigger(actions.fetchUser, [userId], userId);
 
-    // wait() throws promise during pending → Suspense catches it
-    return { user: state.currentUser.wait() };
+    // async.wait() throws promise during pending → Suspense catches it
+    return { user: async.wait(state.currentUser) };
   });
 
   return (
@@ -144,8 +144,8 @@ function UserList() {
     trigger(actions.fetchUsers, []);
 
     return {
-      // wait() in stale mode returns previous data during refresh
-      users: state.users.wait(),
+      // async.wait() in stale mode returns previous data during refresh
+      users: async.wait(state.users),
       isRefreshing: state.users.status === 'pending',
       refresh: actions.fetchUsers,
     };
