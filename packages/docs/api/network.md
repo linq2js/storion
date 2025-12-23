@@ -14,9 +14,28 @@ import {
 } from "storion/network";
 ```
 
+## Architecture
+
+The network module separates concerns:
+
+- **`networkService`** — Owns all logic (online detection, waiting, retry wrapper)
+- **`networkStore`** — Provides reactive state for React components (syncs from service)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  networkService (owns logic)                                     │
+│  - isOnline(), subscribe(), waitForOnline(), offlineRetry()     │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓ syncs state
+┌─────────────────────────────────────────────────────────────────┐
+│  networkStore (reactive state for React)                         │
+│  - state.online                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ## networkStore
 
-Reactive store for network connectivity state.
+Reactive store for network connectivity state in React components.
 
 ### State
 
@@ -27,32 +46,10 @@ interface NetworkState {
 }
 ```
 
-### Actions
-
-```ts
-interface NetworkActions {
-  /** Returns a promise that resolves when online */
-  waitForOnline(): Promise<void>;
-}
-```
-
 ### Usage
 
-```ts
-// In store setup
-setup({ get }) {
-  const [network, networkActions] = get(networkStore);
-
-  // Check current status
-  if (network.online) {
-    // Online
-  }
-
-  // Wait for connectivity
-  await networkActions.waitForOnline();
-}
-
-// In React component
+```tsx
+// In React component - use store for reactive UI
 function NetworkIndicator() {
   const { online } = useStore(({ get }) => {
     const [state] = get(networkStore);
@@ -61,21 +58,42 @@ function NetworkIndicator() {
 
   return online ? "🟢 Online" : "🔴 Offline";
 }
+
+// Check status in store setup
+setup({ get }) {
+  const [network] = get(networkStore);
+  if (network.online) {
+    // ...
+  }
+}
 ```
+
+::: tip
+For logic like `waitForOnline()` and `offlineRetry()`, use `networkService` directly.
+:::
 
 ## networkService
 
-Service that provides network-aware retry wrapper.
+Service that provides network detection and retry logic.
 
 ### Interface
 
 ```ts
 interface NetworkService {
-  /**
-   * AbortableWrapper that retries on network reconnection.
-   * If a network error occurs while offline, waits for reconnection and retries once.
-   */
-  offlineRetry<TArgs extends any[], TResult>(): AbortableWrapper<TArgs, TResult>;
+  /** Check if currently online */
+  isOnline(): boolean;
+
+  /** Subscribe to online/offline state changes */
+  subscribe(listener: (online: boolean) => void): VoidFunction;
+
+  /** Returns a promise that resolves when online */
+  waitForOnline(): Promise<void>;
+
+  /** AbortableWrapper that retries on network reconnection */
+  offlineRetry(): IdentityWrapper;
+
+  /** Cleanup subscriptions */
+  dispose(): void;
 }
 ```
 
@@ -87,6 +105,14 @@ import { networkService } from "storion/network";
 
 setup({ get, focus }) {
   const network = get(networkService);
+
+  // Check online status
+  if (network.isOnline()) {
+    // ...
+  }
+
+  // Wait for connectivity
+  await network.waitForOnline();
 
   // Define abortable function
   const fetchUsers = abortable(async ({ signal }) => {
@@ -106,6 +132,23 @@ setup({ get, focus }) {
 }
 ```
 
+### waitForOnline()
+
+Returns a promise that resolves when online. If already online, resolves immediately.
+
+```ts
+const network = get(networkService);
+
+// Wait before making request
+await network.waitForOnline();
+await uploadData();
+
+// Multiple waiters share the same promise
+const promise1 = network.waitForOnline();
+const promise2 = network.waitForOnline();
+// promise1 === promise2
+```
+
 ### offlineRetry()
 
 Returns an `AbortableWrapper` for use with `.use()` pattern.
@@ -122,7 +165,7 @@ const network = get(networkService);
 // Basic usage
 const robustFetch = fetchData.use(network.offlineRetry());
 
-// Combined with retry wrapper
+// Combined with retry wrapper (recommended)
 const veryRobust = fetchData
   .use(retry(3))              // Retry on any error up to 3 times
   .use(network.offlineRetry()); // If still failing and offline, wait for reconnection

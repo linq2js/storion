@@ -1,35 +1,35 @@
 /**
  * Reactive network state store.
+ *
+ * This store consumes `networkService` to provide reactive state for React components.
+ * The actual logic lives in `networkService` - this store only syncs the state.
  */
 
 import { store } from "../core/store";
-import { pingService, onlineService } from "./services";
+import { networkService } from "./retry";
 
 /**
  * Reactive network state store.
  *
- * Consumes `onlineService` and `pingService` to provide:
- * - `state.online`: reactive boolean for current connectivity
- * - `actions.waitForOnline()`: promise that resolves when online
+ * Provides reactive `state.online` for UI components.
+ * For logic (waitForOnline, offlineRetry), use `networkService` directly.
  *
  * @example
  * ```ts
- * // Check current status
- * const [network] = get(networkStore);
- * if (network.online) { ... }
- *
- * // Wait for connectivity in retry
- * async.action(focus('data'), handler, {
- *   retry: () => actions.waitForOnline(),
- * });
- *
- * // React component
+ * // React component - use store for reactive state
  * function NetworkIndicator() {
  *   const { online } = useStore(({ get }) => {
  *     const [state] = get(networkStore);
  *     return { online: state.online };
  *   });
  *   return online ? '🟢 Online' : '🔴 Offline';
+ * }
+ *
+ * // In store setup - use service for logic
+ * setup({ get, focus }) {
+ *   const network = get(networkService);
+ *   await network.waitForOnline();
+ *   const robustFetch = fetchUsers.use(network.offlineRetry());
  * }
  * ```
  */
@@ -40,61 +40,20 @@ export const networkStore = store({
     online: true,
   },
   setup({ state, get, onDispose }) {
-    // Get services (factories return instance directly, not tuple)
-    const { isOnline, subscribe } = get(onlineService);
-    const { ping } = get(pingService);
+    // Get the network service (owns the logic)
+    const network = get(networkService);
 
-    // Promise for waitForOnline
-    let currentPromise: Promise<void> | undefined;
-    let currentResolve: (() => void) | undefined;
+    // Initialize with current status from service
+    state.online = network.isOnline();
 
-    // Initialize with current status
-    state.online = isOnline();
-
-    // Subscribe to online/offline events
+    // Sync state when service detects changes
     onDispose(
-      subscribe(async (online: boolean) => {
-        if (online) {
-          // Verify with ping when browser says online
-          state.online = await ping();
-        } else {
-          state.online = false;
-        }
-
-        // Resolve waiting promise when online
-        if (state.online && currentResolve) {
-          currentResolve();
-          currentPromise = undefined;
-          currentResolve = undefined;
-        }
+      network.subscribe((online: boolean) => {
+        state.online = online;
       })
     );
 
-    /**
-     * Returns a promise that resolves when online.
-     * If already online, resolves immediately.
-     *
-     * Useful with async retry:
-     * ```ts
-     * async.action(focus('data'), handler, {
-     *   retry: () => actions.waitForOnline(),
-     * });
-     * ```
-     */
-    const waitForOnline = (): Promise<void> => {
-      if (state.online) return Promise.resolve();
-
-      if (!currentPromise) {
-        currentPromise = new Promise((resolve) => {
-          currentResolve = resolve;
-        });
-      }
-
-      return currentPromise;
-    };
-
-    return {
-      waitForOnline,
-    };
+    // No actions needed - use networkService directly for logic
+    return {};
   },
 });

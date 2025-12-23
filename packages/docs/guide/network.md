@@ -52,15 +52,17 @@ function NetworkBanner() {
 Check connectivity before making requests:
 
 ```ts
+import { networkService } from "storion/network";
+
 const dataStore = store({
   name: "data",
   state: { items: async.fresh<Item[]>() },
   setup({ get, focus }) {
-    const [network] = get(networkStore);
+    const network = get(networkService);
 
     const itemsQuery = async.action(focus("items"), async (ctx) => {
       // Early exit if offline
-      if (!network.online) {
+      if (!network.isOnline()) {
         throw new Error("No network connection");
       }
 
@@ -75,19 +77,21 @@ const dataStore = store({
 
 ## Waiting for Connectivity
 
-Use `waitForOnline()` to pause execution until the network is available:
+Use `networkService.waitForOnline()` to pause execution until the network is available:
 
 ```ts
+import { networkService } from "storion/network";
+
 const syncStore = store({
   name: "sync",
   state: { pendingChanges: [] },
   setup({ state, get }) {
-    const [, networkActions] = get(networkStore);
+    const network = get(networkService);
 
     return {
       syncPendingChanges: async () => {
         // Wait until we're online
-        await networkActions.waitForOnline();
+        await network.waitForOnline();
 
         // Now safe to sync
         for (const change of state.pendingChanges) {

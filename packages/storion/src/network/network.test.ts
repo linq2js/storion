@@ -88,7 +88,7 @@ describe("network", () => {
   });
 
   describe("networkStore", () => {
-    it("should initialize with online status", () => {
+    it("should initialize with online status from service", () => {
       // Override onlineService to control initial state
       mockContainer.set(onlineService, () => ({
         isOnline: () => true,
@@ -99,7 +99,7 @@ describe("network", () => {
       expect(instance.state.online).toBe(true);
     });
 
-    it("should update online state when event fires", async () => {
+    it("should sync online state from service", async () => {
       let capturedListener: ((online: boolean) => void) | null = null;
 
       mockContainer.set(onlineService, () => ({
@@ -122,6 +122,8 @@ describe("network", () => {
 
       // Simulate offline
       capturedListener!(false);
+      // Wait for service to update and store to sync
+      await new Promise((r) => setTimeout(r, 10));
       expect(instance.state.online).toBe(false);
 
       // Simulate online
@@ -156,17 +158,31 @@ describe("network", () => {
       // Should be offline because ping failed
       expect(instance.state.online).toBe(false);
     });
+  });
 
-    describe("waitForOnline", () => {
+  describe("networkService", () => {
+    describe("isOnline()", () => {
+      it("should return current online status", () => {
+        mockContainer.set(onlineService, () => ({
+          isOnline: () => true,
+          subscribe: () => () => {},
+        }));
+
+        const network = mockContainer.get(networkService);
+        expect(network.isOnline()).toBe(true);
+      });
+    });
+
+    describe("waitForOnline()", () => {
       it("should resolve immediately if already online", async () => {
         mockContainer.set(onlineService, () => ({
           isOnline: () => true,
           subscribe: () => () => {},
         }));
 
-        const instance = mockContainer.get(networkStore);
+        const network = mockContainer.get(networkService);
         const start = Date.now();
-        await instance.actions.waitForOnline();
+        await network.waitForOnline();
         const elapsed = Date.now() - start;
         expect(elapsed).toBeLessThan(50);
       });
@@ -186,11 +202,11 @@ describe("network", () => {
           ping: async () => true,
         }));
 
-        const instance = mockContainer.get(networkStore);
-        expect(instance.state.online).toBe(false);
+        const network = mockContainer.get(networkService);
+        expect(network.isOnline()).toBe(false);
 
         let resolved = false;
-        const promise = instance.actions.waitForOnline().then(() => {
+        const promise = network.waitForOnline().then(() => {
           resolved = true;
         });
 
@@ -221,11 +237,11 @@ describe("network", () => {
           ping: async () => true,
         }));
 
-        const instance = mockContainer.get(networkStore);
+        const network = mockContainer.get(networkService);
 
         // Multiple waiters
-        const promise1 = instance.actions.waitForOnline();
-        const promise2 = instance.actions.waitForOnline();
+        const promise1 = network.waitForOnline();
+        const promise2 = network.waitForOnline();
 
         // Should be the same promise
         expect(promise1).toBe(promise2);
@@ -235,9 +251,7 @@ describe("network", () => {
         await Promise.all([promise1, promise2]);
       });
     });
-  });
 
-  describe("networkService", () => {
     describe("offlineRetry()", () => {
       it("should execute successfully when online", async () => {
         mockContainer.set(onlineService, () => ({
@@ -334,4 +348,3 @@ describe("network", () => {
     });
   });
 });
-
