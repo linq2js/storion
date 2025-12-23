@@ -674,6 +674,329 @@ describe("focus()", () => {
       });
     });
   });
+
+  describe("dirty() method", () => {
+    it("should return false when value has not changed", () => {
+      const userStore = store({
+        state: {
+          profile: { name: "John" },
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("profile.name");
+          return {
+            isDirty: () => focus.dirty(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.actions.isDirty()).toBe(false);
+    });
+
+    it("should return true when value has changed", () => {
+      const userStore = store({
+        state: {
+          profile: { name: "John" },
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("profile.name");
+          const [, setName] = focus;
+          return {
+            setName,
+            isDirty: () => focus.dirty(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.actions.isDirty()).toBe(false);
+
+      instance.actions.setName("Jane");
+
+      expect(instance.actions.isDirty()).toBe(true);
+    });
+
+    it("should return false after setting value back to initial", () => {
+      const userStore = store({
+        state: {
+          count: 10,
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("count");
+          const [, setCount] = focus;
+          return {
+            setCount,
+            isDirty: () => focus.dirty(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions.setCount(20);
+      expect(instance.actions.isDirty()).toBe(true);
+
+      instance.actions.setCount(10);
+      expect(instance.actions.isDirty()).toBe(false);
+    });
+
+    it("should use custom equality for dirty check", () => {
+      const userStore = store({
+        state: {
+          items: [1, 2, 3],
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("items", {
+            equality: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+          });
+          const [, setItems] = focus;
+          return {
+            setItems,
+            isDirty: () => focus.dirty(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      // Set to equivalent array (different reference but same content)
+      instance.actions.setItems([1, 2, 3]);
+      expect(instance.actions.isDirty()).toBe(false);
+
+      // Set to different array
+      instance.actions.setItems([1, 2, 3, 4]);
+      expect(instance.actions.isDirty()).toBe(true);
+    });
+
+    it("should work with nested paths", () => {
+      const userStore = store({
+        state: {
+          user: {
+            profile: {
+              address: {
+                city: "NYC",
+              },
+            },
+          },
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("user.profile.address.city");
+          const [, setCity] = focus;
+          return {
+            setCity,
+            isDirty: () => focus.dirty(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.actions.isDirty()).toBe(false);
+
+      instance.actions.setCity("LA");
+      expect(instance.actions.isDirty()).toBe(true);
+    });
+  });
+
+  describe("reset() method", () => {
+    it("should reset value to initial state", () => {
+      const userStore = store({
+        state: {
+          profile: { name: "John" },
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("profile.name");
+          const [getName, setName] = focus;
+          return {
+            getName,
+            setName,
+            reset: () => focus.reset(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions.setName("Jane");
+      expect(instance.actions.getName()).toBe("Jane");
+
+      instance.actions.reset();
+      expect(instance.actions.getName()).toBe("John");
+    });
+
+    it("should make dirty() return false after reset", () => {
+      const userStore = store({
+        state: {
+          count: 5,
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("count");
+          const [getCount, setCount] = focus;
+          return {
+            getCount,
+            setCount,
+            isDirty: () => focus.dirty(),
+            reset: () => focus.reset(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions.setCount(100);
+      expect(instance.actions.isDirty()).toBe(true);
+
+      instance.actions.reset();
+      expect(instance.actions.isDirty()).toBe(false);
+      expect(instance.actions.getCount()).toBe(5);
+    });
+
+    it("should work with nested paths", () => {
+      const userStore = store({
+        state: {
+          user: {
+            address: {
+              city: "NYC",
+              zip: "10001",
+            },
+          },
+        },
+        setup: (ctx) => {
+          const cityFocus = ctx.focus("user.address.city");
+          const [getCity, setCity] = cityFocus;
+          return {
+            getCity,
+            setCity,
+            resetCity: () => cityFocus.reset(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions.setCity("LA");
+      expect(instance.actions.getCity()).toBe("LA");
+
+      instance.actions.resetCity();
+      expect(instance.actions.getCity()).toBe("NYC");
+      // Other fields should not be affected
+      expect(instance.state.user.address.zip).toBe("10001");
+    });
+
+    it("should work with object values", () => {
+      const userStore = store({
+        state: {
+          config: {
+            settings: { theme: "light", fontSize: 14 },
+          },
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("config.settings");
+          const [getSettings, setSettings] = focus;
+          return {
+            getSettings,
+            setSettings,
+            reset: () => focus.reset(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions.setSettings({ theme: "dark", fontSize: 18 });
+      expect(instance.actions.getSettings()).toEqual({
+        theme: "dark",
+        fontSize: 18,
+      });
+
+      instance.actions.reset();
+      expect(instance.actions.getSettings()).toEqual({
+        theme: "light",
+        fontSize: 14,
+      });
+    });
+
+    it("should trigger on() listener when resetting", () => {
+      const userStore = store({
+        state: {
+          value: "initial",
+        },
+        setup: (ctx) => {
+          const focus = ctx.focus("value");
+          const [, setValue] = focus;
+          return {
+            setValue,
+            reset: () => focus.reset(),
+            onValueChange: (
+              cb: (e: { next: string; prev: string }) => void
+            ) => focus.on(cb),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions.setValue("changed");
+
+      const listener = vi.fn();
+      instance.actions.onValueChange(listener);
+
+      instance.actions.reset();
+
+      expect(listener).toHaveBeenCalledWith({
+        next: "initial",
+        prev: "changed",
+      });
+    });
+
+    it("should work with child focus via to()", () => {
+      const userStore = store({
+        state: {
+          user: {
+            profile: {
+              name: "John",
+              age: 25,
+            },
+          },
+        },
+        setup: (ctx) => {
+          const userFocus = ctx.focus("user");
+          const nameFocus = userFocus.to<string>("profile.name");
+          const [getName, setName] = nameFocus;
+
+          return {
+            getName,
+            setName,
+            resetName: () => nameFocus.reset(),
+            isNameDirty: () => nameFocus.dirty(),
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions.setName("Jane");
+      expect(instance.actions.getName()).toBe("Jane");
+      expect(instance.actions.isNameDirty()).toBe(true);
+
+      instance.actions.resetName();
+      expect(instance.actions.getName()).toBe("John");
+      expect(instance.actions.isNameDirty()).toBe(false);
+    });
+  });
 });
 
 describe("onDispose()", () => {

@@ -238,10 +238,31 @@ export type Focus<TValue> = [
    * const addressFocus = userFocus.to("address");
    * const cityFocus = userFocus.to("address.city");
    */
+  to<TPath extends StatePath<NonNullable<TValue>>>(
+    relativePath: TPath,
+    options?: FocusOptions<PathValue<NonNullable<TValue>, TPath>>
+  ): Focus<PathValue<NonNullable<TValue>, TPath>>;
+
+  /**
+   * Create a new Focus with manual type specification.
+   * Use when the automatic path inference doesn't work (e.g., dynamic paths).
+   */
   to<TChild>(
     relativePath: string,
     options?: FocusOptions<TChild>
   ): Focus<TChild>;
+
+  /**
+   * Check if the focused path is dirty.
+   *
+   * @returns True if the focused path is dirty, false otherwise
+   */
+  dirty(): boolean;
+
+  /**
+   * Reset the focused path to its initial value.
+   */
+  reset(): void;
 };
 
 // =============================================================================
