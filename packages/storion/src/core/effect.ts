@@ -7,7 +7,6 @@
 
 import type { Emitter } from "../emitter";
 import { emitter } from "../emitter";
-import { isPromiseLike } from "../utils/isPromiseLike";
 import {
   withHooks,
   getHooks,
