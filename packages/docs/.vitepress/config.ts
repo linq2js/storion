@@ -111,7 +111,10 @@ export default defineConfig({
         },
         {
           text: "Async",
-          items: [{ text: "async()", link: "/api/async" }],
+          items: [
+            { text: "async()", link: "/api/async" },
+            { text: "abortable()", link: "/api/abortable" },
+          ],
         },
         {
           text: "Network",
