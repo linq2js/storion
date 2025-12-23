@@ -46,6 +46,112 @@ function Counter() {
 
 No manual dependency arrays. No forgotten selectors. Just natural code.
 
+## How Storion Differs from Other Libraries
+
+On the surface, Storion's `useStore` looks similar to Redux or Zustand selectors. The key difference is **what gets tracked**.
+
+### Redux/Zustand: Track Selector Return Value
+
+```ts
+// Zustand
+const name = useStore((state) => state.user.name);
+//                              ^^^^^^^^^^^^^^^^
+//                              Compares THIS return value with ===
+```
+
+The selector runs on **every store change**, compares the return value, and re-renders if different:
+
+```ts
+// ❌ Problem: Returns new object every time
+const user = useStore((state) => ({
+  name: state.user.name,
+  email: state.user.email,
+}));
+// Re-renders on ANY store change because {} !== {}
+
+// Fix requires manual shallow comparison
+import { shallow } from 'zustand/shallow';
+const user = useStore(
+  (state) => ({ name: state.user.name, email: state.user.email }),
+  shallow // Must remember to add this!
+);
+```
+
+### Storion: Track Property Access via Proxy
+
+```ts
+// Storion
+const { name, email } = useStore(({ get }) => {
+  const [state] = get(userStore);
+  //    ^^^^^ This is a Proxy that records every property you READ
+  
+  return { 
+    name: state.name,   // Proxy records: "accessed 'name'"
+    email: state.email, // Proxy records: "accessed 'email'"
+  };
+});
+// Only re-renders when name OR email changes
+// New object in return doesn't matter!
+```
+
+The Proxy records which properties you **accessed**, not what you returned.
+
+### Why This Matters
+
+| Scenario | Redux/Zustand | Storion |
+|----------|---------------|---------|
+| Return new object | ❌ Re-renders (need `shallow`) | ✅ Works |
+| Computed values | ❌ Need memoization | ✅ Works |
+| Conditional access | ❌ Manual handling | ✅ Automatic |
+| Multiple properties | ❌ Need `shallow` or multiple hooks | ✅ Works |
+
+**Computed values:**
+
+```ts
+// Zustand - needs useMemo or reselect
+const fullName = useStore((state) => 
+  `${state.user.firstName} ${state.user.lastName}` // Runs on every change!
+);
+
+// Storion - just works
+const { fullName } = useStore(({ get }) => {
+  const [state] = get(userStore);
+  return { fullName: `${state.firstName} ${state.lastName}` };
+  // Only runs when firstName or lastName changes
+});
+```
+
+**Conditional access:**
+
+```ts
+// Zustand - tricky to get right
+const data = useStore((state) => 
+  state.isAdmin ? state.adminData : state.publicData
+);
+// Always subscribed to isAdmin, adminData, AND publicData
+
+// Storion - tracks exactly what was accessed
+const { data } = useStore(({ get }) => {
+  const [state] = get(userStore);
+  if (state.isAdmin) {
+    return { data: state.adminData }; // Tracks: isAdmin, adminData
+  }
+  return { data: state.publicData };  // Tracks: isAdmin, publicData
+});
+```
+
+### The Mental Model
+
+```
+Redux/Zustand:
+  "Tell me exactly what you want, I'll check if it changed"
+  → You must be precise, or face extra re-renders
+  
+Storion:
+  "Just use state naturally, I'll watch what you touch"
+  → Write natural code, get optimal updates
+```
+
 ## Key Features
 
 ### 🎯 Auto-tracking

@@ -133,7 +133,49 @@ const userStore = store({
 });
 ```
 
-## Behavior Comparison
+## Accessing Async State
+
+Both modes give you the same async state shape:
+
+```ts
+interface AsyncState<T> {
+  status: "idle" | "pending" | "success" | "error";
+  data: T | undefined; // The resolved data
+  error: Error | undefined; // The error if status is 'error'
+  mode: "fresh" | "stale"; // Which mode this state uses
+}
+```
+
+You can access this directly and check the status manually (works the same for both modes):
+
+```tsx
+const { user } = useStore(({ get }) => {
+  const [state] = get(userStore);
+  return { user: state.user }; // AsyncState<User>
+});
+
+// Check status manually - same for Fresh and Stale
+if (user.status === "pending") return <Spinner />;
+if (user.status === "error") return <Error error={user.error} />;
+return <div>{user.data?.name}</div>;
+```
+
+### Using async.wait() to Extract Data
+
+`async.wait()` extracts the data from an async state, but behaves differently based on the mode:
+
+```tsx
+// With async.wait() - behavior depends on mode
+const { user } = useStore(({ get }) => {
+  const [state] = get(userStore);
+  return { user: async.wait(state.user) }; // User (not AsyncState<User>)
+});
+
+// No status checks needed - async.wait() handles it
+return <div>{user.name}</div>;
+```
+
+**`async.wait()` Behavior by Mode:**
 
 | Status    | Fresh Mode                     | Stale Mode               |
 | --------- | ------------------------------ | ------------------------ |
@@ -141,6 +183,10 @@ const userStore = store({
 | `pending` | ❌ Throws promise (Suspense)   | ✅ Returns previous data |
 | `success` | ✅ Returns data                | ✅ Returns data          |
 | `error`   | ❌ Throws error                | ✅ Returns previous data |
+
+**Fresh mode** is designed for Suspense - throwing promises lets React show fallback UI.
+
+**Stale mode** never throws - it always returns the best available data (current, previous, or initial).
 
 ## Using Async State in Components
 
@@ -221,19 +267,6 @@ function UserList() {
       ))}
     </div>
   );
-}
-```
-
-## Async State Shape
-
-Every async state has this structure:
-
-```ts
-interface AsyncState<T> {
-  status: "idle" | "pending" | "success" | "error";
-  data: T | undefined; // The resolved data
-  error: Error | undefined; // The error if status is 'error'
-  mode: "fresh" | "stale"; // Which mode this state uses
 }
 ```
 
