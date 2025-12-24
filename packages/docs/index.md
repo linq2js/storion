@@ -255,10 +255,10 @@ These features are covered in the [Getting Started](/guide/getting-started) guid
 
 See Storion in action:
 
-- 🎮 **[Feature Showcase](/demos/feature-showcase/)** — All major features demonstrated
-- 🐾 **[Pokemon App](/demos/pokemon/)** — API integration with caching
-- 💬 **[Chat App](/demos/chat/)** — Real-time with IndexedDB persistence
-- 💰 **[Expense Manager](/demos/expense-manager/)** — Clean architecture example
+- 🎮 **Feature Showcase** — All major features demonstrated
+- 🐾 **Pokemon App** — API integration with caching
+- 💬 **Chat App** — Real-time with IndexedDB persistence
+- 💰 **Expense Manager** — Clean architecture example
 
 [View All Demos →](/demos)
 
