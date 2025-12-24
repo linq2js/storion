@@ -304,11 +304,11 @@ export interface AsyncRetryOptions {
  * use the `use()` pattern with wrapper utilities:
  *
  * ```ts
- * import { retry, onError } from "storion/async";
+ * import { retry, catchError } from "storion/async";
  *
  * const userQuery = async.action(
  *   focus("user"),
- *   userService.getUser.use(retry(3)).use(onError(console.error))
+ *   userService.getUser.use(retry(3)).use(catchError(console.error))
  * );
  * ```
  */

@@ -10,11 +10,11 @@
  *
  * Use wrappers for cross-cutting concerns:
  * ```ts
- * import { retry, onError, timeout } from "storion/async";
+ * import { retry, catchError, timeout } from "storion/async";
  *
  * const getUser = userService.getUser
  *   .use(retry(3))
- *   .use(onError(console.error))
+ *   .use(catchError(console.error))
  *   .use(timeout(5000));
  * ```
  */
@@ -38,7 +38,15 @@ export {
   logging,
   debounce,
   throttle,
+  fallback,
+  cache,
+  rateLimit,
+  circuitBreaker,
+  map,
   type RetryOptions,
+  type CacheOptions,
+  type RateLimitOptions,
+  type CircuitBreakerOptions,
 } from "./wrappers";
 
 export {

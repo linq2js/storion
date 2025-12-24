@@ -4,11 +4,11 @@
  * Use with the `.use()` method to compose behavior:
  *
  * ```ts
- * import { retry, onError, timeout, logging } from "storion/async";
+ * import { retry, catchError, timeout, logging } from "storion/async";
  *
  * const getUser = userService.getUser
  *   .use(retry(3))
- *   .use(onError(console.error))
+ *   .use(catchError(console.error))
  *   .use(timeout(5000))
  *   .use(logging("getUser"));
  * ```

@@ -352,26 +352,7 @@ const getUserWithPosts = abortable(async ({ signal, safe }, userId: string) => {
 });
 ```
 
-## Utility Functions
-
-### abortableDelay()
-
-Create a delay that respects abort signal:
-
-```ts
-import { abortableDelay } from "storion/async";
-
-const myFn = abortable(async ({ signal }) => {
-  console.log("Starting...");
-  await abortableDelay(1000, signal); // Respects abort
-  console.log("After 1 second");
-});
-
-const result = myFn();
-result.abort(); // Cancels the delay
-```
-
-### Using Promise.all/Promise.race with safe()
+## Using Promise.all/Promise.race with safe()
 
 Use `ctx.safe()` to wrap `Promise.all()` or `Promise.race()` - it respects abort signal and allows pausing:
 
@@ -435,9 +416,9 @@ import {
   abortable,
   retry,
   timeout,
-  fallback,
-  cache,
   circuitBreaker,
+  cache,
+  fallback,
   logging,
 } from "storion/async";
 
@@ -473,7 +454,7 @@ const userQuery = async.action(focus("user"), robustGetUser);
 | `cache()`          | Memoize results with TTL               |
 | `rateLimit()`      | Queue excess calls                     |
 | `circuitBreaker()` | Fail fast after repeated errors        |
-| `map()`            | Simplified arg/result transformation   |
+| `map()`            | Transform args/result                  |
 
 ## Wrapper Execution Order
 
@@ -823,7 +804,7 @@ Aborted operations (via `ctx.signal`) are **not** counted as failures.
 
 ## map()
 
-Create a simplified wrapper for argument/result transformations. Unlike regular wrappers, `map()` hides the `ctx` parameter, providing a simple `next(...args)` function.
+Transform arguments or results with a simplified wrapper that hides `ctx`:
 
 ```ts
 import { map } from "storion/async";
@@ -841,14 +822,6 @@ const getUserByEmail = getUser.use(
   map(async (next, email: string) => {
     const id = await lookupUserId(email);
     return next(id);
-  })
-);
-
-// Combine multiple calls
-const getUserWithPosts = getUser.use(
-  map(async (next, id: string) => {
-    const [user, posts] = await Promise.all([next(id), fetchPosts(id)]);
-    return { ...user, posts };
   })
 );
 ```
