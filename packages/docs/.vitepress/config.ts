@@ -132,7 +132,6 @@ export default defineConfig({
             { text: "Counter", link: "/examples/counter" },
             { text: "Todo App", link: "/examples/todo" },
             { text: "Async Data", link: "/examples/async-data" },
-            { text: "Form Validation", link: "/examples/form" },
           ],
         },
       ],

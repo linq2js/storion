@@ -15,9 +15,6 @@ A complete todo application with filtering and persistence.
 ### [Async Data](/examples/async-data)
 Fetching data with loading states and error handling.
 
-### [Form Validation](/examples/form)
-Real-time form validation with computed values.
-
 ## Live Demos
 
 Check out our live demo applications:
