@@ -24,6 +24,9 @@ function watchStorion() {
 export default defineConfig({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     plugins: [react(), watchStorion()],
+    define: {
+        __DEV__: JSON.stringify(true),
+    },
     resolve: {
         alias: [
             // More specific paths first
