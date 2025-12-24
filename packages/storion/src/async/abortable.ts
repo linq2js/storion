@@ -266,11 +266,12 @@ export type AbortableWrapper<
 ) => AbortableFn<TNewArgs, TNewResult, TNewYield>;
 
 /**
- * Identity wrapper that preserves input types.
+ * Identity wrapper that preserves all input types including TYield.
  */
-export type IdentityWrapper<TYield extends void | object = void> = <
+export type IdentityWrapper = <
   TArgs extends any[],
-  TResult
+  TResult,
+  TYield extends void | object = void
 >(
   next: AbortableFn<TArgs, TResult, TYield>
 ) => AbortableFn<TArgs, TResult, TYield>;

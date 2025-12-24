@@ -692,5 +692,53 @@ describe("wrappers", () => {
       expect(callCount).toBe(2); // Only 2 actual calls
     });
   });
+
+  describe("TYield preservation", () => {
+    it("should preserve TYield type through wrapper chain (compile-time check)", async () => {
+      type Events = { step: number };
+
+      const workflow = abortable<[], string, Events>(async ({ take }) => {
+        const step1 = await take("step");
+        return `completed: ${step1}`;
+      });
+
+      // Apply wrappers - TYield type should be preserved
+      const wrappedWorkflow = workflow.use(retry(2));
+
+      // Type check: result should have send() with correct signature
+      const result = wrappedWorkflow();
+
+      // This should compile - send() should accept "step" with number
+      // @ts-expect-error - "invalid" is not a valid event key
+      result.send("invalid", 10);
+
+      // Abort and catch to clean up
+      result.abort();
+      await result.catch(() => {});
+    });
+
+    it("should preserve TYield through multiple wrappers", async () => {
+      type MyEvents = { data: string; done: boolean };
+
+      const fn = abortable<[string], number, MyEvents>(async ({ take }, id) => {
+        const data = await take("data");
+        const done = await take("done");
+        return done ? data.length : 0;
+      });
+
+      // Chain multiple wrappers
+      const wrapped = fn.use(retry(3)).use(catchError(() => {}));
+
+      const result = wrapped("test-id");
+
+      // Type check: send signature should match MyEvents
+      // @ts-expect-error - wrong value type for "data" event
+      result.send("data", 123);
+
+      // Abort and catch to clean up
+      result.abort();
+      await result.catch(() => {});
+    });
+  });
 });
 

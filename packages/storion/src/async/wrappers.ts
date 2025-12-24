@@ -167,7 +167,7 @@ export function retry(
  * ```
  */
 export function catchError(
-  callback: (error: Error, ctx: AbortableContext, ...args: any[]) => void
+  callback: (error: Error, ctx: AbortableContext<any>, ...args: any[]) => void
 ): IdentityWrapper {
   return (next) =>
     async (ctx, ...args) => {
@@ -426,7 +426,7 @@ export function rateLimit(options: RateLimitOptions): IdentityWrapper {
   const queue: Array<{
     resolve: (value: any) => void;
     reject: (error: Error) => void;
-    ctx: AbortableContext;
+    ctx: AbortableContext<any>;
     args: any[];
     next: Function;
   }> = [];
@@ -632,9 +632,9 @@ export function map<
     next: (...args: NoInfer<TArgs>) => Promise<NoInfer<TResult>>,
     ...newArgs: TNewArgs
   ) => Promise<TNewResult>
-): AbortableWrapper<TArgs, TResult, TNewArgs, TNewResult> {
+): AbortableWrapper<TArgs, TResult, any, TNewArgs, TNewResult, any> {
   return (next) =>
-    async (ctx, ...newArgs: TNewArgs) => {
-      return mapper((...args) => next(ctx, ...args), ...newArgs);
+    async (ctx, ...newArgs) => {
+      return mapper((...args) => next(ctx as any, ...args), ...newArgs);
     };
 }
