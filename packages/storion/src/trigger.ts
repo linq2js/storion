@@ -12,10 +12,13 @@ import { Equality } from "./types";
 /** Default key for unkeyed trigger calls */
 const DEFAULT_KEY: object = {};
 
+/** Deps can be a single value or an array of values */
+export type TriggerDeps = unknown | unknown[];
+
 /** Options for trigger */
 export interface TriggerOptions {
   /** Dependencies to check (default: [] - run once) */
-  deps?: unknown[];
+  deps?: TriggerDeps;
   /** Scope key (default: DEFAULT_KEY - global) */
   key?: unknown;
   /** Custom equality function for deps comparison */
@@ -31,6 +34,11 @@ interface CacheEntry {
 
 /** Cache: key -> WeakMap<function, CacheEntry> */
 const cache = new Map<unknown, WeakMap<Function, CacheEntry>>();
+
+/** Normalize deps to always be an array */
+function normalizeDeps(deps: TriggerDeps): unknown[] {
+  return Array.isArray(deps) ? deps : [deps];
+}
 
 /**
  * Get or create the WeakMap for a given key.
@@ -48,13 +56,16 @@ function getKeyCache(key: unknown): WeakMap<Function, CacheEntry> {
  * Trigger a function when dependencies change.
  *
  * @overload With options object
- * @overload With deps array (shorthand)
+ * @overload With deps (single value or array)
  * @overload With key (scoped)
  *
  * @example
  * ```ts
- * // With deps array (shorthand)
- * trigger(fetchUser, [userId], userId)
+ * // With single dep value (shorthand)
+ * trigger(fetchUser, userId, userId)
+ *
+ * // With deps array
+ * trigger(fetchUser, [userId, page], userId, page)
  *
  * // With options object
  * trigger(reset, { key: id })
@@ -62,7 +73,7 @@ function getKeyCache(key: unknown): WeakMap<Function, CacheEntry> {
  *
  * // With key (scoped, shorthand)
  * trigger(id, reset, [])
- * trigger(id, fetchData, [userId], userId)
+ * trigger(id, fetchData, userId, userId)
  * ```
  */
 // Overload 1: trigger(fn, options?, ...args)
@@ -71,17 +82,17 @@ export function trigger<TArgs extends unknown[], TResult>(
   options?: TriggerOptions,
   ...args: TArgs
 ): TResult;
-// Overload 2: trigger(fn, deps, ...args)
+// Overload 2: trigger(fn, deps (single or array), ...args)
 export function trigger<TArgs extends unknown[], TResult>(
   fn: (...args: TArgs) => TResult,
-  deps: unknown[],
+  deps: TriggerDeps,
   ...args: TArgs
 ): TResult;
 // Overload 3: trigger(key, fn, deps, ...args)
 export function trigger<TArgs extends unknown[], TResult>(
   key: unknown,
   fn: (...args: TArgs) => TResult,
-  deps: unknown[],
+  deps: TriggerDeps,
   ...args: TArgs
 ): TResult;
 export function trigger(
@@ -101,10 +112,20 @@ export function trigger(
     // Signature 3: trigger(key, fn, deps, ...args)
     key = keyOrFn;
     fn = fnOrDepsOrOptions;
-    deps = (depsOrFirstArg as unknown[]) ?? [];
+    deps = normalizeDeps(depsOrFirstArg ?? []);
     args = restArgs;
+  } else if (
+    fnOrDepsOrOptions !== undefined &&
+    fnOrDepsOrOptions !== null &&
+    typeof fnOrDepsOrOptions !== "object"
+  ) {
+    // Signature 2 with single value: trigger(fn, singleDep, ...args)
+    key = DEFAULT_KEY;
+    fn = keyOrFn as Function;
+    deps = [fnOrDepsOrOptions];
+    args = depsOrFirstArg !== undefined ? [depsOrFirstArg, ...restArgs] : [];
   } else if (Array.isArray(fnOrDepsOrOptions)) {
-    // Signature 2: trigger(fn, deps, ...args)
+    // Signature 2 with array: trigger(fn, deps, ...args)
     key = DEFAULT_KEY;
     fn = keyOrFn as Function;
     deps = fnOrDepsOrOptions;
@@ -114,7 +135,7 @@ export function trigger(
     const options = (fnOrDepsOrOptions as TriggerOptions) ?? {};
     key = options.key ?? DEFAULT_KEY;
     fn = keyOrFn as Function;
-    deps = options.deps ?? [];
+    deps = normalizeDeps(options.deps ?? []);
     equality = options.equality ? resolveEquality(options.equality) : undefined;
     args = depsOrFirstArg !== undefined ? [depsOrFirstArg, ...restArgs] : [];
   }
