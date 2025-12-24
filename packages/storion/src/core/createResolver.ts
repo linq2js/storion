@@ -29,7 +29,7 @@
 
 import type {
   Factory,
-  FactoryMiddlewareContext,
+  ServiceMiddlewareContext,
   Resolver,
   ResolverOptions,
   StoreInstance,
@@ -126,8 +126,8 @@ export function createResolver(options: ResolverOptions = {}): Resolver {
           };
           return mw(ctx);
         } else {
-          const ctx: FactoryMiddlewareContext = {
-            type: "factory",
+          const ctx: ServiceMiddlewareContext = {
+            type: "service",
             factory,
             resolver: resolverForCtx,
             next,

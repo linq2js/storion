@@ -1073,11 +1073,11 @@ interface BaseMiddlewareContext {
 }
 
 /**
- * Context for plain factory middleware.
+ * Context for service middleware.
  */
-export interface FactoryMiddlewareContext extends BaseMiddlewareContext {
-  /** Discriminant - this is a plain factory */
-  readonly type: "factory";
+export interface ServiceMiddlewareContext extends BaseMiddlewareContext {
+  /** Discriminant - this is a service */
+  readonly type: "service";
 }
 
 /**
@@ -1114,7 +1114,7 @@ export interface StoreMiddlewareContext extends BaseMiddlewareContext {
  * ```
  */
 export type MiddlewareContext =
-  | FactoryMiddlewareContext
+  | ServiceMiddlewareContext
   | StoreMiddlewareContext;
 
 /**

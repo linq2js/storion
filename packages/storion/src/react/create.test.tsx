@@ -242,7 +242,7 @@ describe("create", () => {
           middleware: [
             (ctx) => {
               middlewareCalls.push(
-                ctx.type === "store" ? ctx.spec.displayName : "factory"
+                ctx.type === "store" ? ctx.spec.displayName : "service"
               );
               return ctx.next();
             },

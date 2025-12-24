@@ -514,8 +514,8 @@ describe("middleware utilities", () => {
             return ctx.next();
           }),
           (ctx) => {
-            if (ctx.type === "factory") {
-              factoryLog("factory");
+            if (ctx.type === "service") {
+              factoryLog("service");
             }
             return ctx.next();
           },
@@ -526,7 +526,7 @@ describe("middleware utilities", () => {
       app.get(myFactory);
 
       expect(storeLog).toHaveBeenCalledWith("myStore");
-      expect(factoryLog).toHaveBeenCalledWith("factory");
+      expect(factoryLog).toHaveBeenCalledWith("service");
     });
 
     it("should support array of store middleware", () => {

@@ -112,8 +112,8 @@ The context provides information about what's being created:
 
 ```ts
 interface MiddlewareContext {
-  // Type of creation — 'store' for stores, 'factory' for services
-  type: 'store' | 'factory'
+  // Type of creation — 'store' for stores, 'service' for services
+  type: 'store' | 'service'
 
   // Display name (store name or service function name)
   displayName?: string
