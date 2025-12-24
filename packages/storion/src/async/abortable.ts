@@ -55,6 +55,20 @@ export type AbortableTake<TYield extends void | object = void> =
     ? () => Promise<void>
     : <TKey extends keyof TYield>(key: TKey) => Promise<TYield[TKey]>;
 
+/**
+ * Join function type for coordinating multiple abortable results.
+ * When the parent abortable is aborted, all joined results are also aborted.
+ */
+export type AbortableJoin = {
+  /** Join a single abortable result */
+  <TResult>(result: AbortableResult<TResult, any>): Promise<TResult>;
+
+  /** Join multiple abortable results (like Promise.all with abort propagation) */
+  <const T extends readonly AbortableResult<any, any>[]>(results: T): Promise<{
+    -readonly [K in keyof T]: Awaited<T[K]>;
+  }>;
+};
+
 // =============================================================================
 // ABORTABLE RESULT
 // =============================================================================
@@ -236,6 +250,25 @@ export interface AbortableContext<TYield extends void | object = void> {
    * ```
    */
   checkpoint(): Promise<void>;
+
+  /**
+   * Join one or more abortable results.
+   * When this abortable is aborted, all joined results are also aborted.
+   *
+   * @example
+   * ```ts
+   * // Single result
+   * const user = await ctx.join(fetchUser(id));
+   *
+   * // Multiple results (like Promise.all)
+   * const [user, posts, comments] = await ctx.join([
+   *   fetchUser(id),
+   *   fetchPosts(id),
+   *   fetchComments(id),
+   * ]);
+   * ```
+   */
+  join: AbortableJoin;
 }
 
 // =============================================================================
@@ -490,10 +523,55 @@ function createAbortableContext<TYield extends void | object>(
     });
   }) as AbortableTake<TYield>;
 
+  // Join function - coordinates multiple abortable results
+  const join = ((
+    resultOrResults: AbortableResult<any, any> | AbortableResult<any, any>[]
+  ): Promise<any> => {
+    // Check abort before starting
+    if (signal.aborted) {
+      return Promise.reject(new AbortableAbortedError());
+    }
+
+    const isArray = Array.isArray(resultOrResults);
+    const results = isArray ? resultOrResults : [resultOrResults];
+
+    // Abort all joined results when this abortable aborts
+    const abortAll = () => {
+      for (const result of results) {
+        result.abort();
+      }
+    };
+    signal.addEventListener("abort", abortAll, { once: true });
+
+    // Wait for all results
+    const promise = Promise.all(results)
+      .then(async (values) => {
+        // Clean up abort listener
+        signal.removeEventListener("abort", abortAll);
+        // Check pause/abort after all complete
+        await checkPauseAndAbort();
+        return isArray ? values : values[0];
+      })
+      .catch(async (error) => {
+        // Clean up abort listener
+        signal.removeEventListener("abort", abortAll);
+        // Abort remaining results on error
+        abortAll();
+        // Re-throw as AbortableAbortedError if aborted
+        if (signal.aborted) {
+          throw new AbortableAbortedError();
+        }
+        throw error;
+      });
+
+    return promise;
+  }) as AbortableJoin;
+
   return {
     signal,
     safe,
     take,
+    join,
     aborted: () => signal.aborted,
     abort: () => {
       if (signal.aborted) return false;

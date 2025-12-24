@@ -5,6 +5,7 @@ import {
   AbortableAbortedError,
   type AbortableContext,
 } from "./abortable";
+import { async } from "./async";
 
 describe("abortable", () => {
   describe("abortable()", () => {
@@ -467,6 +468,124 @@ describe("abortable", () => {
       const result = fn();
       await expect(result).rejects.toThrow(AbortableAbortedError);
       expect(checkpointPassed).toBe(false);
+    });
+  });
+
+  describe("join()", () => {
+    it("should join a single abortable result", async () => {
+      const innerFn = abortable(async () => {
+        await async.delay(10);
+        return "inner-result";
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        const result = await ctx.join(innerFn());
+        return `outer-${result}`;
+      });
+
+      const result = await outerFn();
+      expect(result).toBe("outer-inner-result");
+    });
+
+    it("should join multiple abortable results", async () => {
+      const fn1 = abortable(async () => {
+        await async.delay(10);
+        return "a";
+      });
+      const fn2 = abortable(async () => {
+        await async.delay(20);
+        return "b";
+      });
+      const fn3 = abortable(async () => {
+        await async.delay(5);
+        return "c";
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        const [r1, r2, r3] = await ctx.join([fn1(), fn2(), fn3()]);
+        return `${r1}-${r2}-${r3}`;
+      });
+
+      const result = await outerFn();
+      expect(result).toBe("a-b-c");
+    });
+
+    it("should abort joined results when parent aborts", async () => {
+      const abortedResults: string[] = [];
+
+      const innerFn = abortable<[string], string>(async (ctx, id) => {
+        await async.delay(100);
+        if (ctx.aborted()) {
+          abortedResults.push(id);
+          throw new AbortableAbortedError();
+        }
+        return id;
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        const [r1, r2] = await ctx.join([innerFn("a"), innerFn("b")]);
+        return `${r1}-${r2}`;
+      });
+
+      const result = outerFn();
+
+      // Abort after a short delay
+      await async.delay(20);
+      result.abort();
+
+      await expect(result).rejects.toThrow(AbortableAbortedError);
+    });
+
+    it("should abort remaining joined results if one fails", async () => {
+      const innerFn1 = abortable(async () => {
+        await async.delay(50);
+        return "success";
+      });
+
+      const innerFn2 = abortable(async () => {
+        await async.delay(10);
+        throw new Error("inner error");
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        const [r1, r2] = await ctx.join([innerFn1(), innerFn2()]);
+        return `${r1}-${r2}`;
+      });
+
+      await expect(outerFn()).rejects.toThrow("inner error");
+    });
+
+    it("should respect pause/checkpoint after join completes", async () => {
+      const innerFn = abortable(async () => {
+        await async.delay(10);
+        return "inner";
+      });
+
+      let pauseChecked = false;
+
+      const outerFn = abortable(async (ctx) => {
+        const r = await ctx.join(innerFn());
+        pauseChecked = true;
+        return r;
+      });
+
+      const result = outerFn();
+      const value = await result;
+
+      expect(value).toBe("inner");
+      expect(pauseChecked).toBe(true);
+    });
+
+    it("should throw AbortableAbortedError if already aborted before join", async () => {
+      const innerFn = abortable(async () => "inner");
+
+      const outerFn = abortable(async (ctx) => {
+        ctx.abort();
+        const r = await ctx.join(innerFn());
+        return r;
+      });
+
+      await expect(outerFn()).rejects.toThrow(AbortableAbortedError);
     });
   });
 });
