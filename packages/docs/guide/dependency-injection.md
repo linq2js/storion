@@ -69,23 +69,22 @@ function apiService() {
 
 ### Typed Services
 
-Use the `service()` helper for better TypeScript support:
+Services are plain functions — use explicit return types for best TypeScript support:
 
 ```ts
-import { service } from 'storion';
-
 interface ApiService {
   get: (path: string) => Promise<unknown>;
   post: (path: string, data: unknown) => Promise<unknown>;
 }
 
-const apiService = service<ApiService>(() => ({
+// Annotate return type for full type inference
+const apiService = (): ApiService => ({
   get: (path) => fetch(path).then(r => r.json()),
   post: (path, data) => fetch(path, {
     method: 'POST',
     body: JSON.stringify(data),
   }).then(r => r.json()),
-}));
+});
 ```
 
 ### Service with Dependencies

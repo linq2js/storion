@@ -458,29 +458,26 @@ setup({ get, create }) {
 }
 ```
 
-### Typed Services with `service()`
+### Typed Services
 
-For better TypeScript support, wrap services with `service()`:
+Services are plain functions — TypeScript infers types automatically:
 
 ```ts
-import { service } from 'storion'
-
-// Define the interface
-interface ApiService {
-  get: <T>(path: string) => Promise<T>
-  post: <T>(path: string, data: unknown) => Promise<T>
-}
-
-// Create typed service
-const apiService = service<ApiService>(() => ({
+// Define as a plain function with explicit return type
+const apiService = (): ApiService => ({
   get: (path) => fetch(path).then(r => r.json()),
   post: (path, data) => fetch(path, {
     method: 'POST',
     body: JSON.stringify(data),
   }).then(r => r.json()),
-}))
+})
 
-// Now get() returns correctly typed service
+interface ApiService {
+  get: <T>(path: string) => Promise<T>
+  post: <T>(path: string, data: unknown) => Promise<T>
+}
+
+// get() returns correctly typed service
 const api = get(apiService)  // Type: ApiService
 api.get<User>('/users/1')    // Autocomplete works!
 ```
