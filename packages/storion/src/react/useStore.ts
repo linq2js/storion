@@ -258,16 +258,14 @@ export function useStoreWithContainer<T extends object>(
   // isStarted guard prevents double-execution of the same instance.
   useEffect(() => {
     // Run each effect and collect dispose functions
-    const disposers: VoidFunction[] = [];
+    const disposers = emitter();
     for (const runEffect of scheduledEffects) {
-      disposers.push(runEffect());
+      disposers.on(runEffect());
     }
 
     // Cleanup: dispose all effects in reverse order (LIFO)
     return () => {
-      for (let i = disposers.length - 1; i >= 0; i--) {
-        disposers[i]();
-      }
+      disposers.emitAndClear();
     };
   });
 
