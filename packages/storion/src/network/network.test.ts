@@ -7,6 +7,7 @@ import {
   networkService,
 } from "./index";
 import { abortable } from "../async";
+import { isNetworkError } from "./utils";
 
 describe("network", () => {
   let mockContainer: ReturnType<typeof container>;
@@ -345,6 +346,84 @@ describe("network", () => {
         // Should throw because we're online (no retry needed)
         await expect(fn()).rejects.toThrow("Failed to fetch");
       });
+    });
+  });
+
+  describe("isNetworkError", () => {
+    it("should return false for non-network errors", () => {
+      expect(isNetworkError(new Error("generic error"))).toBe(false);
+      expect(isNetworkError("string error")).toBe(false);
+      expect(isNetworkError(null)).toBe(false);
+      expect(isNetworkError(undefined)).toBe(false);
+    });
+
+    it("should detect TypeError with fetch message (Chrome)", () => {
+      expect(isNetworkError(new TypeError("Failed to fetch"))).toBe(true);
+    });
+
+    it("should detect TypeError with network message (Firefox)", () => {
+      expect(
+        isNetworkError(
+          new TypeError("NetworkError when attempting to fetch resource")
+        )
+      ).toBe(true);
+    });
+
+    it("should detect TypeError with load failed message (Safari)", () => {
+      expect(isNetworkError(new TypeError("Load failed"))).toBe(true);
+    });
+
+    it("should detect DOMException NetworkError", () => {
+      expect(isNetworkError(new DOMException("", "NetworkError"))).toBe(true);
+    });
+
+    it("should detect DOMException TimeoutError", () => {
+      expect(isNetworkError(new DOMException("", "TimeoutError"))).toBe(true);
+    });
+
+    it("should detect DOMException AbortError", () => {
+      expect(isNetworkError(new DOMException("", "AbortError"))).toBe(true);
+    });
+
+    it("should not detect other DOMException types", () => {
+      expect(isNetworkError(new DOMException("", "SyntaxError"))).toBe(false);
+    });
+
+    it("should detect Node.js ENOTFOUND error", () => {
+      const error = new Error("getaddrinfo ENOTFOUND");
+      (error as any).code = "ENOTFOUND";
+      expect(isNetworkError(error)).toBe(true);
+    });
+
+    it("should detect Node.js ECONNREFUSED error", () => {
+      const error = new Error("connect ECONNREFUSED");
+      (error as any).code = "ECONNREFUSED";
+      expect(isNetworkError(error)).toBe(true);
+    });
+
+    it("should detect Node.js ETIMEDOUT error", () => {
+      const error = new Error("connect ETIMEDOUT");
+      (error as any).code = "ETIMEDOUT";
+      expect(isNetworkError(error)).toBe(true);
+    });
+
+    it("should detect Node.js ENETUNREACH error", () => {
+      const error = new Error("network unreachable");
+      (error as any).code = "ENETUNREACH";
+      expect(isNetworkError(error)).toBe(true);
+    });
+
+    it("should detect Apollo Client networkError", () => {
+      const innerError = new TypeError("Failed to fetch");
+      const apolloError = new Error("Network error");
+      (apolloError as any).networkError = innerError;
+      expect(isNetworkError(apolloError)).toBe(true);
+    });
+
+    it("should return false for Apollo error without networkError", () => {
+      const apolloError = new Error("GraphQL error");
+      (apolloError as any).networkError = null;
+      expect(isNetworkError(apolloError)).toBe(false);
     });
   });
 });

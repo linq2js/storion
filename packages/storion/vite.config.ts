@@ -75,8 +75,21 @@ export default defineConfig({
         "**/*.test.ts",
         "**/*.test.tsx",
         "**/test/**",
+        // Index files (just re-exports)
         "**/src/index.ts",
         "**/src/react/index.ts",
+        "**/src/async/index.ts",
+        "**/src/devtools/index.ts",
+        "**/src/persist/index.ts",
+        "**/src/meta/index.ts",
+        "**/src/network/index.ts",
+        // Type-only files (no runtime code)
+        "**/*typeCheck.ts",
+        "**/*.typeCheck.ts",
+        // Dead code
+        "**/src/core/proxy.ts",
+        // UI components (need E2E tests, not unit tests)
+        "**/src/devtools-panel/**",
       ],
     },
   },
