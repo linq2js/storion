@@ -471,6 +471,82 @@ function SearchPage() {
 4. Store state is auto-tracked for re-runs
 5. Cleanup runs on unmount or before re-run
 
+### Single `useEffect` Consolidation
+
+Multiple `effect()` calls are batched into **one** React `useEffect` hook internally. This is more efficient than having many separate `useEffect` hooks:
+
+```tsx
+// Traditional React: N effects = N useEffect calls
+useEffect(() => handleResize(), [width]);
+useEffect(() => handleScroll(), [scrollY]);
+useEffect(() => handleFocus(), [isFocused]);
+
+// Storion: N effects = 1 useEffect call
+useStore(({ get, effect }) => {
+  const [state] = get(layoutStore);
+
+  effect(() => handleResize(state.width));
+  effect(() => handleScroll(state.scrollY));
+  effect(() => handleFocus(state.isFocused));
+
+  return {
+    /* ... */
+  };
+});
+```
+
+Each effect still tracks its own dependencies and re-runs independently — the consolidation is purely an implementation optimization.
+
+### Effect-Only Reactivity (No Re-render)
+
+Effects inside `useStore` can track state **without causing component re-renders**. If your selector returns nothing reactive, the component won't re-render when effect dependencies change:
+
+```tsx
+function AnalyticsTracker() {
+  useStore(({ get, effect }) => {
+    const [state] = get(pageStore);
+
+    // This effect re-runs when state.currentPage changes
+    // BUT the component doesn't re-render (we return nothing)
+    effect(() => {
+      analytics.track("pageView", {
+        page: state.currentPage,
+        timestamp: Date.now(),
+      });
+    });
+
+    // Return empty object = no reactive dependencies for rendering
+    return {};
+  });
+
+  // This component never re-renders after mount!
+  return null;
+}
+```
+
+This pattern is useful for:
+
+- **Analytics/logging** — Track state changes without UI updates
+- **Background sync** — Sync state to external systems silently
+- **Performance monitoring** — Observe state without affecting render performance
+
+You can also use `pick()` inside effects for even more precise tracking:
+
+```tsx
+useStore(({ get, effect }) => {
+  const [state] = get(userStore);
+
+  effect(() => {
+    // Only re-runs when state.preferences.theme changes
+    // (not when other preferences or user fields change)
+    const theme = pick(state.preferences, "theme");
+    document.body.className = theme;
+  });
+
+  return {};
+});
+```
+
 ## Best Practices
 
 1. **Keep effects focused** — One effect per concern

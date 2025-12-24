@@ -250,6 +250,29 @@ function SearchPage() {
 | **Tracking** | Auto-tracks store state reads |
 | **Re-runs** | When tracked state changes |
 | **Cleanup** | Runs on unmount or before re-run |
+| **Consolidation** | Multiple `effect()` calls → single React `useEffect` |
+
+### Effect-Only Reactivity
+
+Effects can track state **without causing component re-renders**:
+
+```tsx
+function AnalyticsTracker() {
+  useStore(({ get, effect }) => {
+    const [state] = get(pageStore);
+    
+    // Re-runs when state.currentPage changes
+    // Component NEVER re-renders (returns nothing reactive)
+    effect(() => {
+      analytics.track('pageView', state.currentPage);
+    });
+    
+    return {}; // No reactive return = no re-renders
+  });
+
+  return null;
+}
+```
 
 ### When to Use
 

@@ -259,8 +259,14 @@ export function useStoreWithContainer<T extends object>(
   useEffect(() => {
     // Run each effect and collect dispose functions
     const disposers = emitter();
-    for (const runEffect of scheduledEffects) {
-      disposers.on(runEffect());
+    try {
+      for (const runEffect of scheduledEffects) {
+        disposers.on(runEffect());
+      }
+    } catch (ex) {
+      // clear disposers on error
+      disposers.emitAndClear();
+      throw ex;
     }
 
     // Cleanup: dispose all effects in reverse order (LIFO)
