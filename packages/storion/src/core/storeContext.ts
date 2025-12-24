@@ -134,6 +134,9 @@ export function createStoreContext<
 
   const currentLifetime = spec.options.lifetime ?? "keepAlive";
 
+  // Cache for focus objects - same path returns same focus
+  const focusCache = new Map<string, any>();
+
   const ctx: StoreContext<TState> = {
     [STORION_TYPE]: "store.context",
 
@@ -232,6 +235,10 @@ export function createStoreContext<
       onDispose?.(callback);
     },
 
+    isSetupPhase() {
+      return isSetupPhase();
+    },
+
     mixin<TResult, TArgs extends unknown[]>(
       mixin: StoreMixin<TState, TResult, TArgs>,
       ...args: TArgs
@@ -257,7 +264,7 @@ export function createStoreContext<
         resolver,
         focusCtx,
         path.split("."),
-        isSetupPhase,
+        focusCache,
         options
       );
     },

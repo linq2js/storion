@@ -39,11 +39,17 @@ function checkIsDev(): boolean {
   // Fallback: check process.env.NODE_ENV at runtime
   // This won't be tree-shaken but ensures dev utilities work
   try {
-    return process.env.NODE_ENV !== "production";
+    // Use globalThis to avoid TypeScript errors in environments without @types/node
+    const p = (globalThis as any).process;
+    if (p?.env?.NODE_ENV) {
+      return p.env.NODE_ENV !== "production";
+    }
   } catch {
-    // If process is not available (browser without polyfill), assume production
-    return false;
+    // Ignore errors
   }
+
+  // If process is not available (browser without polyfill), assume production
+  return false;
 }
 
 /**
@@ -187,29 +193,4 @@ export namespace dev {
       }
     }
   }
-}
-
-/** @deprecated Use `dev.log()` instead */
-export function devLog(message: string, ...args: any[]): void {
-  dev.log(message, ...args);
-}
-
-/** @deprecated Use `dev.warn()` instead */
-export function devWarn(message: string, ...args: any[]): void {
-  dev.warn(message, ...args);
-}
-
-/** @deprecated Use `dev.error()` instead */
-export function devError(message: string, ...args: any[]): void {
-  dev.error(message, ...args);
-}
-
-/** @deprecated Use `dev()` with a function argument instead */
-export function devOnly(fn: () => void): void {
-  dev(fn);
-}
-
-/** @deprecated Use `dev.assert()` instead */
-export function devAssert(condition: boolean, message: string): void {
-  dev.assert(condition, message);
 }

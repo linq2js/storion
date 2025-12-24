@@ -515,7 +515,7 @@ describe("focus()", () => {
       );
     });
 
-    it("should throw error when focus is called outside setup phase", () => {
+    it("should allow focus to be called outside setup phase", () => {
       let capturedCtx: any;
 
       const userStore = store({
@@ -527,7 +527,7 @@ describe("focus()", () => {
             get,
             set,
             createFocusOutsideSetup: () => {
-              // This should throw
+              // This should work now
               return ctx.focus("value");
             },
           };
@@ -537,15 +537,96 @@ describe("focus()", () => {
       const stores = container();
       const instance = stores.get(userStore);
 
-      // Calling focus inside an action should throw
-      expect(() => instance.actions.createFocusOutsideSetup()).toThrow(
-        /createFocus\(\) can only be called during setup phase/
-      );
+      // Calling focus inside an action should work
+      const focus = instance.actions.createFocusOutsideSetup();
+      expect(focus[0]()).toBe(1);
 
-      // Using captured context outside setup should also throw
-      expect(() => capturedCtx.focus("value")).toThrow(
-        /createFocus\(\) can only be called during setup phase/
-      );
+      // Using captured context outside setup should also work
+      const focus2 = capturedCtx.focus("value");
+      expect(focus2[0]()).toBe(1);
+    });
+
+    it("should return same focus object for same path (caching)", () => {
+      let capturedCtx: any;
+      let areSame = false;
+
+      const userStore = store({
+        state: { value: 1 },
+        setup: (ctx) => {
+          capturedCtx = ctx;
+          const focus1 = ctx.focus("value");
+          const focus2 = ctx.focus("value");
+          areSame = focus1 === focus2;
+          return {};
+        },
+      });
+
+      const stores = container();
+      stores.get(userStore);
+
+      // Same path should return same focus object
+      expect(areSame).toBe(true);
+
+      // Called later should also return same object
+      const focus3 = capturedCtx.focus("value");
+      const focus4 = capturedCtx.focus("value");
+      expect(focus3).toBe(focus4);
+    });
+
+    it("should return same focus for same path even with different options", () => {
+      let areSame = false;
+
+      const userStore = store({
+        state: { items: [1, 2, 3] },
+        setup: (ctx) => {
+          const focus1 = ctx.focus("items");
+          const focus2 = ctx.focus("items", { equality: "shallow" });
+          areSame = focus1 === focus2;
+          return {};
+        },
+      });
+
+      const stores = container();
+      stores.get(userStore);
+
+      // Same path returns same focus (first options win, dev warning if options differ)
+      expect(areSame).toBe(true);
+    });
+  });
+
+  describe("pick() method", () => {
+    it("should have pick method on focus tuple", () => {
+      const userStore = store({
+        state: { value: 1 },
+        setup: (ctx) => {
+          const focus = ctx.focus("value");
+          return {
+            hasPick: () => typeof focus.pick === "function",
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.actions.hasPick()).toBe(true);
+    });
+
+    it("should have pick method on getter function", () => {
+      const userStore = store({
+        state: { value: 1 },
+        setup: (ctx) => {
+          const [getter] = ctx.focus("value");
+          return {
+            hasPickOnGetter: () => typeof getter.pick === "function",
+          };
+        },
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.actions.hasPickOnGetter()).toBe(true);
     });
   });
 

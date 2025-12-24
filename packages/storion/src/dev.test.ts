@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { dev, devLog, devWarn, devError, devOnly, devAssert } from "./dev";
+import { dev } from "./dev";
 
 describe("dev utilities", () => {
   let consoleLogSpy: any;
@@ -20,7 +20,7 @@ describe("dev utilities", () => {
 
   describe("devLog", () => {
     it("should log in development", () => {
-      devLog("test message", { data: 123 });
+      dev.log("test message", { data: 123 });
 
       // In test environment (__DEV__ is true), it should log
       expect(consoleLogSpy).toHaveBeenCalledWith("[rextive] test message", {
@@ -29,7 +29,7 @@ describe("dev utilities", () => {
     });
 
     it("should prefix messages with [rextive]", () => {
-      devLog("hello");
+      dev.log("hello");
 
       expect(consoleLogSpy).toHaveBeenCalledWith("[rextive] hello");
     });
@@ -37,13 +37,13 @@ describe("dev utilities", () => {
 
   describe("devWarn", () => {
     it("should warn in development", () => {
-      devWarn("warning message");
+      dev.warn("warning message");
 
       expect(consoleWarnSpy).toHaveBeenCalledWith("[rextive] warning message");
     });
 
     it("should support multiple arguments", () => {
-      devWarn("deprecated", "feature", 123);
+      dev.warn("deprecated", "feature", 123);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         "[rextive] deprecated",
@@ -55,7 +55,7 @@ describe("dev utilities", () => {
 
   describe("devError", () => {
     it("should error in development", () => {
-      devError("error message");
+      dev.error("error message");
 
       expect(consoleErrorSpy).toHaveBeenCalledWith("[rextive] error message");
     });
@@ -64,7 +64,7 @@ describe("dev utilities", () => {
   describe("devOnly", () => {
     it("should execute function in development", () => {
       const mockFn = vi.fn();
-      devOnly(mockFn);
+      dev(mockFn);
 
       // In test environment (__DEV__ is true), function should execute
       expect(mockFn).toHaveBeenCalledTimes(1);
@@ -72,7 +72,7 @@ describe("dev utilities", () => {
 
     it("should execute complex logic", () => {
       let executed = false;
-      devOnly(() => {
+      dev(() => {
         executed = true;
       });
 
@@ -82,11 +82,11 @@ describe("dev utilities", () => {
 
   describe("devAssert", () => {
     it("should pass when condition is true", () => {
-      expect(() => devAssert(true, "should not throw")).not.toThrow();
+      expect(() => dev.assert(true, "should not throw")).not.toThrow();
     });
 
     it("should throw when condition is false", () => {
-      expect(() => devAssert(false, "test failure")).toThrow(
+      expect(() => dev.assert(false, "test failure")).toThrow(
         "[rextive] Assertion failed: test failure"
       );
     });
@@ -94,7 +94,7 @@ describe("dev utilities", () => {
     it("should throw with custom message", () => {
       const a: any = 1;
       const b: any = 2;
-      expect(() => devAssert(a === b, "math is broken")).toThrow(
+      expect(() => dev.assert(a === b, "math is broken")).toThrow(
         "[rextive] Assertion failed: math is broken"
       );
     });

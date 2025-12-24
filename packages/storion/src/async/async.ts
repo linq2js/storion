@@ -25,7 +25,7 @@ import type {
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
 import { untrack } from "../core/tracking";
-import { AsyncFunctionError } from "../errors";
+import { AsyncFunctionError, SetupPhaseError } from "../errors";
 import { store } from "../core/store";
 import { createAsyncContext } from "./context";
 import { isAbortable, type Abortable } from "./abortable";
@@ -138,6 +138,14 @@ function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
   handler: AsyncHandler<T, TArgs>,
   options?: AsyncOptions
 ): AsyncActions<T, M, TArgs> {
+  // Ensure async.action is called during setup phase
+  if (!focus._storeContext.isSetupPhase()) {
+    throw new SetupPhaseError(
+      "async.action",
+      "async.action() must be called during store setup phase."
+    );
+  }
+
   const [getState, setState] = focus;
 
   // Stable key for this async instance (used for promise tracking)

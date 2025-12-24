@@ -30,6 +30,10 @@ function createMockFocus<T, M extends AsyncMode>(
   Object.defineProperty(focus, "on", {
     value: () => () => {},
   });
+  // Mock _storeContext for async.action setup phase check
+  Object.defineProperty(focus, "_storeContext", {
+    value: { isSetupPhase: () => true },
+  });
 
   return [focus, { getState: getter }];
 }
@@ -345,6 +349,9 @@ describe("async", () => {
 
       const focus = [getter, setter] as Focus<AsyncState<string, "fresh">>;
       Object.defineProperty(focus, "on", { value: () => () => {} });
+      Object.defineProperty(focus, "_storeContext", {
+        value: { isSetupPhase: () => true },
+      });
 
       let resolveHandler: (value: string) => void;
 
@@ -417,6 +424,9 @@ describe("async", () => {
 
       const focus = [getter, setter] as Focus<AsyncState<string, "fresh">>;
       Object.defineProperty(focus, "on", { value: () => () => {} });
+      Object.defineProperty(focus, "_storeContext", {
+        value: { isSetupPhase: () => true },
+      });
 
       let rejectHandler: (error: Error) => void;
 
@@ -1171,6 +1181,10 @@ describe("async", () => {
         },
         focus[1],
       ] as Focus<AsyncState<number, "fresh">>;
+      // Mock _storeContext for async.action setup phase check
+      Object.defineProperty(trackedFocus, "_storeContext", {
+        value: { isSetupPhase: () => true },
+      });
 
       const actions = async.action(trackedFocus, async () => 42);
 
@@ -2207,6 +2221,59 @@ describe("asyncState()", () => {
 
       expect(instance.state.result.status).toBe("success");
       expect(instance.state.result.data).toBe("John Doe");
+    });
+  });
+
+  describe("setup phase check", () => {
+    it("should throw error when async.action is called outside setup phase", () => {
+      let capturedCtx: any;
+
+      const userStore = store({
+        state: {
+          result: async.fresh<string>(),
+        },
+        setup: (ctx) => {
+          capturedCtx = ctx;
+          return {
+            createAsyncOutsideSetup: () => {
+              // This should throw because setup phase has ended
+              return async.action(ctx.focus("result"), async () => "result");
+            },
+          };
+        },
+      });
+
+      const testContainer = container();
+      const instance = testContainer.get(userStore);
+
+      // Calling async.action inside an action (outside setup) should throw
+      expect(() => instance.actions.createAsyncOutsideSetup()).toThrow(
+        /async\.action\(\) must be called during store setup phase/
+      );
+    });
+
+    it("should work when async.action is called during setup phase", async () => {
+      const userStore = store({
+        state: {
+          result: async.fresh<string>(),
+        },
+        setup: (ctx) => {
+          // This should work because we're in setup phase
+          const fetchData = async.action(ctx.focus("result"), async () => {
+            return "success";
+          });
+          return {
+            fetch: fetchData.dispatch,
+          };
+        },
+      });
+
+      const testContainer = container();
+      const instance = testContainer.get(userStore);
+
+      await instance.actions.fetch();
+      expect(instance.state.result.status).toBe("success");
+      expect(instance.state.result.data).toBe("success");
     });
   });
 });

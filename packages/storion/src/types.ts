@@ -170,6 +170,16 @@ export interface FocusContext {
 }
 
 /**
+ * Focus getter with pick method attached.
+ */
+export type FocusGetter<TValue> = (() => TValue) & {
+  /**
+   * Create a pick selector from this getter for fine-grained reactivity.
+   */
+  pick(equality?: PickEquality<TValue>): TValue;
+};
+
+/**
  * Focus tuple: [getter, setter] with an on() method for subscribing to changes.
  *
  * @example
@@ -193,8 +203,8 @@ export interface FocusContext {
  * });
  */
 export type Focus<TValue> = [
-  /** Get the current value at the focused path */
-  getter: () => TValue,
+  /** Get the current value at the focused path (with pick method attached) */
+  getter: FocusGetter<TValue>,
   /**
    * Set the value at the focused path.
    * - Direct value: `set(newValue)`
@@ -263,6 +273,22 @@ export type Focus<TValue> = [
    * Reset the focused path to its initial value.
    */
   reset(): void;
+
+  /**
+   * Create a pick selector from this focus for fine-grained reactivity.
+   * Equivalent to `pick(() => focusGetter())`.
+   *
+   * @param equality - Optional equality function for change detection
+   * @returns The current value with fine-grained tracking
+   *
+   * @example
+   * useStore(({ get }) => {
+   *   const [state] = get(userStore);
+   *   // Re-renders only when profile.name changes
+   *   return { name: state.nameFocus.pick() };
+   * });
+   */
+  pick(equality?: PickEquality<TValue>): TValue;
 };
 
 // =============================================================================
@@ -651,6 +677,12 @@ export interface StoreContext<TState extends StateBase = any>
    * }
    */
   onDispose(callback: () => void): void;
+
+  /**
+   * Check if currently in setup phase.
+   * @internal
+   */
+  isSetupPhase(): boolean;
 
   /**
    * Apply a mixin to compose reusable logic.

@@ -8,10 +8,7 @@
 
 export {
   persist,
-  /** @deprecated Use `persist` instead */
-  persist as persistMiddleware,
   notPersisted,
   type PersistOptions,
   type PersistLoadResult,
 } from "./persist";
-

@@ -13,10 +13,13 @@ import {
   type FocusOptions,
   type FocusContext,
   type Equality,
+  type PickEquality,
+  type FocusGetter,
 } from "../types";
 
 import { resolveEquality } from "./equality";
-import { SetupPhaseError } from "../errors";
+import { pick } from "./pick";
+import { dev } from "../dev";
 
 // =============================================================================
 // Helpers
@@ -35,6 +38,37 @@ function getAtPath<T>(obj: T, segments: string[]): unknown {
 }
 
 // =============================================================================
+// Focus Cache
+// =============================================================================
+
+/** Cache key for focus objects - just use path, same path = same focus */
+function getCacheKey(segments: string[]): string {
+  return segments.join(".");
+}
+
+/** Track options for dev-mode warning */
+type CachedFocusInfo = {
+  focus: Focus<any>;
+  options?: FocusOptions<any>;
+};
+
+/** Check if two FocusOptions are equivalent */
+function optionsMatch(
+  a: FocusOptions<any> | undefined,
+  b: FocusOptions<any> | undefined
+): boolean {
+  // Both undefined = match
+  if (!a && !b) return true;
+  // One undefined = no match
+  if (!a || !b) return false;
+  // Compare equality option
+  if (a.equality !== b.equality) return false;
+  // Compare fallback (reference equality - if different functions, assume different)
+  if (a.fallback !== b.fallback) return false;
+  return true;
+}
+
+// =============================================================================
 // Focus Factory
 // =============================================================================
 
@@ -45,7 +79,7 @@ function getAtPath<T>(obj: T, segments: string[]): unknown {
  * @param resolver - The dependency resolver
  * @param context - Focus context with state access
  * @param segments - Path segments to focus on
- * @param isSetupPhase - Check if in setup phase
+ * @param cache - Cache map for reusing focus objects by path
  * @param options - Focus options (fallback, equality)
  */
 export function createFocus<TValue>(
@@ -53,20 +87,27 @@ export function createFocus<TValue>(
   resolver: Resolver,
   context: FocusContext,
   segments: string[],
-  isSetupPhase: () => boolean,
+  cache: Map<string, CachedFocusInfo>,
   options?: FocusOptions<TValue>
 ): Focus<TValue> {
-  if (!isSetupPhase()) {
-    throw new SetupPhaseError(
-      "createFocus",
-      "Focus can only be called during setup phase."
-    );
+  // Check cache first - same path = same focus object
+  const cacheKey = getCacheKey(segments);
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    // Dev warning if options differ from cached
+    if (!optionsMatch(cached.options, options)) {
+      dev.warn(
+        `focus("${cacheKey}") called with different options. ` +
+          `The first options are used. If you need different behavior, use a different path.`
+      );
+    }
+    return cached.focus as Focus<TValue>;
   }
 
   const { fallback, equality: equalityOption } = options ?? {};
   const equalityFn = resolveEquality(equalityOption as Equality | undefined);
 
-  // Capture initial value at focus creation time (during setup phase)
+  // Capture initial value at focus creation time
   const initialValue = getAtPath(context.get(), segments) as TValue;
 
   /**
@@ -82,6 +123,12 @@ export function createFocus<TValue>(
     }
 
     return value;
+  };
+
+  // Add pick method to getter
+  const getterWithPick = getter as FocusGetter<TValue>;
+  getterWithPick.pick = (equality?: PickEquality<TValue>) => {
+    return pick(getter, equality);
   };
 
   /**
@@ -171,7 +218,7 @@ export function createFocus<TValue>(
       resolver,
       context,
       [...segments, ...relativePath.split(".")],
-      isSetupPhase,
+      cache,
       childOptions
     );
   };
@@ -191,20 +238,30 @@ export function createFocus<TValue>(
     setter(initialValue);
   };
 
-  // Create tuple with on(), to(), dirty(), and reset() methods
-  const focus = [getter, setter] as Focus<TValue>;
+  /**
+   * Create a pick selector from this focus.
+   */
+  const focusPick = (equality?: PickEquality<TValue>): TValue => {
+    return pick(getter, equality);
+  };
+
+  // Create tuple with methods
+  const focus = [getterWithPick, setter] as Focus<TValue>;
   Object.assign(focus, {
     [STORION_TYPE]: "focus",
     on,
     to,
     dirty,
     reset,
+    pick: focusPick,
     context,
     _storeContext: storeContext,
     _resolver: resolver,
     segments,
   });
 
+  // Cache the focus object with its options
+  cache.set(cacheKey, { focus, options });
+
   return focus;
 }
-
