@@ -223,8 +223,8 @@ export function UserProfile({ userId }: { userId: string }) {
   return (
     <ErrorBoundary fallback={<ErrorMessage />}>
       <Suspense fallback={<LoadingSpinner />}>
-        <UserProfileContent userId={userId} />
-      </Suspense>
+      <UserProfileContent userId={userId} />
+    </Suspense>
     </ErrorBoundary>
   );
 }
@@ -292,14 +292,14 @@ export function UserList() {
       {users.length === 0 ? (
         <p className="empty">No users found</p>
       ) : (
-        <ul>
-          {users.map(user => (
+      <ul>
+        {users.map(user => (
             <li key={user.id}>
               <img src={user.avatarUrl} alt="" />
               <span>{user.name}</span>
             </li>
-          ))}
-        </ul>
+        ))}
+      </ul>
       )}
     </div>
   );

@@ -134,7 +134,7 @@ import { todoStore } from '../stores/todoStore';
 
 export function TodoInput() {
   const [text, setText] = useState('');
-
+  
   const { addTodo } = useStore(({ get }) => {
     const [, actions] = get(todoStore);
     return { addTodo: actions.addTodo };
@@ -184,7 +184,7 @@ import { todoStore } from '../stores/todoStore';
 export function TodoList() {
   const { todos, toggleTodo, removeTodo } = useStore(({ get }) => {
     const [state, actions] = get(todoStore);
-
+    
     // Computed value: filter todos based on current filter
     const filteredTodos = state.items.filter((todo) => {
       switch (state.filter) {
@@ -193,7 +193,7 @@ export function TodoList() {
         case 'completed':
           return todo.completed;
         default:
-          return true;
+      return true;
       }
     });
 
@@ -213,11 +213,11 @@ export function TodoList() {
       {todos.map((todo) => (
         <li key={todo.id} className={todo.completed ? 'completed' : ''}>
           <label>
-            <input
-              type="checkbox"
-              checked={todo.completed}
+          <input
+            type="checkbox"
+            checked={todo.completed}
               onChange={() => toggleTodo(todo.id)}
-            />
+          />
             <span className="todo-text">{todo.text}</span>
           </label>
           <button
@@ -265,27 +265,27 @@ const filters = ['all', 'active', 'completed'] as const;
 export function TodoFilters() {
   const { filter, setFilter, remaining, hasCompleted, clearCompleted } =
     useStore(({ get }) => {
-      const [state, actions] = get(todoStore);
+    const [state, actions] = get(todoStore);
 
       // Computed values
       const activeCount = state.items.filter((t) => !t.completed).length;
       const completedCount = state.items.filter((t) => t.completed).length;
-
-      return {
-        filter: state.filter,
-        setFilter: actions.setFilter,
+    
+    return {
+      filter: state.filter,
+      setFilter: actions.setFilter,
         remaining: activeCount,
         hasCompleted: completedCount > 0,
-        clearCompleted: actions.clearCompleted,
-      };
-    });
+      clearCompleted: actions.clearCompleted,
+    };
+  });
 
   return (
     <footer className="todo-filters">
       <span className="todo-count">
         <strong>{remaining}</strong> {remaining === 1 ? 'item' : 'items'} left
       </span>
-
+      
       <div className="filter-buttons">
         {filters.map((f) => (
           <button
@@ -298,7 +298,7 @@ export function TodoFilters() {
           </button>
         ))}
       </div>
-
+      
       {hasCompleted && (
         <button className="clear-completed" onClick={clearCompleted}>
           Clear completed

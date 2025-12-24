@@ -69,16 +69,10 @@ Here's a complete, working counter — no setup or Provider needed:
 import { store } from 'storion'
 import { useStore } from 'storion/react'
 
-// ═══════════════════════════════════════════════════════════════════════════
-// STEP 1: Define your store
-// ═══════════════════════════════════════════════════════════════════════════
-
+// STEP 1: Define your store ─────────────────────────────────────────────────
 const counterStore = store({
-  // Name appears in DevTools for easy debugging
-  name: 'counter',
-
-  // Initial state — becomes reactive automatically
-  state: { count: 0 },
+  name: 'counter',          // Name appears in DevTools for easy debugging
+  state: { count: 0 },      // Initial state — becomes reactive automatically
 
   // Setup runs once when store is first used
   setup({ state }) {
@@ -92,10 +86,7 @@ const counterStore = store({
   },
 })
 
-// ═══════════════════════════════════════════════════════════════════════════
-// STEP 2: Use in React — that's it!
-// ═══════════════════════════════════════════════════════════════════════════
-
+// STEP 2: Use in React — that's it! ─────────────────────────────────────────
 function Counter() {
   // The selector function receives a context with `get` to access stores
   const { count, increment, decrement } = useStore(({ get }) => {

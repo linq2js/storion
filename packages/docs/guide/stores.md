@@ -103,18 +103,12 @@ Here's the anatomy of a store with detailed explanations:
 import { store } from "storion/react";
 
 const userStore = store({
-  // ═══════════════════════════════════════════════════════════════════════════
   // NAME (required)
-  // ═══════════════════════════════════════════════════════════════════════════
   // Unique identifier for debugging. Shows in DevTools and error messages.
-  // Convention: use camelCase + "Store" suffix
   name: "user",
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // STATE (required)
-  // ═══════════════════════════════════════════════════════════════════════════
   // Initial data structure. Storion wraps this in a reactive Proxy.
-  // Any changes to these properties notify subscribers.
   state: {
     /** User profile information */
     profile: null as User | null,
@@ -126,20 +120,15 @@ const userStore = store({
     error: null as string | null,
   },
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // SETUP (required)
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Runs ONCE when the store is first accessed. Receives context with utilities.
-  // Returns an object containing actions that can modify state.
+  // Runs ONCE when the store is first accessed. Returns actions.
   setup({ state, update, get, create, focus, onDispose }) {
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ state: Reactive proxy of your state. Mutations here trigger updates.
-    // │ update: For nested mutations (Immer-style draft)
-    // │ get: Access other stores and services (cached)
-    // │ create: Create fresh service instances with parameters
-    // │ focus: Create getter/setter for a specific state path
-    // │ onDispose: Register cleanup callbacks
-    // └─────────────────────────────────────────────────────────────────────
+    // state: Reactive proxy — mutations trigger updates
+    // update: For nested mutations (Immer-style draft)
+    // get: Access other stores and services (cached)
+    // create: Create fresh service instances with parameters
+    // focus: Create getter/setter for a specific state path
+    // onDispose: Register cleanup callbacks
 
     return {
       // Actions are just functions that modify state
@@ -216,24 +205,18 @@ Actions are returned from `setup()`. They're the only way to modify state.
 ```ts
 setup({ state }) {
   return {
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ Simple setter: Just assign to state properties
-    // │ Storion's Proxy intercepts this and notifies subscribers
-    // └─────────────────────────────────────────────────────────────────────
+    // Simple setter: Just assign to state properties
+    // Storion's Proxy intercepts this and notifies subscribers
     setName: (name: string) => {
       state.name = name
     },
 
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ Toggle: Read current value, write new value
-    // └─────────────────────────────────────────────────────────────────────
+    // Toggle: Read current value, write new value
     toggleDarkMode: () => {
       state.darkMode = !state.darkMode
     },
 
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ Reset: Set multiple properties at once
-    // └─────────────────────────────────────────────────────────────────────
+    // Reset: Set multiple properties at once
     reset: () => {
       state.name = ''
       state.count = 0
@@ -273,10 +256,8 @@ setup({ state }) {
 ```ts
 setup({ state }) {
   return {
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ Async actions work naturally — just use async/await
-    // │ State changes trigger re-renders immediately
-    // └─────────────────────────────────────────────────────────────────────
+    // Async actions work naturally — just use async/await
+    // State changes trigger re-renders immediately
     fetchUser: async (id: string) => {
       state.loading = true
       state.error = null
@@ -291,9 +272,7 @@ setup({ state }) {
       }
     },
 
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ Actions can call other actions
-    // └─────────────────────────────────────────────────────────────────────
+    // Actions can call other actions
     refreshUser: async () => {
       const currentId = state.user?.id
       if (currentId) {
@@ -371,9 +350,7 @@ setup({ state, update }) {
 ```ts
 setup({ state, update }) {
   return {
-    // ═══════════════════════════════════════════════════════════════════════
     // Pattern 1: Draft function (most common)
-    // ═══════════════════════════════════════════════════════════════════════
     addTodo: (text: string) => {
       update(draft => {
         draft.todos.push({
@@ -384,9 +361,7 @@ setup({ state, update }) {
       })
     },
 
-    // ═══════════════════════════════════════════════════════════════════════
     // Pattern 2: Partial object (shallow merge at root level)
-    // ═══════════════════════════════════════════════════════════════════════
     resetDefaults: () => {
       update({
         count: 0,
@@ -395,23 +370,17 @@ setup({ state, update }) {
       })
     },
 
-    // ═══════════════════════════════════════════════════════════════════════
     // Pattern 3: update.action() — creates a reusable action
-    // ═══════════════════════════════════════════════════════════════════════
     increment: update.action(draft => {
       draft.count++
     }),
 
-    // ═══════════════════════════════════════════════════════════════════════
     // Pattern 4: update.action() with parameters
-    // ═══════════════════════════════════════════════════════════════════════
     setCount: update.action((draft, value: number) => {
       draft.count = value
     }),
 
-    // ═══════════════════════════════════════════════════════════════════════
     // Pattern 5: Multiple mutations in one update (batched)
-    // ═══════════════════════════════════════════════════════════════════════
     completeAll: () => {
       update(draft => {
         for (const todo of draft.todos) {
@@ -440,10 +409,8 @@ setup({ state, update }) {
 
 ```ts
 setup({ focus }) {
-  // ┌─────────────────────────────────────────────────────────────────────
-  // │ focus() returns [getter, setter] tuple for a path
-  // │ Path is type-safe — TypeScript validates it matches your state shape
-  // └─────────────────────────────────────────────────────────────────────
+  // focus() returns [getter, setter] tuple for a path
+  // Path is type-safe — TypeScript validates it matches your state shape
   const [getName, setName] = focus('profile.name')
   const [getItems, setItems] = focus('cart.items')
 
@@ -494,15 +461,11 @@ const cartStore = store({
   name: "cart",
   state: { items: [] as CartItem[] },
   setup({ state, get }) {
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ get() returns [state, actions] from another store
-    // │ The state is reactive — always has the latest values
-    // └─────────────────────────────────────────────────────────────────────
+    // get() returns [state, actions] from another store
+    // The state is reactive — always has the latest values
     const [userState, userActions] = get(userStore);
 
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ Can also access services
-    // └─────────────────────────────────────────────────────────────────────
+    // Can also access services
     const api = get(apiService);
 
     return {
@@ -797,9 +760,7 @@ const formStore = store({
 
 ```ts
 const myStore = store({
-  // ═══════════════════════════════════════════════════════════════════════════
-  // REQUIRED
-  // ═══════════════════════════════════════════════════════════════════════════
+  // REQUIRED ────────────────────────────────────────────────────────────────
   name: "myStore",
   state: {
     /* initial state */
@@ -810,31 +771,23 @@ const myStore = store({
     };
   },
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // OPTIONAL: Lifecycle
-  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Lifecycle ─────────────────────────────────────────────────────
   lifetime: "keepAlive", // or 'autoDispose'
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // OPTIONAL: Custom equality per field
-  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Custom equality per field ─────────────────────────────────────
   equality: {
     items: "shallow", // Shallow compare arrays
     config: "deep", // Deep compare objects
     custom: (a, b) => a.id === b.id, // Custom comparator
   },
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // OPTIONAL: Metadata for middleware
-  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Metadata for middleware ───────────────────────────────────────
   meta: [
     persist(), // Mark for persistence
     logged(), // Mark for logging
   ],
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // OPTIONAL: Callbacks
-  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Callbacks ─────────────────────────────────────────────────────
   onDispatch: (event) => {
     console.log(`${event.name}(${event.args}) took ${event.duration}ms`);
   },
@@ -842,16 +795,12 @@ const myStore = store({
     Sentry.captureException(error);
   },
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // OPTIONAL: Serialization (for persistence, SSR)
-  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Serialization (for persistence, SSR) ──────────────────────────
   normalize: (state) => ({
-    // Convert to serializable format
     ...state,
     date: state.date.toISOString(),
   }),
   denormalize: (data) => ({
-    // Convert from serializable format
     ...data,
     date: new Date(data.date),
   }),

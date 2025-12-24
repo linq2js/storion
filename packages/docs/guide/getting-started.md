@@ -59,10 +59,8 @@ Create a new file for your store:
 // stores/counterStore.ts
 import { store } from 'storion/react';
 
-// ┌─────────────────────────────────────────────────────────────────────────────┐
-// │ store() creates a store specification.                                      │
-// │ It doesn't create the actual instance yet - that happens when you use it.   │
-// └─────────────────────────────────────────────────────────────────────────────┘
+// store() creates a store specification.
+// It doesn't create the actual instance yet - that happens when you use it.
 export const counterStore = store({
   // name: Used in devtools and error messages to identify this store.
   // Pick something descriptive that you'll recognize when debugging.
@@ -121,10 +119,8 @@ The container manages all your store instances. Think of it as the "brain" of yo
 // App.tsx
 import { container, StoreProvider } from 'storion/react';
 
-// ┌─────────────────────────────────────────────────────────────────────────────┐
-// │ container() creates the central hub for all stores.                         │
-// │ It handles: instance creation, caching, dependency injection, cleanup.      │
-// └─────────────────────────────────────────────────────────────────────────────┘
+// container() creates the central hub for all stores.
+// It handles: instance creation, caching, dependency injection, cleanup.
 const app = container();
 
 function App() {
@@ -164,10 +160,8 @@ import { useStore } from 'storion/react';
 import { counterStore } from '../stores/counterStore';
 
 function Counter() {
-  // ┌─────────────────────────────────────────────────────────────────────────────┐
-  // │ useStore() connects your component to Storion.                              │
-  // │ The selector function tells Storion what data your component needs.         │
-  // └─────────────────────────────────────────────────────────────────────────────┘
+  // useStore() connects your component to Storion.
+  // The selector function tells Storion what data your component needs.
   const { count, increment, decrement } = useStore(({ get }) => {
     // get() retrieves a store from the container.
     // Returns a tuple: [state, actions]
@@ -182,10 +176,8 @@ function Counter() {
     };
   });
 
-  // ┌─────────────────────────────────────────────────────────────────────────────┐
-  // │ This component ONLY re-renders when `count` changes.                        │
-  // │ If we had other state (like `name`), changing it wouldn't affect this.      │
-  // └─────────────────────────────────────────────────────────────────────────────┘
+  // This component ONLY re-renders when `count` changes.
+  // If we had other state (like `name`), changing it wouldn't affect this.
   return (
     <div>
       <button onClick={decrement}>-</button>
@@ -239,10 +231,8 @@ For simple apps or isolated features, skip the container setup entirely:
 ```tsx
 import { create } from 'storion/react';
 
-// ┌─────────────────────────────────────────────────────────────────────────────┐
-// │ create() is a shorthand that creates both the store and a custom hook.      │
-// │ Perfect for single-store apps, isolated components, or quick prototypes.    │
-// └─────────────────────────────────────────────────────────────────────────────┘
+// create() is a shorthand that creates both the store and a custom hook.
+// Perfect for single-store apps, isolated components, or quick prototypes.
 const [counter, useCounter] = create({
   name: 'counter',
   state: { count: 0 },

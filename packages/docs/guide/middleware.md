@@ -20,24 +20,24 @@ Middleware solves the problem of shared logic across stores. Instead of adding l
 Middleware wraps the store creation process. Each middleware can run code before and after store creation:
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Middleware Execution Flow                         │
-│                                                                      │
-│   middleware 1         middleware 2         middleware 3             │
-│   ┌─────────┐         ┌─────────┐         ┌─────────┐              │
-│   │ BEFORE  │ ──────▶ │ BEFORE  │ ──────▶ │ BEFORE  │              │
-│   └─────────┘         └─────────┘         └─────────┘              │
-│        │                   │                   │                     │
-│        │                   │                   ▼                     │
-│        │                   │            ┌─────────────┐             │
-│        │                   │            │   STORE     │             │
-│        │                   │            │  CREATION   │             │
-│        │                   │            └─────────────┘             │
-│        │                   │                   │                     │
-│   ┌─────────┐         ┌─────────┐         ┌─────────┐              │
-│   │ AFTER   │ ◀────── │ AFTER   │ ◀────── │ AFTER   │              │
-│   └─────────┘         └─────────┘         └─────────┘              │
-└─────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                    Middleware Execution Flow                      │
+│                                                                   │
+│   middleware 1         middleware 2         middleware 3          │
+│   ┌─────────┐         ┌─────────┐         ┌─────────┐            │
+│   │ BEFORE  │ ──────▶ │ BEFORE  │ ──────▶ │ BEFORE  │            │
+│   └─────────┘         └─────────┘         └─────────┘            │
+│        │                   │                   │                  │
+│        │                   │                   ▼                  │
+│        │                   │            ┌─────────────┐           │
+│        │                   │            │   STORE     │           │
+│        │                   │            │  CREATION   │           │
+│        │                   │            └─────────────┘           │
+│        │                   │                   │                  │
+│   ┌─────────┐         ┌─────────┐         ┌─────────┐            │
+│   │ AFTER   │ ◀────── │ AFTER   │ ◀────── │ AFTER   │            │
+│   └─────────┘         └─────────┘         └─────────┘            │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ## Basic Usage
@@ -65,38 +65,26 @@ Let's create a simple logging middleware to understand the pattern:
 ```ts
 import type { Middleware, MiddlewareContext } from 'storion'
 
-// ┌─────────────────────────────────────────────────────────────────────────────┐
-// │ Middleware is a function that returns another function (factory pattern).   │
-// │ This allows middleware to accept configuration options.                      │
-// └─────────────────────────────────────────────────────────────────────────────┘
+// Middleware is a function that returns another function (factory pattern).
+// This allows middleware to accept configuration options.
 function loggingMiddleware(): Middleware {
-  // ┌─────────────────────────────────────────────────────────────────────────────┐
-  // │ The inner function receives a context (ctx) with information about what's  │
-  // │ being created (store or service) and a `next()` function to continue.      │
-  // └─────────────────────────────────────────────────────────────────────────────┘
+  // The inner function receives a context (ctx) with information about what's
+  // being created (store or service) and a `next()` function to continue.
   return (ctx: MiddlewareContext) => {
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ BEFORE: Code here runs before store creation
-    // └─────────────────────────────────────────────────────────────────────────
+    // BEFORE: Code here runs before store creation
     console.log(`[LOG] Creating: ${ctx.displayName}`)
     const startTime = performance.now()
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ ctx.next() continues the middleware chain and creates the store.
-    // │ You MUST call this to get the store instance!
-    // └─────────────────────────────────────────────────────────────────────────
+    // ctx.next() continues the middleware chain and creates the store.
+    // You MUST call this to get the store instance!
     const instance = ctx.next()
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ AFTER: Code here runs after store creation.
-    // │ You have access to the created instance.
-    // └─────────────────────────────────────────────────────────────────────────
+    // AFTER: Code here runs after store creation.
+    // You have access to the created instance.
     const duration = performance.now() - startTime
     console.log(`[LOG] Created: ${ctx.displayName} (${duration.toFixed(2)}ms)`)
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Return the instance (you can modify or wrap it before returning).
-    // └─────────────────────────────────────────────────────────────────────────
+    // Return the instance (you can modify or wrap it before returning).
     return instance
   }
 }
@@ -124,29 +112,19 @@ The context provides information about what's being created:
 
 ```ts
 interface MiddlewareContext {
-  // ═══════════════════════════════════════════════════════════════════════════
   // Type of creation — 'store' for stores, 'factory' for services
-  // ═══════════════════════════════════════════════════════════════════════════
   type: 'store' | 'factory'
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // Display name (store name or service function name)
-  // ═══════════════════════════════════════════════════════════════════════════
   displayName?: string
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // Store specification (only for stores)
-  // ═══════════════════════════════════════════════════════════════════════════
   spec?: StoreSpec
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // Meta query API (only for stores) — see Meta section below
-  // ═══════════════════════════════════════════════════════════════════════════
   meta?: MetaQuery
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // Continue middleware chain — you MUST call this!
-  // ═══════════════════════════════════════════════════════════════════════════
   next(): unknown
 }
 ```
@@ -158,9 +136,7 @@ Always check the type when your middleware is store-specific:
 ```ts
 function storeOnlyMiddleware(): Middleware {
   return (ctx) => {
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Skip factories (services) — only process stores
-    // └─────────────────────────────────────────────────────────────────────────
+    // Skip factories (services) — only process stores
     if (ctx.type !== 'store') {
       return ctx.next()  // Pass through unchanged
     }
@@ -184,27 +160,15 @@ import { applyFor } from 'storion'
 
 const app = container({
   middleware: [
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Pattern matching
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    // Exact match
-    applyFor('userStore', loggingMiddleware()),
-    
-    // Wildcard patterns
-    applyFor('user*', loggingMiddleware()),      // userStore, userSettings, userCache
-    applyFor('*Store', loggingMiddleware()),     // userStore, cartStore, authStore
-    applyFor('*auth*', loggingMiddleware()),     // authStore, userAuth, oauthStore
-    
-    // Regular expression
-    applyFor(/^(user|auth)Store$/, loggingMiddleware()),
-    
-    // Multiple patterns (array)
-    applyFor(['userStore', 'auth*'], loggingMiddleware()),
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Predicate function
-    // ═══════════════════════════════════════════════════════════════════════════
+    // Pattern matching ──────────────────────────────────────────────────────
+    applyFor('userStore', loggingMiddleware()),              // Exact match
+    applyFor('user*', loggingMiddleware()),                  // Wildcard: userStore, userSettings
+    applyFor('*Store', loggingMiddleware()),                 // Wildcard: userStore, cartStore
+    applyFor('*auth*', loggingMiddleware()),                 // Wildcard: authStore, userAuth
+    applyFor(/^(user|auth)Store$/, loggingMiddleware()),     // Regular expression
+    applyFor(['userStore', 'auth*'], loggingMiddleware()),   // Multiple patterns
+
+    // Predicate function ────────────────────────────────────────────────────
     applyFor(
       (ctx) => ctx.meta?.any(persist),  // Apply to stores with persist meta
       persistMiddleware()
@@ -241,10 +205,8 @@ Convenient helper to filter for stores only:
 ```ts
 import { forStores } from 'storion'
 
-// ┌─────────────────────────────────────────────────────────────────────────────┐
-// │ forStores() is a shorthand that skips factories automatically.              │
-// │ Equivalent to checking ctx.type === 'store' yourself.                       │
-// └─────────────────────────────────────────────────────────────────────────────┘
+// forStores() is a shorthand that skips factories automatically.
+// Equivalent to checking ctx.type === 'store' yourself.
 const storeLogger = forStores((ctx) => {
   console.log(`Creating store: ${ctx.displayName}`)
   return ctx.next()
@@ -311,11 +273,7 @@ function smartMiddleware(): Middleware {
 
     const instance = ctx.next()
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ ctx.meta() queries metadata defined on the store
-    // └─────────────────────────────────────────────────────────────────────────
-    
-    // Check store-level meta
+    // ctx.meta() queries metadata defined on the store
     const persistInfo = ctx.meta(persist)
     if (persistInfo.store) {
       console.log(`${ctx.displayName} should be persisted`)
@@ -327,10 +285,7 @@ function smartMiddleware(): Middleware {
       console.log(`${field} has priority: ${value}`)
     }
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Helper methods on ctx.meta
-    // └─────────────────────────────────────────────────────────────────────────
-    
+    // Helper methods on ctx.meta
     // Check if ANY meta of these types exists
     if (ctx.meta.any(persist, priority)) {
       console.log('Has persist or priority meta')
@@ -360,9 +315,7 @@ function stateLoggerMiddleware(): Middleware {
 
     const instance = ctx.next()
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Subscribe to state changes after creation
-    // └─────────────────────────────────────────────────────────────────────────
+    // Subscribe to state changes after creation
     instance.subscribe((state, prevState) => {
       console.group(`[${ctx.displayName}] State changed`)
       console.log('Previous:', prevState)
@@ -386,9 +339,7 @@ function actionTrackerMiddleware(): Middleware {
 
     const instance = ctx.next()
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Subscribe to action dispatches with '@*' pattern
-    // └─────────────────────────────────────────────────────────────────────────
+    // Subscribe to action dispatches with '@*' pattern
     instance.subscribe('@*', (event) => {
       const { next } = event
       console.log(

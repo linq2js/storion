@@ -113,24 +113,16 @@ Stores co-locate state with the logic that modifies it:
 import { store } from 'storion/react'
 
 const cartStore = store({
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ name: Unique identifier for debugging and DevTools
-  // └─────────────────────────────────────────────────────────────────────────
-  name: 'cart',
+  name: 'cart',  // Unique identifier for debugging and DevTools
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ state: Initial data — automatically becomes reactive
-  // │        Any mutation to these properties notifies subscribers
-  // └─────────────────────────────────────────────────────────────────────────
+  // Initial data — automatically becomes reactive
+  // Any mutation to these properties notifies subscribers
   state: {
     items: [] as CartItem[],
     loading: false,
   },
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ setup: Runs ONCE when the store is first accessed
-  // │        Returns actions that can modify state
-  // └─────────────────────────────────────────────────────────────────────────
+  // Runs ONCE when the store is first accessed, returns actions
   setup({ state, get }) {
     // Access other stores and services
     const [userState] = get(userStore)  // Depends on user store
@@ -181,46 +173,32 @@ function ProductList() {
 
 ```ts
 const userStore = store({
-  // ═══════════════════════════════════════════════════════════════════════════
   // 1. IDENTITY — For debugging and DevTools
-  // ═══════════════════════════════════════════════════════════════════════════
   name: 'user',
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // 2. INITIAL STATE — Becomes reactive automatically
-  // ═══════════════════════════════════════════════════════════════════════════
   state: {
     profile: null as User | null,
     preferences: { theme: 'light', language: 'en' },
     isLoggedIn: false,
   },
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // 3. SETUP — Runs once, returns actions
-  // ═══════════════════════════════════════════════════════════════════════════
   setup({ state, update, get, create, focus, onDispose }) {
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ get() — Access other stores/services (cached)
-    // └─────────────────────────────────────────────────────────────────────
+    // get() — Access other stores/services (cached)
     const api = get(apiService)
     const logger = get(loggerService)
 
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ create() — Create a fresh instance with parameters
-    // └─────────────────────────────────────────────────────────────────────
+    // create() — Create a fresh instance with parameters
     const analytics = create(analyticsService, 'user-store')
 
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ onDispose() — Cleanup when store is destroyed
-    // └─────────────────────────────────────────────────────────────────────
+    // onDispose() — Cleanup when store is destroyed
     const unsubscribe = authEvents.on('logout', () => {
       state.isLoggedIn = false
     })
     onDispose(() => unsubscribe())
 
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ Return actions — functions that can modify state
-    // └─────────────────────────────────────────────────────────────────────
+    // Return actions — functions that can modify state
     return {
       login: async (credentials: Credentials) => {
         const user = await api.login(credentials)
@@ -281,30 +259,22 @@ The container manages all instances in one place:
 ```ts
 import { container } from 'storion'
 
-// ┌─────────────────────────────────────────────────────────────────────────
-// │ Create a container — the "home" for all stores and services
-// └─────────────────────────────────────────────────────────────────────────
+// Create a container — the "home" for all stores and services
 const app = container()
 
-// ┌─────────────────────────────────────────────────────────────────────────
-// │ get() — Retrieve or create an instance (cached)
-// │         First call creates the instance, subsequent calls return cached
-// └─────────────────────────────────────────────────────────────────────────
+// get() — Retrieve or create an instance (cached)
+// First call creates the instance, subsequent calls return cached
 const [userState, userActions] = app.get(userStore)
 const [cartState, cartActions] = app.get(cartStore)
 
 // Same store spec = same instance
 app.get(userStore) === app.get(userStore)  // true! Same instance
 
-// ┌─────────────────────────────────────────────────────────────────────────
-// │ set() — Override with a custom factory (for testing)
-// └─────────────────────────────────────────────────────────────────────────
+// set() — Override with a custom factory (for testing)
 const testApp = container()
 testApp.set(apiService, () => mockApiService)  // Mock for tests
 
-// ┌─────────────────────────────────────────────────────────────────────────
-// │ dispose() — Clean up everything when done
-// └─────────────────────────────────────────────────────────────────────────
+// dispose() — Clean up everything when done
 app.dispose()  // Cleans up all stores, calls onDispose callbacks
 ```
 
@@ -321,10 +291,8 @@ const app = container()
 
 function App() {
   return (
-    // ┌─────────────────────────────────────────────────────────────────────
-    // │ StoreProvider makes the container available to all descendants
-    // │ Any component below can use useStore() to access stores
-    // └─────────────────────────────────────────────────────────────────────
+    // StoreProvider makes the container available to all descendants
+    // Any component below can use useStore() to access stores
     <StoreProvider container={app}>
       <Router>
         <Layout>
@@ -354,25 +322,16 @@ function UserProfile() {
 ```ts
 const app = container()
 
-// ═══════════════════════════════════════════════════════════════════════════
-// INSTANCE ACCESS
-// ═══════════════════════════════════════════════════════════════════════════
-
+// INSTANCE ACCESS ───────────────────────────────────────────────────────────
 app.get(userStore)        // Returns [state, actions] — cached
 app.get(apiService)       // Returns service instance — cached
 app.create(logger, 'ns')  // Returns new instance with args — NOT cached
 
-// ═══════════════════════════════════════════════════════════════════════════
-// OVERRIDES (for testing/mocking)
-// ═══════════════════════════════════════════════════════════════════════════
-
+// OVERRIDES (for testing/mocking) ───────────────────────────────────────────
 app.set(apiService, () => mockApi)  // Override factory for this container
 app.has(userStore)                   // Check if instance exists
 
-// ═══════════════════════════════════════════════════════════════════════════
-// LIFECYCLE
-// ═══════════════════════════════════════════════════════════════════════════
-
+// LIFECYCLE ─────────────────────────────────────────────────────────────────
 app.delete(userStore)     // Remove specific instance
 app.clear()               // Remove all instances (keeps overrides)
 app.dispose()             // Clean up everything, call onDispose callbacks
@@ -442,10 +401,7 @@ function apiService() {
 Services are just factory functions:
 
 ```ts
-// ═══════════════════════════════════════════════════════════════════════════
 // Simple service — no dependencies
-// ═══════════════════════════════════════════════════════════════════════════
-
 function apiService() {
   const baseUrl = import.meta.env.VITE_API_URL
 
@@ -468,12 +424,8 @@ function apiService() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Service with dependencies — receives resolver
-// ═══════════════════════════════════════════════════════════════════════════
-
 function userApiService(resolver: Resolver) {
-  // Access other services via resolver
   const api = resolver.get(apiService)
   const logger = resolver.get(loggerService)
 
@@ -490,10 +442,7 @@ function userApiService(resolver: Resolver) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Service with parameters — use create() instead of get()
-// ═══════════════════════════════════════════════════════════════════════════
-
 function createLogger(resolver: Resolver, namespace: string) {
   return {
     info: (msg: string) => console.log(`[${namespace}] ℹ️ ${msg}`),
@@ -667,19 +616,13 @@ const { fullName } = useStore(({ get }) => {
 Here's a complete example showing all concepts:
 
 ```tsx
-// ═══════════════════════════════════════════════════════════════════════════
-// 1. SERVICES — Infrastructure
-// ═══════════════════════════════════════════════════════════════════════════
-
+// 1. SERVICES — Infrastructure ──────────────────────────────────────────────
 const apiService = service<ApiService>(() => ({
   get: (url) => fetch(url).then(r => r.json()),
   post: (url, data) => fetch(url, { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
 }))
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 2. STORES — Domain Logic
-// ═══════════════════════════════════════════════════════════════════════════
-
+// 2. STORES — Domain Logic ──────────────────────────────────────────────────
 const userStore = store({
   name: 'user',
   state: { profile: null as User | null },
@@ -709,16 +652,10 @@ const cartStore = store({
   },
 })
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 3. CONTAINER — Instance Management
-// ═══════════════════════════════════════════════════════════════════════════
-
+// 3. CONTAINER — Instance Management ────────────────────────────────────────
 const app = container()
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 4. REACT — UI Layer
-// ═══════════════════════════════════════════════════════════════════════════
-
+// 4. REACT — UI Layer ───────────────────────────────────────────────────────
 function App() {
   return (
     <StoreProvider container={app}>

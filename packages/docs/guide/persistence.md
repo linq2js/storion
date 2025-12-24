@@ -656,11 +656,11 @@ const app = container({
 
         // Debounce saves to max once per 500ms
         const debouncedSave = debounce((state) => {
-          try {
-            localStorage.setItem(key, JSON.stringify(state));
-          } catch (e) {
+            try {
+              localStorage.setItem(key, JSON.stringify(state));
+            } catch (e) {
             console.warn('Storage quota exceeded');
-          }
+            }
         }, 500);
 
         return {

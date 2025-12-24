@@ -86,10 +86,8 @@ Configuration services provide environment-specific settings.
 // services/configs/restConfigs.ts
 import { service } from 'storion'
 
-// ┌─────────────────────────────────────────────────────────────────────────────┐
-// │ Define the shape of your REST API configuration.                            │
-// │ This includes base URLs, endpoints, and default settings.                   │
-// └─────────────────────────────────────────────────────────────────────────────┘
+// Define the shape of your REST API configuration.
+// This includes base URLs, endpoints, and default settings.
 export interface RestConfigs {
   baseUrl: string
   defaultHeaders: Record<string, string>
@@ -106,11 +104,9 @@ export interface RestConfigs {
   }
 }
 
-// ┌─────────────────────────────────────────────────────────────────────────────┐
-// │ service<T>() creates a typed service factory.                               │
-// │ The function returns the configuration object.                              │
-// │ Use environment variables for deployment flexibility.                       │
-// └─────────────────────────────────────────────────────────────────────────────┘
+// service<T>() creates a typed service factory.
+// The function returns the configuration object.
+// Use environment variables for deployment flexibility.
 export const restConfigs = service<RestConfigs>(() => ({
   baseUrl: import.meta.env.VITE_API_URL || 'https://api.example.com',
   defaultHeaders: {
@@ -167,10 +163,7 @@ import { networkService } from 'storion/network'
 import { restConfigs } from '../configs/restConfigs'
 import type { AbortableContext, Abortable } from 'storion/async'
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Types
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// Types ─────────────────────────────────────────────────────────────────────
 export interface RequestOptions {
   headers?: Record<string, string>
   params?: Record<string, string>
@@ -196,20 +189,13 @@ export class ApiError extends Error {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Service Implementation
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// Service Implementation ────────────────────────────────────────────────────
 export const restService = service<RestService>(({ get }) => {
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Inject dependencies via get()
-  // └─────────────────────────────────────────────────────────────────────────
+  // Inject dependencies via get()
   const config = get(restConfigs)
   const network = get(networkService)
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Helper: Build URL with query parameters
-  // └─────────────────────────────────────────────────────────────────────────
+  // Helper: Build URL with query parameters
   const buildUrl = (path: string, params?: Record<string, string>) => {
     const url = new URL(path, config.baseUrl)
     if (params) {
@@ -220,12 +206,9 @@ export const restService = service<RestService>(({ get }) => {
     return url.toString()
   }
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Base fetch: Core HTTP logic without any wrappers
-  // │
-  // │ abortable() makes the function cancellable via AbortSignal.
-  // │ The signal is automatically propagated to fetch().
-  // └─────────────────────────────────────────────────────────────────────────
+  // Base fetch: Core HTTP logic without any wrappers
+  // abortable() makes the function cancellable via AbortSignal.
+  // The signal is automatically propagated to fetch().
   const baseFetch = abortable(
     async (
       { signal }: AbortableContext,
@@ -259,47 +242,28 @@ export const restService = service<RestService>(({ get }) => {
     }
   )
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Query fetch: For GET requests (idempotent, safe to retry)
-  // │
-  // │ Wrapper order matters! They execute outside-in:
-  // │ 1. circuitBreaker - Check if circuit is open (fail fast)
-  // │ 2. offlineRetry   - Wait for network if offline
-  // │ 3. retry          - Retry on transient failures
-  // │ 4. timeout        - Timeout per individual attempt
-  // │ 5. baseFetch      - Actual HTTP request
-  // └─────────────────────────────────────────────────────────────────────────
+  // Query fetch: For GET requests (idempotent, safe to retry)
+  // Wrapper order matters! They execute outside-in:
+  // 1. circuitBreaker → 2. offlineRetry → 3. retry → 4. timeout → 5. baseFetch
   const queryFetch = baseFetch
     .use(timeout(config.timeout))    // Timeout per attempt
     .use(retry(3))                   // Retry up to 3 times
     .use(network.offlineRetry())     // Wait for network when offline
     .use(circuitBreaker({ threshold: 5 }))  // Trip after 5 failures
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Mutation fetch: For POST/PATCH (NOT idempotent - don't retry)
-  // │
-  // │ POST requests should NOT be retried automatically because:
-  // │ - Server might process the first request before returning error
-  // │ - Retrying could create duplicate records
-  // └─────────────────────────────────────────────────────────────────────────
+  // Mutation fetch: For POST/PATCH (NOT idempotent - don't retry)
+  // POST requests should NOT be retried because server might process
+  // the first request before returning error, creating duplicates.
   const mutationFetch = baseFetch
     .use(timeout(config.timeout))
     .use(circuitBreaker({ threshold: 5 }))
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Idempotent mutation fetch: For PUT/DELETE (safe to retry)
-  // │
-  // │ PUT and DELETE are idempotent - same request multiple times
-  // │ produces the same result - so retrying is safe.
-  // └─────────────────────────────────────────────────────────────────────────
+  // Idempotent mutation fetch: For PUT/DELETE (safe to retry)
+  // PUT and DELETE are idempotent - same request produces same result.
   const idempotentMutationFetch = mutationFetch.use(retry(3))
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Return the service interface
-  // │
-  // │ map() transforms the function signature to be more ergonomic.
-  // │ Instead of (method, path, body, options), callers use (path, body, options).
-  // └─────────────────────────────────────────────────────────────────────────
+  // Return the service interface
+  // map() transforms signature to be more ergonomic: (path, body, options)
   return {
     get: queryFetch.use(
       map((fetch, path: string, options?: RequestOptions) =>
@@ -406,10 +370,7 @@ import { map } from 'storion/async'
 import { restService } from '../request/restService'
 import { restConfigs } from '../configs/restConfigs'
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Domain Types
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// Domain Types ──────────────────────────────────────────────────────────────
 export interface User {
   id: string
   email: string
@@ -429,51 +390,36 @@ export interface UpdateUserDto {
   avatar?: string
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Service Implementation
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// Service Implementation ────────────────────────────────────────────────────
 export const userService = service(({ get }) => {
   const rest = get(restService)
   const config = get(restConfigs)
   const endpoint = config.endpoints.users
 
   return {
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Get all users
-    // │ .use(map(...)) transforms the API to be more ergonomic
-    // │ .as<User[]>() asserts the return type
-    // └─────────────────────────────────────────────────────────────────────────
+    // Get all users - .use(map(...)) transforms API, .as<T>() asserts type
     getUsers: rest.get
       .use(map((fetch) => fetch(endpoint)))
       .as<User[]>(),
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Get single user by ID
-    // └─────────────────────────────────────────────────────────────────────────
+    // Get single user by ID
     getUser: rest.get
       .use(map((fetch, id: string) => fetch(`${endpoint}/${id}`)))
       .as<User>(),
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Create new user
-    // └─────────────────────────────────────────────────────────────────────────
+    // Create new user
     createUser: rest.post
       .use(map((fetch, data: CreateUserDto) => fetch(endpoint, data)))
       .as<User>(),
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Update existing user
-    // └─────────────────────────────────────────────────────────────────────────
+    // Update existing user
     updateUser: rest.patch
       .use(map((fetch, id: string, data: UpdateUserDto) =>
         fetch(`${endpoint}/${id}`, data)
       ))
       .as<User>(),
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ Delete user
-    // └─────────────────────────────────────────────────────────────────────────
+    // Delete user
     deleteUser: rest.delete
       .use(map((fetch, id: string) => fetch(`${endpoint}/${id}`)))
       .as<void>(),
@@ -497,20 +443,16 @@ import type { User } from '../services/domain/userService'
 export const userStore = store({
   name: 'user',
   state: {
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ async.stale<T>(initial) - Keeps previous data while loading
-    // │ async.fresh<T>() - Shows loading state, no stale data
-    // └─────────────────────────────────────────────────────────────────────────
+    // async.stale<T>(initial) - Keeps previous data while loading
+    // async.fresh<T>() - Shows loading state, no stale data
     users: async.stale<User[]>([]),
     currentUser: async.fresh<User>(),
   },
   setup({ get, focus }) {
     const users = get(userService)
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ async.action binds an async function to a state field
-    // │ It automatically handles loading/success/error states
-    // └─────────────────────────────────────────────────────────────────────────
+    // async.action binds an async function to a state field
+    // It automatically handles loading/success/error states
     const usersQuery = async(focus('users'), users.getUsers)
     const userQuery = async(focus('currentUser'), users.getUser)
 
@@ -536,10 +478,8 @@ function UserList() {
     const [network] = get(networkStore)
     const [state, actions] = get(userStore)
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ trigger() fetches data when dependencies change
-    // │ Empty array = fetch once on mount
-    // └─────────────────────────────────────────────────────────────────────────
+    // trigger() fetches data when dependencies change
+    // Empty array = fetch once on mount
     trigger(actions.fetchUsers, [])
 
     return {
@@ -597,10 +537,8 @@ export const restService = service<RestService>(({ get }) => {
   const config = get(restConfigs)
   const network = get(networkService)
 
-  // ┌─────────────────────────────────────────────────────────────────────────
-  // │ Get auth token lazily (at request time, not setup time)
-  // │ This ensures we always have the current token
-  // └─────────────────────────────────────────────────────────────────────────
+  // Get auth token lazily (at request time, not setup time)
+  // This ensures we always have the current token
   const getAuthHeaders = () => {
     try {
       const [auth] = get(authStore)

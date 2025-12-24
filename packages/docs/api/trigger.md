@@ -112,10 +112,10 @@ function UserProfile({ userId }: { userId: string | null }) {
   const { user } = useStore(({ get }) => {
     const [state, actions] = get(userStore);
     
-    // Only trigger when userId exists
-    if (userId) {
-      trigger(actions.fetchUser, [userId], userId);
-    }
+// Only trigger when userId exists
+if (userId) {
+  trigger(actions.fetchUser, [userId], userId);
+}
     
     return { user: state.user };
   });
