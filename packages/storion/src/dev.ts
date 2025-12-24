@@ -48,8 +48,8 @@ function checkIsDev(): boolean {
     // Ignore errors
   }
 
-  // If process is not available (browser without polyfill), assume production
-  return false;
+    // If process is not available (browser without polyfill), assume production
+    return false;
 }
 
 /**

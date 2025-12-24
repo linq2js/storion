@@ -25,6 +25,7 @@ export {
   isAbortable,
   type Abortable,
   type AbortableContext,
+  type AbortableResult,
   type AbortableWrapper,
   type IdentityWrapper,
 } from "./abortable";

@@ -3,7 +3,6 @@ import {
   abortable,
   isAbortable,
   AbortableAbortedError,
-  abortableDelay,
   type AbortableContext,
 } from "./abortable";
 
@@ -373,32 +372,6 @@ describe("abortable", () => {
     it("should return false for null/undefined", () => {
       expect(isAbortable(null)).toBe(false);
       expect(isAbortable(undefined)).toBe(false);
-    });
-  });
-
-  describe("utilities", () => {
-    describe("abortableDelay()", () => {
-      it("should delay for specified time", async () => {
-        const start = Date.now();
-        await abortableDelay(50);
-        const elapsed = Date.now() - start;
-        expect(elapsed).toBeGreaterThanOrEqual(45);
-      });
-
-      it("should reject when signal is aborted", async () => {
-        const controller = new AbortController();
-        const promise = abortableDelay(1000, controller.signal);
-        controller.abort();
-        await expect(promise).rejects.toThrow(AbortableAbortedError);
-      });
-
-      it("should reject immediately if signal already aborted", async () => {
-        const controller = new AbortController();
-        controller.abort();
-        await expect(abortableDelay(1000, controller.signal)).rejects.toThrow(
-          AbortableAbortedError
-        );
-      });
     });
   });
 

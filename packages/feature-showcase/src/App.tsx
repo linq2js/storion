@@ -10,6 +10,7 @@ import {
   TodoDemo,
   MutationDemo,
   NetworkDemo,
+  AbortableDemo,
 } from "./components";
 import { WithStoreDemo } from "./components/WithStoreDemo";
 
@@ -20,7 +21,8 @@ type Tab =
   | "mutations"
   | "network"
   | "selectors"
-  | "withStore";
+  | "withStore"
+  | "abortable";
 
 const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
   {
@@ -64,6 +66,12 @@ const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
     label: "withStore",
     icon: "🧩",
     description: "Automatic memoization for hooks + render",
+  },
+  {
+    id: "abortable",
+    label: "Abortable",
+    icon: "⏯️",
+    description: "Pause/resume, events, and workflow orchestration",
   },
 ];
 
@@ -133,6 +141,7 @@ export function App() {
           {activeTab === "network" && <NetworkDemo />}
           {activeTab === "selectors" && <TodoDemo />}
           {activeTab === "withStore" && <WithStoreDemo />}
+          {activeTab === "abortable" && <AbortableDemo />}
         </div>
 
         {/* Feature Info */}
