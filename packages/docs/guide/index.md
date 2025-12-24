@@ -168,6 +168,7 @@ Most apps only need stores, actions, and useStore. Advanced features exist for w
 - **[Middleware](/guide/middleware)** — Cross-cutting concerns
 - **[Persistence](/guide/persistence)** — Saving state to storage
 - **[Dependency Injection](/guide/dependency-injection)** — Services and testing
+- **[Testing](/guide/testing)** — Unit and integration tests
 - **[DevTools](/guide/devtools)** — Debugging and inspection
 
 ### React Integration

@@ -70,6 +70,7 @@ export default defineConfig({
             { text: "Dependency Injection", link: "/guide/dependency-injection" },
             { text: "Middleware", link: "/guide/middleware" },
             { text: "Persistence", link: "/guide/persistence" },
+            { text: "Testing", link: "/guide/testing" },
             { text: "DevTools", link: "/guide/devtools" },
             { text: "Meta System", link: "/guide/meta" },
           ],
