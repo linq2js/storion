@@ -1160,4 +1160,183 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(uniqueLastIds.length).toBe(1);
     });
   });
+
+  describe("effect() in selector", () => {
+    it("should run effect after render", async () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const effectCalls: number[] = [];
+
+      const { effect } = await import("../core/effect");
+
+      renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state] = get(counter);
+
+            // Effect defined in selector - runs after render
+            effect(() => {
+              effectCalls.push(state.count);
+            });
+
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      // Effect should have run after mount
+      expect(effectCalls).toContain(0);
+    });
+
+    it("should cleanup effect on unmount", async () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const cleanupCalls: string[] = [];
+
+      const { effect } = await import("../core/effect");
+
+      const { unmount } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state] = get(counter);
+
+            effect((ctx) => {
+              ctx.onCleanup(() => {
+                cleanupCalls.push("cleanup");
+              });
+            });
+
+            return { count: state.count };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      unmount();
+
+      // Cleanup should have been called at least once
+      // (In StrictMode: may be called multiple times due to mount/unmount cycles)
+      expect(cleanupCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should have access to external values via closure", async () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const capturedValues: Array<{ count: number; external: string }> = [];
+
+      const { effect } = await import("../core/effect");
+
+      const TestComponent = ({ externalProp }: { externalProp: string }) => {
+        const { count, increment } = useStore(({ get }) => {
+          const [state, actions] = get(counter);
+
+          // Effect has closure over externalProp
+          effect(() => {
+            capturedValues.push({
+              count: state.count,
+              external: externalProp,
+            });
+          });
+
+          return { count: state.count, increment: actions.increment };
+        });
+
+        return (
+          <div>
+            <span data-testid="count">{count}</span>
+            <span data-testid="external">{externalProp}</span>
+            <button onClick={increment}>Inc</button>
+          </div>
+        );
+      };
+
+      const Wrapper = ({ children }: { children: React.ReactNode }) => (
+        <StoreProvider container={stores}>{children}</StoreProvider>
+      );
+
+      const { rerender } = render(
+        <Wrapper>
+          <TestComponent externalProp="initial" />
+        </Wrapper>
+      );
+
+      // Should have captured initial values
+      expect(capturedValues.some((v) => v.external === "initial")).toBe(true);
+
+      // Rerender with new prop
+      rerender(
+        <Wrapper>
+          <TestComponent externalProp="updated" />
+        </Wrapper>
+      );
+
+      // Effect should have fresh closure with new prop value
+      expect(capturedValues.some((v) => v.external === "updated")).toBe(true);
+    });
+
+    it("should re-run effect when tracked state changes", async () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const effectCalls: number[] = [];
+
+      const { effect } = await import("../core/effect");
+
+      const { result } = renderHook(
+        () =>
+          useStore(({ get }) => {
+            const [state, actions] = get(counter);
+
+            effect(() => {
+              // This tracks state.count
+              effectCalls.push(state.count);
+            });
+
+            return { count: state.count, increment: actions.increment };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      const initialCallCount = effectCalls.length;
+
+      // Trigger state change
+      act(() => {
+        result.current.increment();
+      });
+
+      // Effect should have re-run with new count
+      expect(effectCalls.length).toBeGreaterThan(initialCallCount);
+      expect(effectCalls).toContain(1);
+    });
+  });
 });

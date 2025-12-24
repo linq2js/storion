@@ -419,6 +419,58 @@ effect(() => {
 });
 ```
 
+## Effects in `useStore` Selector
+
+Effects can also be defined inside `useStore()` selectors. This is useful when you need an effect that:
+
+- Accesses component-scope values (refs, props, other hook results)
+- Auto-tracks store state
+- Is tied to the component's lifecycle
+
+```tsx
+import { useStore, effect } from "storion/react";
+
+function SearchPage() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const location = useLocation(); // React Router hook
+
+  const { query, isReady } = useStore(({ get }) => {
+    const [state] = get(searchStore);
+
+    // Effect defined in selector:
+    // - Runs in useEffect (after render)
+    // - Has fresh closure over refs, props, hooks
+    // - Auto-tracks state.isReady access
+    effect(() => {
+      if (location.pathname === "/search" && state.isReady) {
+        inputRef.current?.focus();
+      }
+    });
+
+    return { query: state.query, isReady: state.isReady };
+  });
+
+  return <input ref={inputRef} value={query} />;
+}
+```
+
+### When to Use Which
+
+| Scenario                                        | Where to Define Effect |
+| ----------------------------------------------- | ---------------------- |
+| Store-level side effects (logging, persistence) | Store's `setup()`      |
+| Effects that only use store state               | Store's `setup()`      |
+| Effects that need refs, props, or other hooks   | `useStore()` selector  |
+| Effects tied to component lifecycle             | `useStore()` selector  |
+
+### How It Works
+
+1. Effects in the selector are **collected** during render (pure - no immediate side effects)
+2. After render, they're **executed** in React's `useEffect`
+3. Fresh closure each render = access to current refs/props/hooks
+4. Store state is auto-tracked for re-runs
+5. Cleanup runs on unmount or before re-run
+
 ## Best Practices
 
 1. **Keep effects focused** — One effect per concern
@@ -426,6 +478,7 @@ effect(() => {
 3. **Use ctx.safe() for async** — Prevents race conditions
 4. **Don't return cleanup functions** — Use `ctx.onCleanup()` instead
 5. **Avoid expensive computations** — Effects run synchronously and can block
+6. **Prefer store effects for store-only logic** — Use selector effects only when you need external values
 
 ## Next Steps
 

@@ -210,6 +210,55 @@ const { filteredItems } = useStore(({ get }) => {
 });
 ```
 
+## Effects in Selector
+
+Use `effect()` inside the selector to create effects that:
+- Access component-scope values (refs, props, other hooks)
+- Auto-track store state dependencies
+- Run after render (in React's `useEffect`)
+
+```tsx
+import { useStore, effect } from "storion/react";
+
+function SearchPage() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const location = useLocation();
+
+  const { query } = useStore(({ get }) => {
+    const [state] = get(searchStore);
+
+    // Effect with access to refs, props, AND auto-tracked store state
+    effect(() => {
+      if (location.pathname === "/search" && state.isReady) {
+        inputRef.current?.focus();
+      }
+    });
+
+    return { query: state.query };
+  });
+
+  return <input ref={inputRef} value={query} />;
+}
+```
+
+### Key Behavior
+
+| Aspect | Behavior |
+|--------|----------|
+| **Execution** | Runs in `useEffect` (after render) |
+| **Closure** | Fresh each render (access to current refs/props/hooks) |
+| **Tracking** | Auto-tracks store state reads |
+| **Re-runs** | When tracked state changes |
+| **Cleanup** | Runs on unmount or before re-run |
+
+### When to Use
+
+| Scenario | Where |
+|----------|-------|
+| Store-only effects | Store's `setup()` |
+| Needs refs/props/hooks | Selector's `effect()` |
+| Component lifecycle | Selector's `effect()` |
+
 ## Component-Local Stores with scoped()
 
 Use `scoped()` for stores that should be isolated to a component and automatically disposed on unmount:

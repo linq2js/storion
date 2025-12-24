@@ -29,6 +29,7 @@ import { useContainer } from "./context";
 import { AsyncFunctionError, ScopedOutsideSelectorError } from "../errors";
 import { isSpec } from "../is";
 import { storeTuple } from "../utils/storeTuple";
+import { emitter } from "../emitter";
 
 /**
  * React hook to consume stores with automatic optimization.
@@ -78,6 +79,7 @@ export function useStoreWithContainer<T extends object>(
 
   // Track whether we're inside selector execution (use object for stable reference)
   const [selectorExecution] = useState(() => ({ active: false }));
+  const [scheduledEffects] = useState<(() => VoidFunction)[]>(() => []);
 
   // Clear tracked deps for this render
   refs.trackedDeps.clear();
@@ -145,6 +147,11 @@ export function useStoreWithContainer<T extends object>(
       {
         onRead: (event) => {
           refs.trackedDeps.set(event.key, event);
+        },
+        // Collect effects to run in useEffect (not immediately)
+        // This enables effect() calls in selector to access component scope
+        scheduleEffect: (runEffect) => {
+          scheduledEffects.push(runEffect);
         },
       },
       () => {
@@ -241,6 +248,29 @@ export function useStoreWithContainer<T extends object>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackedKeysToken]);
 
+  // Run scheduled effects after render
+  // Effects defined via effect() in the selector are collected here and
+  // executed in useEffect, giving them access to fresh closure values
+  // (refs, props, other hook results) while auto-tracking store state.
+  //
+  // Note: We don't clear scheduledEffects here because StrictMode runs
+  // effects twice (mount → cleanup → remount). The effect's internal
+  // isStarted guard prevents double-execution of the same instance.
+  useEffect(() => {
+    // Run each effect and collect dispose functions
+    const disposers: VoidFunction[] = [];
+    for (const runEffect of scheduledEffects) {
+      disposers.push(runEffect());
+    }
+
+    // Cleanup: dispose all effects in reverse order (LIFO)
+    return () => {
+      for (let i = disposers.length - 1; i >= 0; i--) {
+        disposers[i]();
+      }
+    };
+  });
+
   return output;
 }
 
@@ -250,24 +280,46 @@ export function useStoreWithContainer<T extends object>(
  * Features:
  * - Multi-store access via `get()` for global stores
  * - Component-local stores via `scoped()` (auto-disposed on unmount)
+ * - Component-scoped effects via `effect()` with access to external values
  * - Auto-stable functions (never cause re-renders)
  * - Fine-grained updates (only re-renders when selected values change)
  *
- * @example
+ * @example Basic usage
  * ```tsx
- * const { count, increment, form } = useStore(({ get, scoped }) => {
- *   // Global stores
+ * const { count, increment } = useStore(({ get }) => {
  *   const [state, actions] = get(counterStore);
- *
- *   // Component-local stores (disposed on unmount)
- *   const [formState, formActions] = scoped(formStore);
- *
- *   return {
- *     count: state.count,
- *     increment: actions.increment,
- *     form: { ...formState, ...formActions },
- *   };
+ *   return { count: state.count, increment: actions.increment };
  * });
+ * ```
+ *
+ * @example Component-local stores
+ * ```tsx
+ * const { form } = useStore(({ scoped }) => {
+ *   const [formState, formActions] = scoped(formStore);
+ *   return { form: { ...formState, ...formActions } };
+ * });
+ * ```
+ *
+ * @example Effects with access to external values (refs, props, hooks)
+ * ```tsx
+ * function SearchPage() {
+ *   const inputRef = useRef<HTMLInputElement>(null);
+ *   const location = useLocation();
+ *
+ *   const { query } = useStore(({ get }) => {
+ *     const [state] = get(searchStore);
+ *
+ *     // Effect runs in useEffect - has access to refs, props, and hooks
+ *     // Auto-tracks store state, re-runs when tracked values change
+ *     effect(() => {
+ *       if (location.pathname === '/search' && state.isReady) {
+ *         inputRef.current?.focus();
+ *       }
+ *     });
+ *
+ *     return { query: state.query };
+ *   });
+ * }
  * ```
  */
 export function useStore<T extends object>(
