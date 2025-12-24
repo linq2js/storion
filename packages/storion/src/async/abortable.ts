@@ -469,6 +469,51 @@ function createAbortableContext<TYield extends void | object>(
     }
   };
 
+  // Join function - coordinates multiple abortable results
+  // Defined first because safe() uses it for abortable functions
+  const join = ((
+    resultOrResults: AbortableResult<any, any> | AbortableResult<any, any>[]
+  ): Promise<any> => {
+    // Check abort before starting
+    if (signal.aborted) {
+      return Promise.reject(new AbortableAbortedError());
+    }
+
+    const isArray = Array.isArray(resultOrResults);
+    const results = isArray ? resultOrResults : [resultOrResults];
+
+    // Abort all joined results when this abortable aborts
+    const abortAll = () => {
+      for (const result of results) {
+        result.abort();
+      }
+    };
+    signal.addEventListener("abort", abortAll, { once: true });
+
+    // Wait for all results
+    const promise = Promise.all(results)
+      .then(async (values) => {
+        // Clean up abort listener
+        signal.removeEventListener("abort", abortAll);
+        // Check pause/abort after all complete
+        await checkPauseAndAbort();
+        return isArray ? values : values[0];
+      })
+      .catch(async (error) => {
+        // Clean up abort listener
+        signal.removeEventListener("abort", abortAll);
+        // Abort remaining results on error
+        abortAll();
+        // Re-throw as AbortableAbortedError if aborted
+        if (signal.aborted) {
+          throw new AbortableAbortedError();
+        }
+        throw error;
+      });
+
+    return promise;
+  }) as AbortableJoin;
+
   // Enhanced safe() that respects pause
   const baseSafe = createSafe(
     () => signal,
@@ -476,7 +521,13 @@ function createAbortableContext<TYield extends void | object>(
   );
 
   const safe: typeof baseSafe = async (fnOrPromise: any, ...args: any[]) => {
-    // Call the base safe
+    // If it's an abortable, use withSignal and join for proper abort propagation
+    if (isAbortable(fnOrPromise)) {
+      const abortableResult = fnOrPromise.withSignal(signal, ...args);
+      return join(abortableResult);
+    }
+
+    // Call the base safe for regular functions/promises
     const result = await baseSafe(fnOrPromise, ...args);
     // Check pause/abort after async operation completes
     await checkPauseAndAbort();
@@ -522,50 +573,6 @@ function createAbortableContext<TYield extends void | object>(
       return value;
     });
   }) as AbortableTake<TYield>;
-
-  // Join function - coordinates multiple abortable results
-  const join = ((
-    resultOrResults: AbortableResult<any, any> | AbortableResult<any, any>[]
-  ): Promise<any> => {
-    // Check abort before starting
-    if (signal.aborted) {
-      return Promise.reject(new AbortableAbortedError());
-    }
-
-    const isArray = Array.isArray(resultOrResults);
-    const results = isArray ? resultOrResults : [resultOrResults];
-
-    // Abort all joined results when this abortable aborts
-    const abortAll = () => {
-      for (const result of results) {
-        result.abort();
-      }
-    };
-    signal.addEventListener("abort", abortAll, { once: true });
-
-    // Wait for all results
-    const promise = Promise.all(results)
-      .then(async (values) => {
-        // Clean up abort listener
-        signal.removeEventListener("abort", abortAll);
-        // Check pause/abort after all complete
-        await checkPauseAndAbort();
-        return isArray ? values : values[0];
-      })
-      .catch(async (error) => {
-        // Clean up abort listener
-        signal.removeEventListener("abort", abortAll);
-        // Abort remaining results on error
-        abortAll();
-        // Re-throw as AbortableAbortedError if aborted
-        if (signal.aborted) {
-          throw new AbortableAbortedError();
-        }
-        throw error;
-      });
-
-    return promise;
-  }) as AbortableJoin;
 
   return {
     signal,

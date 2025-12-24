@@ -588,4 +588,82 @@ describe("abortable", () => {
       await expect(outerFn()).rejects.toThrow(AbortableAbortedError);
     });
   });
+
+  describe("safe() with abortable", () => {
+    it("should automatically join abortable when passed to safe()", async () => {
+      const innerFn = abortable(async () => {
+        await async.delay(10);
+        return "inner-result";
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        const result = await ctx.safe(innerFn);
+        return `outer-${result}`;
+      });
+
+      const result = outerFn();
+      const value = await result;
+
+      expect(value).toBe("outer-inner-result");
+    });
+
+    it("should abort child abortable when parent is aborted via safe()", async () => {
+      let childAborted = false;
+
+      const innerFn = abortable(async (ctx) => {
+        await async.delay(100);
+        if (ctx.aborted()) {
+          childAborted = true;
+        }
+        return "inner";
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        const result = await ctx.safe(innerFn);
+        return result;
+      });
+
+      const result = outerFn();
+
+      // Abort the parent after a short delay
+      await async.delay(10);
+      result.abort();
+
+      await expect(result).rejects.toThrow(AbortableAbortedError);
+      // Give time for child to detect abort
+      await async.delay(10);
+      expect(childAborted).toBe(true);
+    });
+
+    it("should pass arguments to abortable via safe()", async () => {
+      const innerFn = abortable(async (ctx, a: number, b: string) => {
+        return `${a}-${b}`;
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        const result = await ctx.safe(innerFn, 42, "hello");
+        return result;
+      });
+
+      const value = await outerFn();
+      expect(value).toBe("42-hello");
+    });
+
+    it("should propagate signal to child abortable via safe()", async () => {
+      let receivedSignal: AbortSignal | null = null;
+
+      const innerFn = abortable(async (ctx) => {
+        receivedSignal = ctx.signal;
+        return "done";
+      });
+
+      const outerFn = abortable(async (ctx) => {
+        return await ctx.safe(innerFn);
+      });
+
+      await outerFn();
+      expect(receivedSignal).not.toBeNull();
+      expect(receivedSignal!.aborted).toBe(false);
+    });
+  });
 });

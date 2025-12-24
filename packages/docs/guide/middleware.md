@@ -2,523 +2,608 @@
 
 Middleware intercepts store and service creation, enabling cross-cutting concerns like logging, persistence, devtools integration, and more.
 
-## Overview
+## What's This For?
 
-Middleware wraps the store creation process:
+Middleware solves the problem of shared logic across stores. Instead of adding logging, persistence, or validation to each store individually, middleware lets you apply it once to all (or some) stores.
+
+**Common use cases:**
+- 📝 **Logging** — Track all state changes
+- 💾 **Persistence** — Save state to storage
+- 🔧 **DevTools** — Connect to debugging tools
+- ✅ **Validation** — Validate state changes
+- 📊 **Analytics** — Track user actions
+
+---
+
+## How Middleware Works
+
+Middleware wraps the store creation process. Each middleware can run code before and after store creation:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Middleware Execution Flow                         │
+│                                                                      │
+│   middleware 1         middleware 2         middleware 3             │
+│   ┌─────────┐         ┌─────────┐         ┌─────────┐              │
+│   │ BEFORE  │ ──────▶ │ BEFORE  │ ──────▶ │ BEFORE  │              │
+│   └─────────┘         └─────────┘         └─────────┘              │
+│        │                   │                   │                     │
+│        │                   │                   ▼                     │
+│        │                   │            ┌─────────────┐             │
+│        │                   │            │   STORE     │             │
+│        │                   │            │  CREATION   │             │
+│        │                   │            └─────────────┘             │
+│        │                   │                   │                     │
+│   ┌─────────┐         ┌─────────┐         ┌─────────┐              │
+│   │ AFTER   │ ◀────── │ AFTER   │ ◀────── │ AFTER   │              │
+│   └─────────┘         └─────────┘         └─────────┘              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## Basic Usage
+
+Add middleware when creating a container:
 
 ```ts
-import { container } from 'storion';
+import { container } from 'storion'
 
 const app = container({
   middleware: [
-    loggingMiddleware(),
-    persistMiddleware(),
-    devtoolsMiddleware(),
+    loggingMiddleware(),     // First (outermost)
+    persistMiddleware(),     // Second
+    devtoolsMiddleware(),    // Third (innermost)
   ],
-});
+})
 ```
 
-## Creating Middleware
+---
 
-### Basic Structure
+## Your First Middleware (Logger)
+
+Let's create a simple logging middleware to understand the pattern:
 
 ```ts
-import type { Middleware, MiddlewareContext } from 'storion';
+import type { Middleware, MiddlewareContext } from 'storion'
 
-function myMiddleware(): Middleware {
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ Middleware is a function that returns another function (factory pattern).   │
+// │ This allows middleware to accept configuration options.                      │
+// └─────────────────────────────────────────────────────────────────────────────┘
+function loggingMiddleware(): Middleware {
+  // ┌─────────────────────────────────────────────────────────────────────────────┐
+  // │ The inner function receives a context (ctx) with information about what's  │
+  // │ being created (store or service) and a `next()` function to continue.      │
+  // └─────────────────────────────────────────────────────────────────────────────┘
   return (ctx: MiddlewareContext) => {
-    // Before store creation
-    console.log(`Creating: ${ctx.displayName}`);
-    
-    // Continue the chain and get the instance
-    const instance = ctx.next();
-    
-    // After store creation
-    console.log(`Created: ${ctx.displayName}`);
-    
-    return instance;
-  };
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ BEFORE: Code here runs before store creation
+    // └─────────────────────────────────────────────────────────────────────────
+    console.log(`[LOG] Creating: ${ctx.displayName}`)
+    const startTime = performance.now()
+
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ ctx.next() continues the middleware chain and creates the store.
+    // │ You MUST call this to get the store instance!
+    // └─────────────────────────────────────────────────────────────────────────
+    const instance = ctx.next()
+
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ AFTER: Code here runs after store creation.
+    // │ You have access to the created instance.
+    // └─────────────────────────────────────────────────────────────────────────
+    const duration = performance.now() - startTime
+    console.log(`[LOG] Created: ${ctx.displayName} (${duration.toFixed(2)}ms)`)
+
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ Return the instance (you can modify or wrap it before returning).
+    // └─────────────────────────────────────────────────────────────────────────
+    return instance
+  }
 }
 ```
 
-### Middleware Context
+### Using the Middleware
+
+```ts
+import { container } from 'storion'
+
+const app = container({
+  middleware: [loggingMiddleware()],
+})
+
+// Now any store created from this container will be logged:
+// → [LOG] Creating: userStore
+// → [LOG] Created: userStore (0.15ms)
+```
+
+---
+
+## Middleware Context (ctx)
 
 The context provides information about what's being created:
 
 ```ts
 interface MiddlewareContext {
-  // Type of creation
-  type: 'store' | 'factory';
-  
-  // Display name (for stores)
-  displayName?: string;
-  
-  // Store specification (for stores)
-  spec?: StoreSpec;
-  
-  // Continue middleware chain
-  next(): unknown;
-  
-  // Query meta (for stores)
-  meta?: MetaQuery;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Type of creation — 'store' for stores, 'factory' for services
+  // ═══════════════════════════════════════════════════════════════════════════
+  type: 'store' | 'factory'
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Display name (store name or service function name)
+  // ═══════════════════════════════════════════════════════════════════════════
+  displayName?: string
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Store specification (only for stores)
+  // ═══════════════════════════════════════════════════════════════════════════
+  spec?: StoreSpec
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Meta query API (only for stores) — see Meta section below
+  // ═══════════════════════════════════════════════════════════════════════════
+  meta?: MetaQuery
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Continue middleware chain — you MUST call this!
+  // ═══════════════════════════════════════════════════════════════════════════
+  next(): unknown
 }
 ```
 
-### Store-Specific Context
+### Checking Context Type
 
-For store middleware, additional properties are available:
-
-```ts
-interface StoreMiddlewareContext extends MiddlewareContext {
-  type: 'store';
-  spec: StoreSpec;
-  meta: MetaQuery;
-  
-  // Get typed instance
-  next(): StoreInstance;
-}
-```
-
-## Examples
-
-### Logging Middleware
+Always check the type when your middleware is store-specific:
 
 ```ts
-function loggingMiddleware(): Middleware {
+function storeOnlyMiddleware(): Middleware {
   return (ctx) => {
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ Skip factories (services) — only process stores
+    // └─────────────────────────────────────────────────────────────────────────
     if (ctx.type !== 'store') {
-      return ctx.next();
+      return ctx.next()  // Pass through unchanged
     }
+
+    // Now we know ctx.spec and ctx.meta are available
+    console.log('Processing store:', ctx.spec.name)
     
-    const startTime = performance.now();
-    console.log(`[Store] Creating: ${ctx.displayName}`);
-    
-    const instance = ctx.next();
-    
-    const duration = performance.now() - startTime;
-    console.log(`[Store] Created: ${ctx.displayName} (${duration.toFixed(2)}ms)`);
-    
-    // Subscribe to state changes
-    instance.subscribe(() => {
-      console.log(`[Store] ${ctx.displayName} state:`, instance.state);
-    });
-    
-    return instance;
-  };
+    return ctx.next()
+  }
 }
 ```
 
-### Action Tracking Middleware
+---
+
+## Selective Application (applyFor)
+
+Apply middleware only to specific stores:
 
 ```ts
-function actionTrackingMiddleware(): Middleware {
-  return (ctx) => {
-    if (ctx.type !== 'store') {
-      return ctx.next();
-    }
-    
-    const instance = ctx.next();
-    
-    // Subscribe to all action dispatches
-    instance.subscribe('@*', (event) => {
-      const { next } = event;
-      console.log(`[Action] ${ctx.displayName}.${next.name}`, next.args);
-    });
-    
-    return instance;
-  };
-}
-```
-
-### Validation Middleware
-
-```ts
-function validationMiddleware(): Middleware {
-  return (ctx) => {
-    if (ctx.type !== 'store') {
-      return ctx.next();
-    }
-    
-    const instance = ctx.next();
-    
-    // Get validation rules from meta
-    const rules = ctx.meta(validateMeta);
-    
-    // Subscribe to state changes
-    instance.subscribe(() => {
-      for (const [field, rule] of Object.entries(rules.fields)) {
-        const value = instance.state[field];
-        if (!validateField(value, rule)) {
-          console.warn(`Validation failed: ${field}`);
-        }
-      }
-    });
-    
-    return instance;
-  };
-}
-```
-
-## Conditional Middleware
-
-### applyFor() — Match by Pattern
-
-Apply middleware only to matching stores:
-
-```ts
-import { applyFor } from 'storion';
-
-// Exact match
-applyFor('userStore', loggingMiddleware())
-
-// Wildcard patterns
-applyFor('user*', loggingMiddleware())       // userStore, userCache
-applyFor('*Store', loggingMiddleware())      // userStore, authStore
-applyFor('*auth*', loggingMiddleware())      // authStore, userAuth
-
-// RegExp
-applyFor(/^(user|auth)Store$/, loggingMiddleware())
-
-// Multiple patterns
-applyFor(['userStore', 'auth*'], loggingMiddleware())
-
-// Predicate function
-applyFor(
-  (ctx) => ctx.meta?.any(persist),
-  persistMiddleware()
-)
-```
-
-### applyExcept() — Exclude Patterns
-
-Apply middleware to all except matching stores:
-
-```ts
-import { applyExcept } from 'storion';
-
-// Exclude by pattern
-applyExcept('_*', loggingMiddleware())        // exclude _internal, _temp
-applyExcept('*Cache', persistMiddleware())    // exclude userCache, dataCache
-
-// Exclude multiple
-applyExcept(['tempStore', 'cacheStore'], persistMiddleware())
-
-// Exclude by predicate
-applyExcept(
-  (ctx) => ctx.displayName?.startsWith('_') ?? false,
-  loggingMiddleware()
-)
-```
-
-### Object Form
-
-Map patterns to middleware:
-
-```ts
-import { applyFor } from 'storion';
-
-const conditionalMiddleware = applyFor({
-  'userStore': loggingMiddleware(),
-  'auth*': [authMiddleware(), securityMiddleware()],
-  '*Cache': cacheMiddleware(),
-});
+import { applyFor } from 'storion'
 
 const app = container({
-  middleware: [conditionalMiddleware],
-});
+  middleware: [
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Pattern matching
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    // Exact match
+    applyFor('userStore', loggingMiddleware()),
+    
+    // Wildcard patterns
+    applyFor('user*', loggingMiddleware()),      // userStore, userSettings, userCache
+    applyFor('*Store', loggingMiddleware()),     // userStore, cartStore, authStore
+    applyFor('*auth*', loggingMiddleware()),     // authStore, userAuth, oauthStore
+    
+    // Regular expression
+    applyFor(/^(user|auth)Store$/, loggingMiddleware()),
+    
+    // Multiple patterns (array)
+    applyFor(['userStore', 'auth*'], loggingMiddleware()),
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Predicate function
+    // ═══════════════════════════════════════════════════════════════════════════
+    applyFor(
+      (ctx) => ctx.meta?.any(persist),  // Apply to stores with persist meta
+      persistMiddleware()
+    ),
+  ],
+})
 ```
 
-### forStores() — Store-Only
+### applyExcept — Exclude Patterns
 
-Run middleware only for stores, not factories:
+Apply to all stores EXCEPT matching ones:
 
 ```ts
-import { forStores } from 'storion';
+import { applyExcept } from 'storion'
 
-const storeLogger = forStores((ctx) => {
-  console.log(`Creating store: ${ctx.spec.displayName}`);
-  return ctx.next();
-});
+const app = container({
+  middleware: [
+    // Exclude internal stores (starting with _)
+    applyExcept('_*', loggingMiddleware()),
+    
+    // Exclude cache stores
+    applyExcept('*Cache', persistMiddleware()),
+    
+    // Exclude multiple
+    applyExcept(['tempStore', 'debugStore'], analyticsMiddleware()),
+  ],
+})
 ```
+
+### forStores — Store-Only Shorthand
+
+Convenient helper to filter for stores only:
+
+```ts
+import { forStores } from 'storion'
+
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ forStores() is a shorthand that skips factories automatically.              │
+// │ Equivalent to checking ctx.type === 'store' yourself.                       │
+// └─────────────────────────────────────────────────────────────────────────────┘
+const storeLogger = forStores((ctx) => {
+  console.log(`Creating store: ${ctx.displayName}`)
+  return ctx.next()
+})
+```
+
+---
 
 ## Middleware Order
 
-Middleware executes in order, wrapping each other:
+Middleware executes in the order specified, with each wrapping the next:
 
 ```ts
 const app = container({
   middleware: [
-    first(),   // Runs first (outermost)
-    second(),  // Runs second
-    third(),   // Runs third (innermost)
+    first(),   // Outermost — runs first (before), runs last (after)
+    second(),  // Middle
+    third(),   // Innermost — runs last (before), runs first (after)
   ],
-});
+})
 
 // Execution order:
-// first before → second before → third before
-// → store creation →
-// third after → second after → first after
+// 1. first (before)
+// 2. second (before)
+// 3. third (before)
+// 4. → STORE CREATION ←
+// 5. third (after)
+// 6. second (after)
+// 7. first (after)
 ```
 
-## Default Middleware
+### Why This Matters
 
-Set defaults for all containers:
+If you need logging to capture everything (including errors from other middleware), put it first:
 
 ```ts
-import { container } from 'storion';
-
-// Apply to all future containers
-container.defaults({
-  pre: [devtoolsMiddleware()],  // Before user middleware
-  post: [loggingMiddleware()],  // After user middleware
-});
-
-// This container has both default and custom middleware
 const app = container({
-  middleware: [customMiddleware()],
-});
-// Order: devtools → custom → logging
+  middleware: [
+    loggingMiddleware(),     // ← Captures everything
+    validationMiddleware(),  // Might throw
+    persistMiddleware(),     // Might throw
+  ],
+})
 ```
+
+---
+
+## Using Meta in Middleware
+
+Middleware can read store metadata to make decisions:
+
+```ts
+import { meta } from 'storion'
+
+// Define meta types
+const persist = meta()              // Boolean flag
+const priority = meta<number>()     // Typed value
+
+function smartMiddleware(): Middleware {
+  return (ctx) => {
+    if (ctx.type !== 'store') {
+      return ctx.next()
+    }
+
+    const instance = ctx.next()
+
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ ctx.meta() queries metadata defined on the store
+    // └─────────────────────────────────────────────────────────────────────────
+    
+    // Check store-level meta
+    const persistInfo = ctx.meta(persist)
+    if (persistInfo.store) {
+      console.log(`${ctx.displayName} should be persisted`)
+    }
+
+    // Check field-level meta
+    const priorityInfo = ctx.meta(priority)
+    for (const [field, value] of Object.entries(priorityInfo.fields)) {
+      console.log(`${field} has priority: ${value}`)
+    }
+
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ Helper methods on ctx.meta
+    // └─────────────────────────────────────────────────────────────────────────
+    
+    // Check if ANY meta of these types exists
+    if (ctx.meta.any(persist, priority)) {
+      console.log('Has persist or priority meta')
+    }
+
+    // Get all fields with specific meta
+    const persistedFields = ctx.meta.fields(persist)
+    console.log('Persisted fields:', persistedFields)
+
+    return instance
+  }
+}
+```
+
+---
+
+## Recipes: Common Middleware Patterns
+
+### State Change Logger
+
+```ts
+function stateLoggerMiddleware(): Middleware {
+  return (ctx) => {
+    if (ctx.type !== 'store') {
+      return ctx.next()
+    }
+
+    const instance = ctx.next()
+
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ Subscribe to state changes after creation
+    // └─────────────────────────────────────────────────────────────────────────
+    instance.subscribe((state, prevState) => {
+      console.group(`[${ctx.displayName}] State changed`)
+      console.log('Previous:', prevState)
+      console.log('Current:', state)
+      console.groupEnd()
+    })
+
+    return instance
+  }
+}
+```
+
+### Action Tracker
+
+```ts
+function actionTrackerMiddleware(): Middleware {
+  return (ctx) => {
+    if (ctx.type !== 'store') {
+      return ctx.next()
+    }
+
+    const instance = ctx.next()
+
+    // ┌─────────────────────────────────────────────────────────────────────────
+    // │ Subscribe to action dispatches with '@*' pattern
+    // └─────────────────────────────────────────────────────────────────────────
+    instance.subscribe('@*', (event) => {
+      const { next } = event
+      console.log(
+        `[Action] ${ctx.displayName}.${next.name}`,
+        next.args,
+        `(${next.duration}ms)`
+      )
+    })
+
+    return instance
+  }
+}
+```
+
+### Error Boundary
+
+```ts
+function errorBoundaryMiddleware(): Middleware {
+  return (ctx) => {
+    try {
+      return ctx.next()
+    } catch (error) {
+      console.error(`[ERROR] Failed to create ${ctx.displayName}:`, error)
+      
+      // Option 1: Re-throw (let it bubble up)
+      throw error
+      
+      // Option 2: Return a fallback store (advanced)
+      // return createFallbackStore()
+    }
+  }
+}
+```
+
+### Performance Monitor
+
+```ts
+function performanceMiddleware(): Middleware {
+  return (ctx) => {
+    if (ctx.type !== 'store') {
+      return ctx.next()
+    }
+
+    const startTime = performance.now()
+    const instance = ctx.next()
+    const createTime = performance.now() - startTime
+
+    // Warn if creation takes too long
+    if (createTime > 10) {
+      console.warn(
+        `[PERF] ${ctx.displayName} took ${createTime.toFixed(2)}ms to create`
+      )
+    }
+
+    // Track action performance
+    instance.subscribe('@*', (event) => {
+      if (event.next.duration > 100) {
+        console.warn(
+          `[PERF] ${ctx.displayName}.${event.next.name} took ${event.next.duration}ms`
+        )
+      }
+    })
+
+    return instance
+  }
+}
+```
+
+---
 
 ## Built-in Middleware
 
 ### persist()
 
-Persist store state to storage:
+Persist store state to storage. See [Persistence Guide](/guide/persistence) for details.
 
 ```ts
-import { persist } from 'storion/persist';
+import { persist } from 'storion/persist'
 
 const app = container({
   middleware: [
     persist({
-      load: (spec) => localStorage.getItem(spec.displayName),
-      save: (spec, state) => localStorage.setItem(spec.displayName, JSON.stringify(state)),
+      load: (spec) => {
+        const data = localStorage.getItem(spec.displayName)
+        return data ? JSON.parse(data) : undefined
+      },
+      save: (spec, state) => {
+        localStorage.setItem(spec.displayName, JSON.stringify(state))
+      },
     }),
   ],
-});
+})
 ```
-
-See [Persistence Guide](/guide/persistence) for details.
 
 ### devtoolsMiddleware()
 
-Enable devtools integration:
+Enable DevTools integration. See [DevTools Guide](/guide/devtools) for details.
 
 ```ts
-import { devtoolsMiddleware } from 'storion/devtools';
+import { devtoolsMiddleware } from 'storion/devtools'
 
 const app = container({
   middleware: [
-    devtoolsMiddleware({ maxHistory: 50 }),
+    devtoolsMiddleware({
+      name: 'My App',
+      maxHistory: 50,
+    }),
   ],
-});
+})
 ```
 
-See [DevTools Guide](/guide/devtools) for details.
+---
 
-## Using Meta in Middleware
+## Common Mistakes
 
-Query store metadata for conditional behavior:
+### ❌ Forgetting to Call `next()`
 
 ```ts
-import { meta } from 'storion';
-
-const persist = meta();
-const priority = meta<number>();
-
-function smartMiddleware(): Middleware {
+// ❌ WRONG — breaks the chain, store is never created
+function badMiddleware(): Middleware {
   return (ctx) => {
-    if (ctx.type !== 'store') {
-      return ctx.next();
-    }
-    
-    const instance = ctx.next();
-    
-    // Check store-level meta
-    const persistInfo = ctx.meta(persist);
-    if (persistInfo.store) {
-      console.log('Store should be persisted');
-    }
-    
-    // Check field-level meta
-    const priorityInfo = ctx.meta(priority);
-    for (const [field, value] of Object.entries(priorityInfo.fields)) {
-      console.log(`${field} has priority: ${value}`);
-    }
-    
-    // Check if any meta exists
-    if (ctx.meta.any(persist, priority)) {
-      console.log('Has persist or priority meta');
-    }
-    
-    // Get fields with specific meta
-    const persistedFields = ctx.meta.fields(persist);
-    console.log('Persisted fields:', persistedFields);
-    
-    return instance;
-  };
+    console.log('Hello')
+    // Missing ctx.next()!
+    return {}  // Returns empty object instead of store
+  }
+}
+
+// ✅ CORRECT — always call next()
+function goodMiddleware(): Middleware {
+  return (ctx) => {
+    console.log('Hello')
+    return ctx.next()  // Continue the chain
+  }
 }
 ```
 
-## Advanced Patterns
-
-### Middleware Composition
-
-Combine multiple middleware into one:
+### ❌ Not Checking Context Type
 
 ```ts
-function combinedMiddleware(): Middleware {
+// ❌ WRONG — crashes on services (ctx.spec is undefined)
+function badMiddleware(): Middleware {
   return (ctx) => {
-    // First middleware logic
-    console.log('First');
-    
-    // Create wrapper for second middleware
-    const wrappedCtx = {
-      ...ctx,
-      next: () => {
-        // Second middleware logic
-        console.log('Second');
-        return ctx.next();
-      },
-    };
-    
-    return wrappedCtx.next();
-  };
+    console.log(ctx.spec.name)  // TypeError: Cannot read property 'name' of undefined
+    return ctx.next()
+  }
 }
-```
 
-### Instance Enhancement
-
-Add properties or methods to store instances:
-
-```ts
-function enhanceMiddleware(): Middleware {
+// ✅ CORRECT — check type first
+function goodMiddleware(): Middleware {
   return (ctx) => {
-    if (ctx.type !== 'store') {
-      return ctx.next();
+    if (ctx.type === 'store') {
+      console.log(ctx.spec.name)  // Safe
     }
-    
-    const instance = ctx.next();
-    
-    // Add custom method
-    (instance as any).customMethod = () => {
-      console.log('Custom method called');
-    };
-    
-    // Add metadata
-    (instance as any)._createdAt = Date.now();
-    
-    return instance;
-  };
+    return ctx.next()
+  }
 }
 ```
 
-### Error Handling
-
-Handle errors in store creation:
+### ❌ Not Cleaning Up Resources
 
 ```ts
-function errorHandlingMiddleware(): Middleware {
+// ❌ WRONG — subscription leaks when store is disposed
+function badMiddleware(): Middleware {
   return (ctx) => {
-    try {
-      return ctx.next();
-    } catch (error) {
-      console.error(`Failed to create: ${ctx.displayName}`, error);
-      
-      // Optionally return a fallback
-      // or re-throw
-      throw error;
-    }
-  };
+    const instance = ctx.next()
+    
+    const sub = someService.subscribe(() => {
+      // This keeps running forever!
+    })
+    
+    return instance
+  }
+}
+
+// ✅ CORRECT — clean up on dispose
+function goodMiddleware(): Middleware {
+  return (ctx) => {
+    const instance = ctx.next()
+    
+    const sub = someService.subscribe(() => {
+      // ...
+    })
+    
+    // Register cleanup
+    instance.onDispose(() => {
+      sub.unsubscribe()
+    })
+    
+    return instance
+  }
 }
 ```
 
-### Async Initialization
-
-Handle async setup in middleware:
-
-```ts
-function asyncInitMiddleware(): Middleware {
-  return (ctx) => {
-    if (ctx.type !== 'store') {
-      return ctx.next();
-    }
-    
-    const instance = ctx.next();
-    
-    // Add async init method
-    (instance as any).init = async () => {
-      const data = await loadInitialData(ctx.displayName);
-      instance.hydrate(data);
-    };
-    
-    return instance;
-  };
-}
-```
+---
 
 ## Best Practices
 
-### 1. Check Context Type
+1. **Always call `ctx.next()`** — The chain must continue
+2. **Check context type** — Not all middleware applies to both stores and services
+3. **Clean up resources** — Use `instance.onDispose()` to avoid leaks
+4. **Keep middleware focused** — One concern per middleware
+5. **Order matters** — Put logging first to catch everything
+6. **Use `applyFor`** — Don't apply middleware to stores that don't need it
 
-```ts
-// ✅ Good - handle both stores and factories
-function middleware(): Middleware {
-  return (ctx) => {
-    if (ctx.type !== 'store') {
-      return ctx.next(); // Pass through factories
-    }
-    // Handle stores
-    return ctx.next();
-  };
-}
-```
-
-### 2. Always Call next()
-
-```ts
-// ✅ Good - always continue chain
-function middleware(): Middleware {
-  return (ctx) => {
-    doSomething();
-    return ctx.next(); // Must call!
-  };
-}
-
-// ❌ Bad - breaks chain
-function middleware(): Middleware {
-  return (ctx) => {
-    return {}; // Missing ctx.next()!
-  };
-}
-```
-
-### 3. Clean Up Resources
-
-```ts
-function middleware(): Middleware {
-  return (ctx) => {
-    const instance = ctx.next();
-    
-    const subscription = someService.subscribe(() => {
-      // ...
-    });
-    
-    // Clean up on dispose
-    instance.onDispose(() => {
-      subscription.unsubscribe();
-    });
-    
-    return instance;
-  };
-}
-```
+---
 
 ## Next Steps
 
-- **[DevTools](/guide/devtools)** — Devtools middleware deep dive
-- **[Persistence](/guide/persistence)** — Persistence middleware
-- **[Meta System](/guide/meta)** — Using meta for conditional middleware
-- **[container() API](/api/container)** — Complete API reference
+| Topic | What You'll Learn |
+|-------|-------------------|
+| [Persistence](/guide/persistence) | Saving state to storage |
+| [DevTools](/guide/devtools) | Debugging with browser devtools |
+| [Meta](/guide/meta) | Declarative store annotations |
+| [container() API](/api/container) | Complete API reference |
 
+---
+
+**Ready?** [Learn about Persistence →](/guide/persistence)

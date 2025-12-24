@@ -2,212 +2,488 @@
 
 Stores are the core building block of Storion. They encapsulate related state and the actions that modify it, creating a self-contained unit of application logic.
 
+**Time to read:** ~15 minutes
+
+---
+
 ## The Problem Stores Solve
 
 Traditional React state management often leads to:
 
-- **Scattered state** — related data spread across multiple `useState` hooks
-- **Prop drilling** — passing state through many component layers
-- **Unclear ownership** — who is responsible for updating what?
-- **Difficult testing** — state tied to component lifecycle
+| Problem               | What Happens                                         |
+| --------------------- | ---------------------------------------------------- |
+| **Scattered state**   | Related data spread across multiple `useState` hooks |
+| **Prop drilling**     | Passing state through many component layers          |
+| **Unclear ownership** | Who is responsible for updating what?                |
+| **Difficult testing** | State tied to component lifecycle                    |
 
-Stores solve this by co-locating state with the logic that modifies it:
+### Before: Scattered State
+
+```tsx
+// ❌ PROBLEM: State and logic scattered across components
+function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Logic mixed with UI concerns
+  const login = async (credentials) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.login(credentials);
+      setUser(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Must pass everything down through props
+  return <LoginForm onLogin={login} loading={loading} error={error} />;
+}
+```
+
+### After: Self-Contained Store
 
 ```ts
-// All user-related state and logic in one place
+// ✅ SOLUTION: Everything in one place
 const userStore = store({
   name: "user",
-  state: { name: "", email: "", age: 0 },
+  state: {
+    user: null as User | null,
+    loading: false,
+    error: null as string | null,
+  },
   setup({ state }) {
     return {
-      setName: (name: string) => {
-        state.name = name;
-      },
-      setEmail: (email: string) => {
-        state.email = email;
-      },
-      updateProfile: (data: Partial<User>) => {
-        /* ... */
+      login: async (credentials: Credentials) => {
+        state.loading = true;
+        state.error = null;
+        try {
+          state.user = await api.login(credentials);
+        } catch (e) {
+          state.error = e.message;
+        } finally {
+          state.loading = false;
+        }
       },
     };
   },
 });
+
+// Component just uses it — no prop drilling!
+function LoginForm() {
+  const { login, loading, error } = useStore(({ get }) => {
+    const [state, actions] = get(userStore);
+    return {
+      login: actions.login,
+      loading: state.loading,
+      error: state.error,
+    };
+  });
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {error && <p className="error">{error}</p>}
+      <button disabled={loading}>{loading ? "Logging in..." : "Login"}</button>
+    </form>
+  );
+}
 ```
 
-## Defining a Store
+---
+
+## Defining Your First Store
+
+Here's the anatomy of a store with detailed explanations:
 
 ```ts
 import { store } from "storion/react";
 
 const userStore = store({
-  name: "user", // Identifies store in devtools
-  state: { name: "", email: "", age: 0 }, // Initial state
-  setup({ state, update, get, mixin, focus }) {
-    // Setup runs once when store is created
-    // Return actions that components can call
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NAME (required)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Unique identifier for debugging. Shows in DevTools and error messages.
+  // Convention: use camelCase + "Store" suffix
+  name: "user",
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STATE (required)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Initial data structure. Storion wraps this in a reactive Proxy.
+  // Any changes to these properties notify subscribers.
+  state: {
+    /** User profile information */
+    profile: null as User | null,
+
+    /** Whether an async operation is in progress */
+    loading: false,
+
+    /** Last error message, if any */
+    error: null as string | null,
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SETUP (required)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Runs ONCE when the store is first accessed. Receives context with utilities.
+  // Returns an object containing actions that can modify state.
+  setup({ state, update, get, create, focus, onDispose }) {
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ state: Reactive proxy of your state. Mutations here trigger updates.
+    // │ update: For nested mutations (Immer-style draft)
+    // │ get: Access other stores and services (cached)
+    // │ create: Create fresh service instances with parameters
+    // │ focus: Create getter/setter for a specific state path
+    // │ onDispose: Register cleanup callbacks
+    // └─────────────────────────────────────────────────────────────────────
+
     return {
-      setName: (name: string) => {
-        state.name = name;
+      // Actions are just functions that modify state
+      /** Set the user profile */
+      setProfile: (user: User) => {
+        state.profile = user;
+      },
+
+      /** Clear all user data */
+      logout: () => {
+        state.profile = null;
+        state.error = null;
       },
     };
   },
 });
 ```
 
-**Key concepts:**
+### Key Concepts
 
-| Property | Purpose                                                  |
-| -------- | -------------------------------------------------------- |
-| `name`   | Debugging identifier (shows in devtools, error messages) |
-| `state`  | Initial data structure - becomes reactive automatically  |
-| `setup`  | Runs once on creation, receives context, returns actions |
+| Property | Type       | Purpose                                         |
+| -------- | ---------- | ----------------------------------------------- |
+| `name`   | `string`   | Debugging identifier (DevTools, error messages) |
+| `state`  | `object`   | Initial data — becomes reactive automatically   |
+| `setup`  | `function` | Runs once on creation, returns actions          |
 
-## State Mutation
+---
 
-### Direct Mutation (First-Level Properties)
+## State and Initial Values
 
-For top-level properties, mutate directly through the `state` proxy:
+### Typing State
+
+Let TypeScript infer types from your initial values:
+
+```ts
+const counterStore = store({
+  name: "counter",
+  state: {
+    count: 0, // inferred as: number
+    name: "", // inferred as: string
+    items: [] as Item[], // type assertion for arrays
+    user: null as User | null, // nullable types
+    config: {
+      // nested objects work too
+      theme: "light" as "light" | "dark",
+      fontSize: 14,
+    },
+  },
+});
+```
+
+::: tip Use inline comments for documentation
+JSDoc comments on state properties appear in autocomplete:
+
+```ts
+state: {
+  /** Current counter value */
+  count: 0,
+  /** User's display name */
+  name: '',
+}
+```
+
+:::
+
+---
+
+## Actions (Functions that Change State)
+
+Actions are returned from `setup()`. They're the only way to modify state.
+
+### Basic Actions
 
 ```ts
 setup({ state }) {
   return {
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ Simple setter: Just assign to state properties
+    // │ Storion's Proxy intercepts this and notifies subscribers
+    // └─────────────────────────────────────────────────────────────────────
     setName: (name: string) => {
-      state.name = name;  // ✅ Triggers reactivity
+      state.name = name
     },
-    setAge: (age: number) => {
-      state.age = age;    // ✅ Triggers reactivity
+
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ Toggle: Read current value, write new value
+    // └─────────────────────────────────────────────────────────────────────
+    toggleDarkMode: () => {
+      state.darkMode = !state.darkMode
     },
-  };
+
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ Reset: Set multiple properties at once
+    // └─────────────────────────────────────────────────────────────────────
+    reset: () => {
+      state.name = ''
+      state.count = 0
+      state.items = []
+    },
+  }
 }
 ```
 
-**Why this works:** Storion wraps your state in a proxy that intercepts property assignments. When you write `state.name = 'Alice'`, Storion:
+### Actions with Parameters
 
-1. Compares the new value with the old value
-2. If different, records the change
-3. Notifies all subscribers watching `name`
+```ts
+setup({ state }) {
+  return {
+    // Single parameter
+    setCount: (value: number) => {
+      state.count = value
+    },
 
-### Nested State with update()
+    // Multiple parameters
+    updateProfile: (name: string, email: string) => {
+      state.name = name
+      state.email = email
+    },
 
-Direct mutation only works at the first level. For nested objects and arrays, use `update()`:
+    // Object parameter (for many values)
+    setConfig: (config: Partial<Config>) => {
+      state.theme = config.theme ?? state.theme
+      state.fontSize = config.fontSize ?? state.fontSize
+    },
+  }
+}
+```
+
+### Async Actions
+
+```ts
+setup({ state }) {
+  return {
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ Async actions work naturally — just use async/await
+    // │ State changes trigger re-renders immediately
+    // └─────────────────────────────────────────────────────────────────────
+    fetchUser: async (id: string) => {
+      state.loading = true
+      state.error = null
+
+      try {
+        const user = await api.getUser(id)
+        state.user = user
+      } catch (error) {
+        state.error = error.message
+      } finally {
+        state.loading = false
+      }
+    },
+
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ Actions can call other actions
+    // └─────────────────────────────────────────────────────────────────────
+    refreshUser: async () => {
+      const currentId = state.user?.id
+      if (currentId) {
+        await actions.fetchUser(currentId)
+      }
+    },
+  }
+}
+```
+
+---
+
+## Direct Mutation vs `update()`
+
+This is the most important concept to understand about Storion.
+
+### Rule: Direct Mutation Only Works at First Level
+
+```ts
+setup({ state }) {
+  return {
+    // ✅ WORKS: First-level property assignment
+    setName: (name: string) => {
+      state.name = name  // Direct mutation — triggers reactivity
+    },
+
+    // ❌ BROKEN: Nested property assignment
+    setProfileName: (name: string) => {
+      state.profile.name = name  // Won't trigger re-renders!
+    },
+
+    // ❌ BROKEN: Array methods on nested arrays
+    addItem: (item: Item) => {
+      state.items.push(item)  // Won't trigger re-renders!
+    },
+  }
+}
+```
+
+### Why This Happens
+
+Storion tracks changes at the first level of your state object. When you write `state.name = 'Alice'`, Storion sees the assignment and notifies subscribers. But `state.profile.name = 'Alice'` modifies a nested object — Storion doesn't see it.
+
+### Solution: Use `update()` for Nested Changes
 
 ```ts
 setup({ state, update }) {
   return {
-    // ❌ Wrong - won't trigger reactivity
-    badUpdate: () => {
-      state.profile.name = 'John';  // Nested mutation - ignored!
-    },
-
-    // ✅ Correct - use update() for nested changes
-    updateProfile: (profile: Partial<Profile>) => {
+    // ✅ WORKS: Use update() for nested changes
+    setProfileName: (name: string) => {
       update(draft => {
-        Object.assign(draft.profile, profile);
-      });
+        draft.profile.name = name  // Immer-style draft
+      })
     },
 
-    // ✅ Works for arrays too
+    // ✅ WORKS: Array modifications
     addItem: (item: Item) => {
       update(draft => {
-        draft.items.push(item);
-      });
+        draft.items.push(item)
+      })
     },
-  };
+
+    // ✅ WORKS: Complex nested updates
+    updateSettings: (settings: Partial<Settings>) => {
+      update(draft => {
+        Object.assign(draft.user.settings, settings)
+      })
+    },
+  }
 }
 ```
 
-**How update() works:** It uses [Immer](https://immerjs.github.io/immer/) under the hood. You write mutations on a "draft" copy, and Immer produces an immutable update. This gives you:
-
-- **Natural syntax** — mutate like normal JavaScript
-- **Immutable updates** — proper change detection
-- **Batched changes** — multiple mutations in one notification
-
-::: warning Common Mistake
-Direct nested mutation is the #1 bug when starting with Storion:
-
-```ts
-state.profile.name = "John"; // ❌ Won't trigger re-renders
-state.items.push(newItem); // ❌ Won't trigger re-renders
-```
-
-Always use `update()` for anything beyond first-level properties.
-:::
-
-### update() Patterns
+### `update()` Patterns
 
 ```ts
 setup({ state, update }) {
   return {
-    // Pattern 1: Updater function (most common)
+    // ═══════════════════════════════════════════════════════════════════════
+    // Pattern 1: Draft function (most common)
+    // ═══════════════════════════════════════════════════════════════════════
     addTodo: (text: string) => {
       update(draft => {
-        draft.todos.push({ id: Date.now(), text, done: false });
-      });
+        draft.todos.push({
+          id: crypto.randomUUID(),
+          text,
+          done: false,
+        })
+      })
     },
 
-    // Pattern 2: Partial object (shallow merge)
-    setDefaults: () => {
-      update({ count: 0, name: 'Default' });
+    // ═══════════════════════════════════════════════════════════════════════
+    // Pattern 2: Partial object (shallow merge at root level)
+    // ═══════════════════════════════════════════════════════════════════════
+    resetDefaults: () => {
+      update({
+        count: 0,
+        name: 'Default',
+        items: [],
+      })
     },
 
-    // Pattern 3: update.action() - creates reusable action
+    // ═══════════════════════════════════════════════════════════════════════
+    // Pattern 3: update.action() — creates a reusable action
+    // ═══════════════════════════════════════════════════════════════════════
     increment: update.action(draft => {
-      draft.count++;
+      draft.count++
     }),
 
-    // Pattern 4: update.action() with arguments
+    // ═══════════════════════════════════════════════════════════════════════
+    // Pattern 4: update.action() with parameters
+    // ═══════════════════════════════════════════════════════════════════════
     setCount: update.action((draft, value: number) => {
-      draft.count = value;
+      draft.count = value
     }),
-  };
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Pattern 5: Multiple mutations in one update (batched)
+    // ═══════════════════════════════════════════════════════════════════════
+    completeAll: () => {
+      update(draft => {
+        for (const todo of draft.todos) {
+          todo.done = true
+        }
+      })
+    },
+  }
 }
 ```
+
+### When to Use Which
+
+| Scenario                    | Use                                             |
+| --------------------------- | ----------------------------------------------- |
+| Simple first-level property | Direct mutation: `state.count = 5`              |
+| Nested object property      | `update(draft => { draft.user.name = '...' })`  |
+| Array push/pop/splice       | `update(draft => { draft.items.push(...) })`    |
+| Multiple changes at once    | `update(draft => { ... multiple changes ... })` |
+
+---
 
 ## Focus (Lens-like Access)
 
-`focus()` creates a getter/setter pair for any state path. This is useful when you frequently access the same nested path:
+`focus()` creates a getter/setter pair for any state path. Useful when you frequently access the same nested path.
 
 ```ts
 setup({ focus }) {
-  // Create accessor for nested path
-  const [getName, setName] = focus('profile.name');
-  const [getSettings, setSettings] = focus('user.settings');
+  // ┌─────────────────────────────────────────────────────────────────────
+  // │ focus() returns [getter, setter] tuple for a path
+  // │ Path is type-safe — TypeScript validates it matches your state shape
+  // └─────────────────────────────────────────────────────────────────────
+  const [getName, setName] = focus('profile.name')
+  const [getItems, setItems] = focus('cart.items')
 
   return {
-    // Expose the getter
+    // Use getter to read current value
     getName,
 
-    // Use setter directly
+    // Use setter directly as an action
     setName,
 
-    // Compute from current value
+    // Setter with transform function
     uppercaseName: () => {
-      setName(current => current.toUpperCase());
+      setName(current => current.toUpperCase())
     },
 
-    // Update nested object through focus
-    updateSettings: (partial: Partial<Settings>) => {
-      setSettings(draft => {
-        Object.assign(draft, partial);
-      });
+    // Setter with draft function (for objects/arrays)
+    addItem: (item: Item) => {
+      setItems(draft => {
+        draft.push(item)
+      })
     },
-  };
+  }
 }
 ```
 
-**Why use focus?**
+### Focus Setter Patterns
 
-- **Type-safe paths** — TypeScript validates the path string
-- **Reusable accessors** — define once, use in multiple actions
-- **Cleaner code** — avoid repeating `state.deeply.nested.value`
+| Pattern      | Example                                   | Use Case              |
+| ------------ | ----------------------------------------- | --------------------- |
+| Direct value | `setName('Alice')`                        | Replace entirely      |
+| Reducer      | `setCount(n => n + 1)`                    | Compute from previous |
+| Producer     | `setItems(draft => { draft.push(item) })` | Nested mutations      |
 
-**Focus setter patterns:**
+### Why Use Focus?
 
-| Pattern      | Example                             | Use case               |
-| ------------ | ----------------------------------- | ---------------------- |
-| Direct value | `setName('Alice')`                  | Replace entirely       |
-| Reducer      | `setCount(n => n + 1)`              | Compute from previous  |
-| Producer     | `setUser(draft => { draft.age++ })` | Partial nested updates |
+1. **Type-safe paths** — TypeScript validates the path string
+2. **Reusable accessors** — Define once, use in multiple actions
+3. **Cleaner code** — Avoid repeating `state.deeply.nested.value`
+
+---
 
 ## Cross-Store Dependencies
 
@@ -218,283 +494,312 @@ const cartStore = store({
   name: "cart",
   state: { items: [] as CartItem[] },
   setup({ state, get }) {
-    // Get another store's state and actions
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ get() returns [state, actions] from another store
+    // │ The state is reactive — always has the latest values
+    // └─────────────────────────────────────────────────────────────────────
     const [userState, userActions] = get(userStore);
+
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ Can also access services
+    // └─────────────────────────────────────────────────────────────────────
+    const api = get(apiService);
 
     return {
       checkout: async () => {
-        // Use user data in cart logic
+        // Use user state in cart logic
         if (!userState.isLoggedIn) {
-          throw new Error("Must be logged in");
+          throw new Error("Must be logged in to checkout");
         }
-        // ...
+
+        await api.checkout({
+          userId: userState.profile.id,
+          items: state.items,
+        });
       },
 
       addItem: (item: CartItem) => {
-        // Track in analytics using user ID
+        // Track analytics using user ID
         analytics.track("add_to_cart", {
-          userId: userState.id,
-          item,
+          userId: userState.profile?.id,
+          itemId: item.id,
         });
-        state.items.push(item);
+        state.items = [...state.items, item];
       },
     };
   },
 });
 ```
 
-**Important:** `get()` can only be called during setup, not inside actions:
+### ⚠️ Important: `get()` is Setup-Time Only
 
 ```ts
 setup({ get }) {
-  // ✅ Setup-time: get() works here
-  const [userState] = get(userStore);
+  // ✅ CORRECT: Call get() during setup
+  const [userState, userActions] = get(userStore)
 
   return {
     doSomething: () => {
-      // ❌ Runtime: get() would throw here
-      // const [other] = get(otherStore);
+      // ❌ WRONG: Cannot call get() inside actions — will throw!
+      // const [other] = get(otherStore)
 
-      // ✅ But captured state is always current
-      console.log(userState.name); // Gets latest value
+      // ✅ CORRECT: Use the captured reference (always has latest values)
+      console.log(userState.name)  // Latest value from userStore
     },
-  };
+  }
 }
 ```
+
+---
 
 ## Store Lifecycle
 
 ### Lifetime Options
 
 ```ts
-// Default: lives until container is disposed
+// Default: Store lives until container is disposed
 const globalStore = store({
-  lifetime: "keepAlive",
+  lifetime: "keepAlive", // default
   // ...
 });
 
-// Auto-disposes when no components are subscribed
+// Store disposes when no components are subscribed
 const sessionStore = store({
   lifetime: "autoDispose",
   // ...
 });
 ```
 
-**When to use each:**
-
-| Lifetime      | Use case                                                                   |
-| ------------- | -------------------------------------------------------------------------- |
-| `keepAlive`   | Global state (auth, settings), state that should persist across navigation |
-| `autoDispose` | Feature-specific state, modals, wizards, temporary UI state                |
+| Lifetime      | When to Use                                                |
+| ------------- | ---------------------------------------------------------- |
+| `keepAlive`   | Global state (auth, settings), navigation-persistent state |
+| `autoDispose` | Feature-specific state, modals, wizards, temporary UI      |
 
 ::: warning Dependency Rules
-A `keepAlive` store cannot depend on an `autoDispose` store. This would create a situation where the long-lived store holds a reference to a store that might be disposed.
+A `keepAlive` store cannot depend on an `autoDispose` store:
+
+```ts
+// ❌ This will throw an error
+const globalStore = store({
+  lifetime: "keepAlive",
+  setup({ get }) {
+    get(autoDisposeStore); // THROWS: Lifetime mismatch!
+  },
+});
+```
+
 :::
 
-### Cleanup with onDispose
+### Cleanup with `onDispose`
 
-Register cleanup callbacks for resources:
+Register cleanup callbacks for subscriptions, timers, etc:
 
 ```ts
 setup({ state, onDispose }) {
-  // Set up resources
-  const subscription = api.subscribe(data => {
-    state.data = data;
-  });
+  // Set up subscription
+  const unsubscribe = api.subscribe('updates', (data) => {
+    state.data = data
+  })
 
+  // Set up timer
   const intervalId = setInterval(() => {
-    state.tick++;
-  }, 1000);
+    state.tick++
+  }, 1000)
 
-  // Clean up when store is disposed
-  onDispose(() => subscription.unsubscribe());
-  onDispose(() => clearInterval(intervalId));
+  // Register cleanup — called when store is disposed
+  onDispose(() => {
+    unsubscribe()
+    clearInterval(intervalId)
+  })
 
-  return { /* actions */ };
+  return { /* actions */ }
 }
 ```
 
-## Store Instance
+---
 
-There are two ways to access stores:
+## Common Mistakes
 
-### Inside `setup()` or `useStore()` — Tuple
-
-The `get()` function returns a tuple for convenient destructuring:
+### ❌ Nested Mutation (The #1 Bug)
 
 ```ts
-// Inside store setup
+// ❌ WRONG: Won't trigger reactivity
+state.profile.name = "John";
+state.items.push(newItem);
+
+// ✅ CORRECT: Use update()
+update((draft) => {
+  draft.profile.name = "John";
+  draft.items.push(newItem);
+});
+```
+
+### ❌ Calling `get()` Inside Actions
+
+```ts
+// ❌ WRONG: get() inside action throws
 setup({ get }) {
-  const [state, actions] = get(userStore);
-  // state.name, actions.setName()
+  return {
+    doSomething: () => {
+      const [other] = get(otherStore)  // THROWS!
+    },
+  }
 }
 
-// Inside useStore selector
-useStore(({ get }) => {
-  const [state, actions] = get(userStore);
-  return { name: state.name };
-});
-```
-
-### From Container — Full Instance
-
-`container.get()` returns the full store instance:
-
-```ts
-const instance = container.get(userStore);
-
-instance.state; // Reactive state proxy
-instance.actions; // Actions object
-instance.subscribe(fn); // Listen to state changes
-instance.dehydrate(); // Serialize for persistence/SSR
-instance.hydrate(data); // Restore from serialized data
-instance.dirty; // Check if modified since setup
-instance.reset(); // Reset to initial state
-instance.dispose(); // Clean up resources
-```
-
-## Subscribing to Changes
-
-Store instances provide flexible subscription APIs for reacting to state changes outside of React components.
-
-### Subscribe to Any State Change
-
-```ts
-const instance = container.get(counterStore);
-
-// Called whenever ANY state property changes
-const unsubscribe = instance.subscribe((state, prevState) => {
-  console.log("State changed:", state);
-  console.log("Previous state:", prevState);
-});
-
-// Later: stop listening
-unsubscribe();
-```
-
-### Subscribe to Specific Properties
-
-Use a selector to only react when specific values change:
-
-```ts
-const instance = container.get(userStore);
-
-// Only called when `name` changes
-const unsubscribe = instance.subscribe(
-  (state) => state.name, // Selector
-  (name, prevName) => {
-    console.log(`Name changed: ${prevName} → ${name}`);
+// ✅ CORRECT: Call get() at setup time
+setup({ get }) {
+  const [other] = get(otherStore)  // Fine here
+  return {
+    doSomething: () => {
+      console.log(other.value)  // Use captured reference
+    },
   }
-);
-
-// Subscribe to multiple properties
-instance.subscribe(
-  (state) => [state.name, state.email] as const,
-  ([name, email], [prevName, prevEmail]) => {
-    console.log("Name or email changed");
-  }
-);
-
-// Subscribe to computed value
-instance.subscribe(
-  (state) => state.items.length,
-  (count, prevCount) => {
-    console.log(`Item count: ${prevCount} → ${count}`);
-  }
-);
+}
 ```
 
-### Subscribe to Action Dispatching
-
-Use `onDispatch` in store options to react to every action call:
+### ❌ Returning Entire State in Actions
 
 ```ts
-const userStore = store({
-  name: "user",
-  state: { name: "", email: "" },
+// ❌ WRONG: Don't return state from actions
+return {
+  getState: () => state, // Exposes internal proxy
+};
+
+// ✅ CORRECT: Return specific values
+return {
+  getData: () => ({ name: state.name, count: state.count }),
+};
+```
+
+---
+
+## Recipes: Common Store Patterns
+
+### Pattern 1: Loading/Error State
+
+```ts
+const dataStore = store({
+  name: "data",
+  state: {
+    data: null as Data | null,
+    loading: false,
+    error: null as Error | null,
+  },
   setup({ state }) {
     return {
-      setName: (name: string) => {
-        state.name = name;
-      },
-      setEmail: (email: string) => {
-        state.email = email;
+      fetch: async () => {
+        state.loading = true;
+        state.error = null;
+        try {
+          state.data = await api.getData();
+        } catch (e) {
+          state.error = e as Error;
+        } finally {
+          state.loading = false;
+        }
       },
     };
   },
-
-  // Called after every action completes
-  onDispatch: (event) => {
-    console.log(`Action: ${event.name}`);
-    console.log(`Arguments:`, event.args);
-    console.log(`Duration: ${event.duration}ms`);
-    console.log(`State after:`, event.state);
-  },
 });
 ```
 
-### Subscription Patterns
-
-| Pattern                         | Use Case                                         |
-| ------------------------------- | ------------------------------------------------ |
-| `subscribe(callback)`           | React to any state change (logging, persistence) |
-| `subscribe(selector, callback)` | React to specific values (derived state, sync)   |
-| `onDispatch` option             | Analytics, logging, debugging all actions        |
-
-### Example: Sync to External Service
+### Pattern 2: CRUD Operations
 
 ```ts
-const instance = container.get(settingsStore);
-
-// Sync settings to localStorage whenever they change
-instance.subscribe((state) => {
-  localStorage.setItem("settings", JSON.stringify(state));
-});
-
-// Only sync theme changes to CSS
-instance.subscribe(
-  (state) => state.theme,
-  (theme) => {
-    document.documentElement.dataset.theme = theme;
-  }
-);
-```
-
-### Example: Action Analytics
-
-```ts
-const cartStore = store({
-  name: "cart",
-  state: { items: [] as CartItem[] },
-  setup({ state }) {
+const todosStore = store({
+  name: "todos",
+  state: { items: [] as Todo[] },
+  setup({ state, update }) {
     return {
-      addItem: (item: CartItem) => {
-        state.items = [...state.items, item];
+      add: (text: string) => {
+        update((draft) => {
+          draft.items.push({
+            id: crypto.randomUUID(),
+            text,
+            done: false,
+          });
+        });
       },
-      removeItem: (id: string) => {
-        state.items = state.items.filter((i) => i.id !== id);
+
+      toggle: (id: string) => {
+        update((draft) => {
+          const todo = draft.items.find((t) => t.id === id);
+          if (todo) todo.done = !todo.done;
+        });
       },
-      checkout: async () => {
-        /* ... */
+
+      remove: (id: string) => {
+        state.items = state.items.filter((t) => t.id !== id);
+      },
+
+      clearCompleted: () => {
+        state.items = state.items.filter((t) => !t.done);
       },
     };
   },
+});
+```
 
-  onDispatch: (event) => {
-    // Track all cart actions
-    analytics.track(`cart_${event.name}`, {
-      args: event.args,
-      itemCount: event.state.items.length,
-    });
+### Pattern 3: Form State
+
+```ts
+const formStore = store({
+  name: "form",
+  lifetime: "autoDispose", // Clean up when form unmounts
+  state: {
+    values: { name: "", email: "" },
+    errors: {} as Record<string, string>,
+    touched: {} as Record<string, boolean>,
+    submitting: false,
+  },
+  setup({ state, update }) {
+    return {
+      setField: (field: string, value: string) => {
+        update((draft) => {
+          draft.values[field] = value;
+          draft.touched[field] = true;
+          delete draft.errors[field]; // Clear error on change
+        });
+      },
+
+      validate: () => {
+        const errors: Record<string, string> = {};
+        if (!state.values.name) errors.name = "Required";
+        if (!state.values.email) errors.email = "Required";
+        state.errors = errors;
+        return Object.keys(errors).length === 0;
+      },
+
+      submit: async () => {
+        if (!actions.validate()) return;
+
+        state.submitting = true;
+        try {
+          await api.submit(state.values);
+        } finally {
+          state.submitting = false;
+        }
+      },
+
+      reset: () => {
+        state.values = { name: "", email: "" };
+        state.errors = {};
+        state.touched = {};
+      },
+    };
   },
 });
 ```
+
+---
 
 ## Store Options Reference
 
 ```ts
 const myStore = store({
-  // Required
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REQUIRED
+  // ═══════════════════════════════════════════════════════════════════════════
   name: "myStore",
   state: {
     /* initial state */
@@ -505,103 +810,65 @@ const myStore = store({
     };
   },
 
-  // Optional
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Lifecycle
+  // ═══════════════════════════════════════════════════════════════════════════
   lifetime: "keepAlive", // or 'autoDispose'
-  equality: {
-    items: "shallow", // Custom equality per field
-    config: "deep",
-    custom: (a, b) => a.id === b.id,
-  },
-  meta: [persist(), logged()], // Metadata for middleware
 
-  // Callbacks
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Custom equality per field
+  // ═══════════════════════════════════════════════════════════════════════════
+  equality: {
+    items: "shallow", // Shallow compare arrays
+    config: "deep", // Deep compare objects
+    custom: (a, b) => a.id === b.id, // Custom comparator
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Metadata for middleware
+  // ═══════════════════════════════════════════════════════════════════════════
+  meta: [
+    persist(), // Mark for persistence
+    logged(), // Mark for logging
+  ],
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Callbacks
+  // ═══════════════════════════════════════════════════════════════════════════
   onDispatch: (event) => {
-    // Called after every action
-    console.log(event.name, event.args, event.duration);
+    console.log(`${event.name}(${event.args}) took ${event.duration}ms`);
   },
   onError: (error) => {
-    // Called on effect/action errors
     Sentry.captureException(error);
   },
 
-  // Serialization (for persistence, SSR)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OPTIONAL: Serialization (for persistence, SSR)
+  // ═══════════════════════════════════════════════════════════════════════════
   normalize: (state) => ({
-    /* serializable version */
+    // Convert to serializable format
+    ...state,
+    date: state.date.toISOString(),
   }),
   denormalize: (data) => ({
-    /* restored state */
+    // Convert from serializable format
+    ...data,
+    date: new Date(data.date),
   }),
 });
 ```
 
-## Best Practices
+---
 
-### 1. One Store Per Domain
+## What's Next?
 
-Group related state together:
+| Topic                           | What You'll Learn                               |
+| ------------------------------- | ----------------------------------------------- |
+| [Actions](/guide/actions)       | Deep dive into action patterns, composition     |
+| [Reactivity](/guide/reactivity) | How auto-tracking works, `pick()`, optimization |
+| [Effects](/guide/effects)       | Side effects that react to state changes        |
+| [Async](/guide/async)           | Loading states, `async()`, data fetching        |
 
-```ts
-// ✅ Good: one store for user domain
-const userStore = store({
-  state: { profile: {}, preferences: {}, sessions: [] },
-  // ...
-});
+---
 
-// ❌ Avoid: separate stores for related data
-const profileStore = store({ ... });
-const preferencesStore = store({ ... });
-const sessionsStore = store({ ... });
-```
-
-### 2. Keep Actions Focused
-
-Each action should do one thing:
-
-```ts
-// ✅ Good: focused actions
-return {
-  setName: (name) => {
-    state.name = name;
-  },
-  setEmail: (email) => {
-    state.email = email;
-  },
-  clearProfile: () => {
-    state.name = "";
-    state.email = "";
-  },
-};
-
-// ❌ Avoid: god actions
-return {
-  updateEverything: (name, email, prefs, settings) => {
-    /* ... */
-  },
-};
-```
-
-### 3. Use TypeScript Inference
-
-Let TypeScript infer types from your state and setup:
-
-```ts
-// ✅ Good: inferred types
-const counterStore = store({
-  state: { count: 0 },
-  setup({ state }) {
-    return {
-      increment: () => { state.count++; },
-    };
-  },
-});
-
-// ❌ Unnecessary: explicit generics
-const counterStore = store<CounterState, CounterActions>({ ... });
-```
-
-## Next Steps
-
-- **[Reactivity](/guide/reactivity)** — How automatic tracking works
-- **[Effects](/guide/effects)** — Reactive side effects
-- **[Async](/guide/async)** — Loading states and data fetching
-- **[Services](/guide/core-concepts#services)** — Dependency injection
+**Ready?** [Learn about Actions →](/guide/actions)

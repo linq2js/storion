@@ -2,13 +2,27 @@
 
 This guide walks you through setting up Storion and building your first reactive store. By the end, you'll understand the core pattern that makes Storion different from other state management libraries.
 
+## What's This For?
+
+You're here because you need to manage state in a React app. Maybe you've tried Redux (too much boilerplate), Zustand (manual selectors), or Context (re-renders everything). Storion gives you:
+
+- **Automatic tracking** — read state naturally, updates happen automatically
+- **Direct mutation** — write `state.count++` instead of dispatching actions
+- **Type inference** — TypeScript just works, no manual typing
+
 ## The Core Idea
 
-Most state libraries require you to manually specify which state your component depends on. Storion flips this:
+**In 30 seconds:** Most state libraries require you to manually specify which state your component depends on. Storion flips this:
 
-**You read state naturally → Storion automatically tracks what you read → Only re-renders when those specific values change.**
+```
+Traditional: "Tell me what you want, I'll check if it changed"
+             → You must be precise, or face stale data / extra re-renders
 
-This means no forgotten dependencies, no stale closures, and no over-rendering.
+Storion:     "Just use state naturally, I'll watch what you touch"
+             → Write natural code, get optimal updates
+```
+
+When you access `state.count` in your component, Storion records: "this component depends on `count`". When `count` changes, only components that read `count` are notified. You never specify dependencies manually.
 
 ## Installation
 
@@ -28,50 +42,95 @@ yarn add storion
 
 :::
 
+::: info Requirements
+- React 18+ (for useSyncExternalStore)
+- TypeScript 4.7+ (optional but recommended)
+:::
+
 ## Your First Store
 
-Let's build a counter to understand the pattern. We'll go step by step.
+Let's build a counter step by step. We'll explain every line.
 
-### 1. Define a Store
+### Step 1: Define the Store
 
-A store is a container for related state and the actions that modify it:
+Create a new file for your store:
 
 ```ts
 // stores/counterStore.ts
 import { store } from 'storion/react';
 
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ store() creates a store specification.                                      │
+// │ It doesn't create the actual instance yet - that happens when you use it.   │
+// └─────────────────────────────────────────────────────────────────────────────┘
 export const counterStore = store({
+  // name: Used in devtools and error messages to identify this store.
+  // Pick something descriptive that you'll recognize when debugging.
   name: 'counter',
-  state: { count: 0 },
+
+  // state: Your initial data. This becomes reactive automatically.
+  // Storion wraps it in a Proxy that tracks when properties are read or written.
+  state: {
+    count: 0,
+  },
+
+  // setup: A function that runs ONCE when the store is first created.
+  // It receives a context object with helpers, and returns the actions.
   setup({ state }) {
+    // The `state` parameter is a reactive proxy of your initial state.
+    // Reading from it tracks dependencies. Writing to it triggers updates.
+
+    // Return an object containing all the actions this store exposes.
+    // Actions are just regular functions - they're not "dispatched".
     return {
-      increment: () => { state.count++; },
-      decrement: () => { state.count--; },
-      reset: () => { state.count = 0; },
+      // increment: When called, directly mutates the state.
+      // This triggers any component that's reading `count` to re-render.
+      increment: () => {
+        state.count++;  // Direct mutation - no dispatch, no action type!
+      },
+
+      decrement: () => {
+        state.count--;
+      },
+
+      reset: () => {
+        state.count = 0;
+      },
     };
   },
 });
 ```
 
-**What's happening here:**
+### What's Happening Here?
 
-- `name` identifies the store in devtools and error messages
-- `state` is your initial data - Storion wraps it in a reactive proxy
-- `setup` receives the reactive state and returns actions that can modify it
-- Actions mutate state directly - no need for `setState` or `dispatch`
+1. **`store()`** creates a *specification* (a recipe), not an instance
+2. **`name`** is for debugging — you'll see it in errors and devtools
+3. **`state`** is your initial data — it becomes reactive via Proxy
+4. **`setup()`** runs once when the store is created — it returns actions
+5. **Actions mutate state directly** — no reducers, no dispatch
 
-### 2. Create a Container
+::: tip Why `store()` returns a spec, not an instance?
+This enables dependency injection and testing. The actual instance is created by a container when your app starts. This separation lets you mock stores in tests or isolate state in SSR.
+:::
 
-The container is the central hub that manages all your store instances:
+### Step 2: Create a Container
+
+The container manages all your store instances. Think of it as the "brain" of your state management:
 
 ```tsx
 // App.tsx
 import { container, StoreProvider } from 'storion/react';
 
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ container() creates the central hub for all stores.                         │
+// │ It handles: instance creation, caching, dependency injection, cleanup.      │
+// └─────────────────────────────────────────────────────────────────────────────┘
 const app = container();
 
 function App() {
   return (
+    // StoreProvider makes the container available to all child components.
+    // Any component can now access stores via useStore().
     <StoreProvider container={app}>
       <Counter />
     </StoreProvider>
@@ -79,14 +138,23 @@ function App() {
 }
 ```
 
-**Why a container?**
+### What's Happening Here?
 
-- **Instance management**: Creates stores on-demand, caches them for reuse
-- **Dependency injection**: Stores can access other stores and services
-- **Isolation**: Different containers = different state (great for testing and SSR)
-- **Cleanup**: Disposing the container cleans up all resources
+1. **`container()`** creates an instance manager — it creates stores on-demand
+2. **`StoreProvider`** uses React Context to pass the container down the tree
+3. **Components don't import containers** — they use `useStore()` which finds it automatically
 
-### 3. Use the Store
+::: details Why use a container?
+Without a container:
+- Where do stores live? (Global variables? Module singletons?)
+- How do stores find each other? (Import cycles?)
+- How do you reset for testing? (Manual cleanup?)
+- How do you isolate SSR requests? (Shared state = data leaks!)
+
+The container solves all of these by being the single source of truth for store instances.
+:::
+
+### Step 3: Use the Store in a Component
 
 Now connect your component to the store:
 
@@ -96,15 +164,28 @@ import { useStore } from 'storion/react';
 import { counterStore } from '../stores/counterStore';
 
 function Counter() {
+  // ┌─────────────────────────────────────────────────────────────────────────────┐
+  // │ useStore() connects your component to Storion.                              │
+  // │ The selector function tells Storion what data your component needs.         │
+  // └─────────────────────────────────────────────────────────────────────────────┘
   const { count, increment, decrement } = useStore(({ get }) => {
+    // get() retrieves a store from the container.
+    // Returns a tuple: [state, actions]
     const [state, actions] = get(counterStore);
+
+    // Return only what this component needs.
+    // IMPORTANT: Everything you access here is tracked automatically!
     return {
-      count: state.count,
-      increment: actions.increment,
+      count: state.count,           // Accessing state.count → tracked dependency
+      increment: actions.increment, // Actions are stable references
       decrement: actions.decrement,
     };
   });
 
+  // ┌─────────────────────────────────────────────────────────────────────────────┐
+  // │ This component ONLY re-renders when `count` changes.                        │
+  // │ If we had other state (like `name`), changing it wouldn't affect this.      │
+  // └─────────────────────────────────────────────────────────────────────────────┘
   return (
     <div>
       <button onClick={decrement}>-</button>
@@ -115,46 +196,67 @@ function Counter() {
 }
 ```
 
-**The magic happens here:**
+### What's Happening Here?
 
-1. When you access `state.count`, Storion records: "this component depends on `count`"
-2. When `increment` changes `count`, Storion notifies only subscribers of `count`
-3. Components that don't read `count` are never re-rendered
+1. **`useStore(selector)`** — the selector runs during render
+2. **`get(counterStore)`** — retrieves (or creates) the store instance from the container
+3. **`[state, actions]`** — tuple destructuring gives you reactive state and stable actions
+4. **Accessing `state.count`** — this is where the magic happens! Storion records: "Counter component depends on count"
+5. **When `increment` mutates `state.count`** — Storion notifies only components that read `count`
 
-**The selector pattern:**
+::: warning The selector is special
+The selector function is tracked. Any state you read inside it becomes a dependency. This is different from Redux where you manually specify what to watch.
+:::
 
-```ts
-useStore(({ get }) => {
-  // get() retrieves the store, returning [state, actions]
-  const [state, actions] = get(counterStore);
-  
-  // Return only what this component needs
-  // Everything you access here is tracked
-  return { count: state.count, increment: actions.increment };
-});
+## Understanding the Flow
+
+Let's trace what happens when a user clicks the increment button:
+
+```
+1. User clicks "+" button
+   └─→ onClick={increment} fires
+
+2. increment() runs
+   └─→ state.count++
+       └─→ Storion's Proxy intercepts the write
+           └─→ Records: "count changed from 0 to 1"
+
+3. Storion checks: "Who's subscribed to count?"
+   └─→ Counter component is subscribed (it read state.count)
+   └─→ Other components that don't read count are NOT notified
+
+4. Counter re-renders
+   └─→ Selector runs again
+   └─→ get(counterStore) returns same instance (cached)
+   └─→ state.count is now 1
+   └─→ Component renders with new count
 ```
 
-This is different from Redux/Zustand where you manually tell it what to watch. Here, you just use state naturally and Storion figures out the dependencies.
+## The Shorthand: `create()`
 
-## Single-Store Shorthand
-
-For simple apps or isolated features, skip the container setup with `create()`:
+For simple apps or isolated features, skip the container setup entirely:
 
 ```tsx
 import { create } from 'storion/react';
 
-// Creates both the store and a custom hook in one call
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ create() is a shorthand that creates both the store and a custom hook.      │
+// │ Perfect for single-store apps, isolated components, or quick prototypes.    │
+// └─────────────────────────────────────────────────────────────────────────────┘
 const [counter, useCounter] = create({
+  name: 'counter',
   state: { count: 0 },
   setup({ state }) {
     return {
       increment: () => { state.count++; },
+      decrement: () => { state.count--; },
     };
   },
 });
 
 function Counter() {
-  // Simpler selector: (state, actions) => ...
+  // Simpler selector: receives (state, actions) directly
+  // No need to call get() - it's done for you
   const { count, increment } = useCounter((state, actions) => ({
     count: state.count,
     increment: actions.increment,
@@ -163,113 +265,143 @@ function Counter() {
   return <button onClick={increment}>{count}</button>;
 }
 
-// No StoreProvider needed!
+// ✨ No StoreProvider needed!
+// The store instance is created automatically and shared globally.
 ```
 
-**When to use `create()` vs `store()` + container:**
+### When to Use Which?
 
-| Approach | Best for |
+| Approach | Best For |
 |----------|----------|
 | `create()` | Single feature, isolated component, quick prototypes |
-| `store()` + container | Multiple stores, cross-store dependencies, DI |
+| `store()` + container | Multiple stores, cross-store dependencies, testing, DI |
 
-## Understanding Reactivity
+::: tip Start with `create()`
+If you're just starting or building a small feature, use `create()`. You can always migrate to the full container setup later without changing your store definitions.
+:::
 
-Here's what makes Storion efficient:
+## Common Mistakes
 
-```tsx
-function UserCard() {
-  const { name } = useStore(({ get }) => {
-    const [state] = get(userStore);
-    return { name: state.name }; // Only tracks 'name'
-  });
-  
-  // This component ONLY re-renders when name changes
-  // Changes to state.email, state.age, etc. are ignored
-  return <h1>{name}</h1>;
+### ❌ Mistake 1: Nested Mutation
+
+```ts
+setup({ state }) {
+  return {
+    // ❌ WRONG - nested mutation won't trigger reactivity
+    updateName: (name: string) => {
+      state.user.name = name;  // This doesn't work!
+    },
+  };
 }
 ```
 
-Compare to Redux:
+**Why?** Storion tracks first-level property access. Nested mutations bypass the tracking system.
 
-```tsx
-// Redux - must remember to use shallow equality
-const name = useSelector(state => state.user.name);
+**Fix:** Use `update()` for nested changes:
 
-// Or write a custom selector with reselect
-const selectUserName = createSelector(
-  state => state.user,
-  user => user.name
-);
-```
-
-Storion handles this automatically - no selectors, no memoization, no `shallowEqual`.
-
-## Common Patterns
-
-### Accessing Multiple Stores
-
-```tsx
-const { userName, todoCount } = useStore(({ get }) => {
-  const [userState] = get(userStore);
-  const [todoState] = get(todoStore);
-  
+```ts
+setup({ state, update }) {
   return {
-    userName: userState.name,
-    todoCount: todoState.items.length,
+    // ✅ CORRECT - use update() for nested changes
+    updateName: (name: string) => {
+      update(draft => {
+        draft.user.name = name;
+      });
+    },
   };
-});
-```
-
-### Triggering Actions on Mount
-
-Use `trigger()` for effects that should run based on dependencies:
-
-```tsx
-import { trigger } from 'storion';
-
-function UserProfile({ userId }: { userId: string }) {
-  const { user, fetchUser } = useStore(({ get }) => {
-    const [state, actions] = get(userStore);
-    
-    // Fetch when userId changes
-    trigger(actions.fetchUser, [userId], userId);
-    
-    return { user: state.currentUser, fetchUser: actions.fetchUser };
-  });
-  
-  // ...
 }
 ```
 
-### Stable Function References
+### ❌ Mistake 2: Calling `get()` Inside Actions
 
-Functions returned from `useStore` are automatically stable:
+```ts
+setup({ get }) {
+  return {
+    // ❌ WRONG - get() can only be called during setup
+    doSomething: () => {
+      const [other] = get(otherStore);  // This throws!
+    },
+  };
+}
+```
+
+**Why?** `get()` is a setup-time function for dependency declaration.
+
+**Fix:** Capture the store reference during setup:
+
+```ts
+setup({ get }) {
+  // ✅ CORRECT - capture during setup
+  const [otherState, otherActions] = get(otherStore);
+
+  return {
+    doSomething: () => {
+      // Use the captured reference - it's always current
+      console.log(otherState.value);
+    },
+  };
+}
+```
+
+### ❌ Mistake 3: Anonymous Functions in `trigger()`
 
 ```tsx
-const { search } = useStore(({ get }) => {
-  const [, actions] = get(searchStore);
-  
-  return {
-    // This function reference never changes between renders
-    // Safe to pass to memoized children
-    search: () => actions.search(query),
-  };
-});
+// ❌ WRONG - anonymous functions create new references each render
+trigger(() => actions.fetch(userId), [userId]);
+```
 
-// Won't cause re-renders of MemoizedButton
-<MemoizedButton onClick={search}>Search</MemoizedButton>
+**Why?** `trigger()` uses the function reference as a cache key. Anonymous functions are new every render.
+
+**Fix:** Pass the action directly:
+
+```tsx
+// ✅ CORRECT - stable function reference
+trigger(actions.fetch, [userId], userId);
+```
+
+### ❌ Mistake 4: Async Effects
+
+```ts
+// ❌ WRONG - effects must be synchronous
+effect(async (ctx) => {
+  const data = await fetchData();  // Can't await in effect!
+  state.data = data;
+});
+```
+
+**Why?** Effects need to complete synchronously to track dependencies properly.
+
+**Fix:** Use `ctx.safe()` for async operations:
+
+```ts
+// ✅ CORRECT - use ctx.safe() for async
+effect((ctx) => {
+  ctx.safe(fetchData()).then(data => {
+    state.data = data;
+  });
+});
 ```
 
 ## What's Next?
 
-Now that you understand the basics:
+You now understand the core pattern! Here's where to go next:
 
-- **[Core Concepts](/guide/core-concepts)** — Understand stores, services, and containers in depth
-- **[Stores](/guide/stores)** — Learn about state mutation, focus, and lifecycle
-- **[Reactivity](/guide/reactivity)** — Deep dive into how tracking works
-- **[Async State](/guide/async)** — Handle loading, error, and success states
-- **[Effects](/guide/effects)** — Create reactive side effects
+### Building on the Basics
+
+- **[Core Concepts](/guide/core-concepts)** — Understand stores, containers, services, and reactivity in depth
+- **[Stores](/guide/stores)** — Learn about `update()`, `focus()`, and lifecycle
+
+### Adding Features
+
+- **[Effects](/guide/effects)** — Reactive side effects with cleanup
+- **[Async State](/guide/async)** — Data fetching with loading/error states
+- **[Dependency Injection](/guide/dependency-injection)** — Services, mocking, testing
+
+### Going Deeper
+
+- **[Reactivity](/guide/reactivity)** — How auto-tracking works under the hood
+- **[Middleware](/guide/middleware)** — Logging, persistence, devtools
+- **[API Reference](/api/store)** — Complete function documentation
 
 ::: tip Progressive Complexity
 Storion is designed to be **simple at first, powerful as you grow**. Start with basic stores and direct mutations. As your app grows, layer in async state, effects, dependency injection, and middleware — all without rewriting existing code.

@@ -2,81 +2,178 @@
 
 Storion is built on four core concepts that work together: **Stores**, **Containers**, **Services**, and **Reactivity**. Understanding how they interact is key to using Storion effectively.
 
+**Time to read:** ~15 minutes
+
+---
+
 ## Architecture Overview
 
+Here's how the pieces fit together:
+
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Container                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
-│  │  userStore  │  │  cartStore  │  │  uiStore    │          │
-│  │  [state]    │  │  [state]    │  │  [state]    │          │
-│  │  [actions]  │←─│  [actions]  │  │  [actions]  │          │
-│  └─────────────┘  └─────────────┘  └─────────────┘          │
-│         ↓                                                    │
-│  ┌─────────────┐  ┌─────────────┐                           │
-│  │  apiService │  │ logService  │   ← Services               │
-│  └─────────────┘  └─────────────┘                           │
-└─────────────────────────────────────────────────────────────┘
-         ↑
-    Components subscribe to stores via useStore()
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CONTAINER                                       │
+│                        (Instance Management Hub)                             │
+│                                                                              │
+│   ┌──────────────────────────────────────────────────────────────────────┐  │
+│   │                           STORES (Reactive)                           │  │
+│   │                                                                        │  │
+│   │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐               │  │
+│   │  │ userStore   │←───│ cartStore   │    │ uiStore     │               │  │
+│   │  │             │    │             │    │             │               │  │
+│   │  │  state:     │    │  state:     │    │  state:     │               │  │
+│   │  │    profile  │    │    items    │    │    theme    │               │  │
+│   │  │    token    │    │    total    │    │    modal    │               │  │
+│   │  │             │    │             │    │             │               │  │
+│   │  │  actions:   │    │  actions:   │    │  actions:   │               │  │
+│   │  │    login    │    │    add      │    │    toggle   │               │  │
+│   │  │    logout   │    │    checkout │    │    setTheme │               │  │
+│   │  └─────────────┘    └─────────────┘    └─────────────┘               │  │
+│   │         ↑                  ↑                                          │  │
+│   └─────────┼──────────────────┼──────────────────────────────────────────┘  │
+│             │                  │                                             │
+│   ┌─────────┼──────────────────┼──────────────────────────────────────────┐  │
+│   │         ↓                  ↓           SERVICES (Non-reactive)        │  │
+│   │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐               │  │
+│   │  │ apiService  │    │ authService │    │ logService  │               │  │
+│   │  │             │    │             │    │             │               │  │
+│   │  │  get()      │    │  getToken() │    │  info()     │               │  │
+│   │  │  post()     │    │  refresh()  │    │  error()    │               │  │
+│   │  └─────────────┘    └─────────────┘    └─────────────┘               │  │
+│   └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ↑
+                                    │
+            ┌───────────────────────┼───────────────────────┐
+            │                       │                       │
+     ┌──────┴──────┐         ┌──────┴──────┐        ┌───────┴─────┐
+     │  Component  │         │  Component  │        │  Component  │
+     │  useStore() │         │  useStore() │        │  useStore() │
+     └─────────────┘         └─────────────┘        └─────────────┘
 ```
+
+**Key relationships:**
+- **Container** holds all store and service instances
+- **Stores** can depend on other stores and services via `get()`
+- **Services** provide infrastructure (API, logging, etc.)
+- **Components** subscribe to stores via `useStore()`
+
+---
 
 ## Stores
 
-A **store** is a self-contained unit of state and the logic to modify it. Think of it as a "smart model" that knows how to update itself.
+> **Analogy:** A store is like a "smart model" — it holds data AND knows how to update itself. Think of it as a mini-application for one domain (user, cart, settings).
 
-### Why Stores?
+### The Problem Without Stores
 
-Without stores, state management often becomes fragmented:
+Without centralized state, logic scatters across components:
 
 ```tsx
-// ❌ Scattered state across components
+// ❌ PROBLEM: State and logic scattered everywhere
 function App() {
-  const [user, setUser] = useState(null);
-  const [cart, setCart] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // State in multiple places
+  const [user, setUser] = useState(null)
+  const [cart, setCart] = useState([])
+  const [loading, setLoading] = useState(false)
   
   // Logic mixed with UI
   const addToCart = async (item) => {
-    setLoading(true);
-    await api.addToCart(user.id, item);
-    setCart([...cart, item]);
-    setLoading(false);
-  };
+    setLoading(true)
+    await api.addToCart(user.id, item)
+    setCart([...cart, item])
+    setLoading(false)
+  }
   
-  // Must pass everything down...
-  return <ProductList user={user} cart={cart} addToCart={addToCart} />;
+  // Must drill props down
+  return (
+    <ProductList 
+      user={user} 
+      cart={cart} 
+      loading={loading}
+      addToCart={addToCart} 
+    />
+  )
+}
+
+// Every component needs to know about cart logic
+function ProductList({ user, cart, loading, addToCart }) {
+  // More prop drilling...
 }
 ```
 
-Stores co-locate state with behavior:
+### The Solution: Stores
+
+Stores co-locate state with the logic that modifies it:
 
 ```ts
-// ✅ Self-contained store
-const cartStore = store({
-  name: 'cart',
-  state: { items: [], loading: false },
-  setup({ state, get }) {
-    const [userState] = get(userStore);
-    const api = get(apiService);
-    
-    return {
-      addItem: async (item) => {
-        state.loading = true;
-        await api.addToCart(userState.id, item);
-        state.items.push(item);
-        state.loading = false;
-      },
-    };
-  },
-});
+// ✅ SOLUTION: Self-contained store
+// stores/cartStore.ts
 
-// Components just use it
+import { store } from 'storion/react'
+
+const cartStore = store({
+  // ┌─────────────────────────────────────────────────────────────────────────
+  // │ name: Unique identifier for debugging and DevTools
+  // └─────────────────────────────────────────────────────────────────────────
+  name: 'cart',
+
+  // ┌─────────────────────────────────────────────────────────────────────────
+  // │ state: Initial data — automatically becomes reactive
+  // │        Any mutation to these properties notifies subscribers
+  // └─────────────────────────────────────────────────────────────────────────
+  state: {
+    items: [] as CartItem[],
+    loading: false,
+  },
+
+  // ┌─────────────────────────────────────────────────────────────────────────
+  // │ setup: Runs ONCE when the store is first accessed
+  // │        Returns actions that can modify state
+  // └─────────────────────────────────────────────────────────────────────────
+  setup({ state, get }) {
+    // Access other stores and services
+    const [userState] = get(userStore)  // Depends on user store
+    const api = get(apiService)          // Depends on API service
+
+    return {
+      // Actions are just functions that mutate state
+      addItem: async (item: CartItem) => {
+        state.loading = true
+        await api.addToCart(userState.profile?.id, item)
+        state.items.push(item)  // Direct mutation!
+        state.loading = false
+      },
+
+      removeItem: (itemId: string) => {
+        state.items = state.items.filter(i => i.id !== itemId)
+      },
+
+      clear: () => {
+        state.items = []
+      },
+    }
+  },
+})
+```
+
+```tsx
+// Components just use it — no prop drilling needed
 function ProductList() {
-  const { addItem } = useStore(({ get }) => {
-    const [, actions] = get(cartStore);
-    return { addItem: actions.addItem };
-  });
+  const { loading, addItem } = useStore(({ get }) => {
+    const [state, actions] = get(cartStore)
+    return {
+      loading: state.loading,
+      addItem: actions.addItem,
+    }
+  })
+
+  // Component is clean — just UI logic
+  return (
+    <button onClick={() => addItem(product)} disabled={loading}>
+      {loading ? 'Adding...' : 'Add to Cart'}
+    </button>
+  )
 }
 ```
 
@@ -84,378 +181,598 @@ function ProductList() {
 
 ```ts
 const userStore = store({
-  // 1. Identity (for debugging)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 1. IDENTITY — For debugging and DevTools
+  // ═══════════════════════════════════════════════════════════════════════════
   name: 'user',
-  
-  // 2. Initial state
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 2. INITIAL STATE — Becomes reactive automatically
+  // ═══════════════════════════════════════════════════════════════════════════
   state: {
-    profile: { name: '', email: '' },
-    preferences: { theme: 'light' },
+    profile: null as User | null,
+    preferences: { theme: 'light', language: 'en' },
     isLoggedIn: false,
   },
-  
-  // 3. Setup function - runs once when store is created
-  setup({ state, update, get, focus, onDispose }) {
-    // Access other stores/services
-    const api = get(apiService);
-    const logger = get(loggerService);
-    
-    // Set up side effects
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 3. SETUP — Runs once, returns actions
+  // ═══════════════════════════════════════════════════════════════════════════
+  setup({ state, update, get, create, focus, onDispose }) {
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ get() — Access other stores/services (cached)
+    // └─────────────────────────────────────────────────────────────────────
+    const api = get(apiService)
+    const logger = get(loggerService)
+
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ create() — Create a fresh instance with parameters
+    // └─────────────────────────────────────────────────────────────────────
+    const analytics = create(analyticsService, 'user-store')
+
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ onDispose() — Cleanup when store is destroyed
+    // └─────────────────────────────────────────────────────────────────────
     const unsubscribe = authEvents.on('logout', () => {
-      state.isLoggedIn = false;
-    });
-    onDispose(() => unsubscribe());
-    
-    // Return actions
+      state.isLoggedIn = false
+    })
+    onDispose(() => unsubscribe())
+
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ Return actions — functions that can modify state
+    // └─────────────────────────────────────────────────────────────────────
     return {
-      login: async (credentials) => {
-        const user = await api.login(credentials);
+      login: async (credentials: Credentials) => {
+        const user = await api.login(credentials)
+        
+        // update() for nested/complex changes (Immer-style draft)
         update(draft => {
-          draft.profile = user;
-          draft.isLoggedIn = true;
-        });
-        logger.info('User logged in');
+          draft.profile = user
+          draft.isLoggedIn = true
+        })
+        
+        logger.info('User logged in')
+        analytics.track('login')
       },
-      
+
       logout: () => {
-        state.isLoggedIn = false;
+        // Direct mutation for simple changes
+        state.isLoggedIn = false
+        state.profile = null
       },
-    };
+
+      setTheme: (theme: 'light' | 'dark') => {
+        state.preferences.theme = theme
+      },
+    }
   },
-});
+})
 ```
+
+---
 
 ## Container
 
-The **container** is the dependency injection hub that manages all store and service instances.
+> **Analogy:** The container is like a "factory manager" — it creates stores and services on demand, keeps track of what's been created, and cleans up when done.
 
-### Why a Container?
+### The Problem Without a Container
 
-Without a container:
-
-- Where do stores live? (Global variables? Module singletons?)
-- How do stores find each other? (Import cycles?)
-- How do you reset for testing? (Manual cleanup?)
-- How do you isolate SSR requests? (Shared state = data leaks!)
-
-The container solves all of these:
+Without centralized instance management:
 
 ```ts
-import { container } from 'storion';
+// ❌ PROBLEM: Where do stores live?
 
-// Create the app's container
-const app = container();
+// Option 1: Global variables (bad for testing, SSR)
+const userStore = createUserStore()  // Shared across everything!
 
-// Get store instances (created on demand, cached)
-const [userState, userActions] = app.get(userStore);
-const [cartState, cartActions] = app.get(cartStore);
-
-// Same store = same instance
-app.get(userStore) === app.get(userStore); // true
-
-// For testing: create isolated container
-const testApp = container();
-testApp.set(apiService, () => mockApiService);
-
-// For SSR: one container per request
-function handleRequest(req) {
-  const requestApp = container();
-  requestApp.set(sessionService, () => createSession(req));
-  // ...render with requestApp...
-  requestApp.dispose(); // Clean up after response
+// Option 2: Create in components (creates multiple instances)
+function App() {
+  const store = createUserStore()  // New instance every render!
 }
+
+// Option 3: Module singletons (import cycles, hard to test)
+// user.ts imports cart.ts imports user.ts → 💥
+```
+
+### The Solution: Container
+
+The container manages all instances in one place:
+
+```ts
+import { container } from 'storion'
+
+// ┌─────────────────────────────────────────────────────────────────────────
+// │ Create a container — the "home" for all stores and services
+// └─────────────────────────────────────────────────────────────────────────
+const app = container()
+
+// ┌─────────────────────────────────────────────────────────────────────────
+// │ get() — Retrieve or create an instance (cached)
+// │         First call creates the instance, subsequent calls return cached
+// └─────────────────────────────────────────────────────────────────────────
+const [userState, userActions] = app.get(userStore)
+const [cartState, cartActions] = app.get(cartStore)
+
+// Same store spec = same instance
+app.get(userStore) === app.get(userStore)  // true! Same instance
+
+// ┌─────────────────────────────────────────────────────────────────────────
+// │ set() — Override with a custom factory (for testing)
+// └─────────────────────────────────────────────────────────────────────────
+const testApp = container()
+testApp.set(apiService, () => mockApiService)  // Mock for tests
+
+// ┌─────────────────────────────────────────────────────────────────────────
+// │ dispose() — Clean up everything when done
+// └─────────────────────────────────────────────────────────────────────────
+app.dispose()  // Cleans up all stores, calls onDispose callbacks
 ```
 
 ### Container in React
 
-Provide the container to your React tree:
+Use `StoreProvider` to make the container available:
 
 ```tsx
-import { container, StoreProvider } from 'storion/react';
+// App.tsx
+import { container, StoreProvider } from 'storion/react'
 
-const app = container();
+// Create container (usually once, at app startup)
+const app = container()
 
 function App() {
   return (
+    // ┌─────────────────────────────────────────────────────────────────────
+    // │ StoreProvider makes the container available to all descendants
+    // │ Any component below can use useStore() to access stores
+    // └─────────────────────────────────────────────────────────────────────
     <StoreProvider container={app}>
-      <YourApp />
+      <Router>
+        <Layout>
+          <Routes />
+        </Layout>
+      </Router>
     </StoreProvider>
-  );
+  )
 }
 ```
-
-Components access it automatically via `useStore`:
 
 ```tsx
-function Profile() {
+// Any nested component can access stores
+function UserProfile() {
   const { name } = useStore(({ get }) => {
-    // 'get' uses the container from StoreProvider
-    const [state] = get(userStore);
-    return { name: state.profile.name };
-  });
+    // get() uses the container from the nearest StoreProvider
+    const [state] = get(userStore)
+    return { name: state.profile?.name }
+  })
+
+  return <h1>Hello, {name}</h1>
 }
 ```
 
-### Container Methods
+### Container Methods Reference
 
 ```ts
-const app = container();
+const app = container()
 
-// Get or create instance (cached)
-app.get(userStore);    // Returns [state, actions]
-app.get(apiService);   // Returns service instance
+// ═══════════════════════════════════════════════════════════════════════════
+// INSTANCE ACCESS
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Create fresh instance (not cached)
-app.create(loggerService, 'auth'); // With arguments
+app.get(userStore)        // Returns [state, actions] — cached
+app.get(apiService)       // Returns service instance — cached
+app.create(logger, 'ns')  // Returns new instance with args — NOT cached
 
-// Override for testing/mocking
-app.set(apiService, () => mockApi);
+// ═══════════════════════════════════════════════════════════════════════════
+// OVERRIDES (for testing/mocking)
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Lifecycle
-app.delete(userStore); // Remove specific instance
-app.clear();           // Remove all instances
-app.dispose();         // Clean up everything
+app.set(apiService, () => mockApi)  // Override factory for this container
+app.has(userStore)                   // Check if instance exists
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LIFECYCLE
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.delete(userStore)     // Remove specific instance
+app.clear()               // Remove all instances (keeps overrides)
+app.dispose()             // Clean up everything, call onDispose callbacks
 ```
+
+### Why Container Matters
+
+| Scenario | Without Container | With Container |
+|----------|-------------------|----------------|
+| **Testing** | Mock globals, reset after each test | Create isolated container per test |
+| **SSR** | Shared state across requests! | One container per request |
+| **Dependencies** | Import cycles between stores | Container resolves at runtime |
+| **Cleanup** | Manual tracking of subscriptions | `dispose()` handles everything |
+
+---
 
 ## Services
 
-**Services** are plain factory functions for non-reactive dependencies like API clients, loggers, or utilities.
+> **Analogy:** Services are like "utility workers" — they do specific jobs (API calls, logging, analytics) but don't hold application state.
 
 ### Services vs Stores
 
 | Aspect | Store | Service |
 |--------|-------|---------|
-| **State** | Has reactive state | No state (or non-reactive) |
-| **Purpose** | Domain data & logic | Infrastructure & utilities |
-| **Updates** | Changes trigger re-renders | No reactivity |
-| **Examples** | User, Cart, UI | API client, Logger, Analytics |
+| **State** | Has reactive state that triggers re-renders | No reactive state |
+| **Purpose** | Domain data and business logic | Infrastructure and utilities |
+| **Updates** | Changes notify components | No reactivity |
+| **Caching** | Always cached per container | Can be cached or fresh |
+| **Examples** | `userStore`, `cartStore`, `uiStore` | `apiService`, `loggerService`, `analyticsService` |
 
-### Defining Services
-
-Services are just functions that return an object:
+### When to Use Each
 
 ```ts
-// Simple service
+// ✅ USE A STORE when you have:
+// - Data that components need to display
+// - State that changes over time
+// - Logic that modifies that state
+
+const userStore = store({
+  name: 'user',
+  state: { profile: null, isLoggedIn: false },  // ← Components display this
+  setup({ state }) {
+    return {
+      login: async () => { /* ... */ },  // ← Changes trigger re-renders
+    }
+  },
+})
+
+// ✅ USE A SERVICE when you have:
+// - Utilities that don't need reactivity
+// - Infrastructure concerns (API, logging)
+// - Things that don't change or don't need to trigger re-renders
+
 function apiService() {
-  const baseUrl = '/api';
-  
   return {
-    get: (path: string) => fetch(`${baseUrl}${path}`).then(r => r.json()),
-    post: (path: string, data: unknown) => fetch(`${baseUrl}${path}`, {
+    get: (url: string) => fetch(url).then(r => r.json()),
+    post: (url: string, data: unknown) => fetch(url, {
       method: 'POST',
       body: JSON.stringify(data),
     }).then(r => r.json()),
-  };
-}
-
-// Service with dependencies
-function userApiService(resolver) {
-  const api = resolver.get(apiService);
-  const logger = resolver.get(loggerService);
-  
-  return {
-    getUser: async (id: string) => {
-      logger.info(`Fetching user ${id}`);
-      return api.get(`/users/${id}`);
-    },
-  };
-}
-
-// Service with parameters (use create() instead of get())
-function createLogger(resolver, namespace: string) {
-  return {
-    info: (msg: string) => console.log(`[${namespace}] ${msg}`),
-    error: (msg: string) => console.error(`[${namespace}] ${msg}`),
-  };
+  }
 }
 ```
 
-### Using Services in Stores
+### Defining Services
+
+Services are just factory functions:
 
 ```ts
-const userStore = store({
-  name: 'user',
-  state: { profile: null, loading: false },
-  setup({ state, get, create }) {
-    // get() - cached, shared instance
-    const api = get(userApiService);
-    
-    // create() - fresh instance with parameters
-    const logger = create(createLogger, 'user-store');
-    
-    return {
-      fetchProfile: async (id: string) => {
-        state.loading = true;
-        logger.info(`Loading profile ${id}`);
-        state.profile = await api.getUser(id);
-        state.loading = false;
-      },
-    };
-  },
-});
+// ═══════════════════════════════════════════════════════════════════════════
+// Simple service — no dependencies
+// ═══════════════════════════════════════════════════════════════════════════
+
+function apiService() {
+  const baseUrl = import.meta.env.VITE_API_URL
+
+  return {
+    get: async <T>(path: string): Promise<T> => {
+      const res = await fetch(`${baseUrl}${path}`)
+      if (!res.ok) throw new Error(`API Error: ${res.status}`)
+      return res.json()
+    },
+
+    post: async <T>(path: string, data: unknown): Promise<T> => {
+      const res = await fetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error(`API Error: ${res.status}`)
+      return res.json()
+    },
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Service with dependencies — receives resolver
+// ═══════════════════════════════════════════════════════════════════════════
+
+function userApiService(resolver: Resolver) {
+  // Access other services via resolver
+  const api = resolver.get(apiService)
+  const logger = resolver.get(loggerService)
+
+  return {
+    getUser: async (id: string) => {
+      logger.info(`Fetching user ${id}`)
+      return api.get<User>(`/users/${id}`)
+    },
+
+    updateUser: async (id: string, data: Partial<User>) => {
+      logger.info(`Updating user ${id}`)
+      return api.post<User>(`/users/${id}`, data)
+    },
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Service with parameters — use create() instead of get()
+// ═══════════════════════════════════════════════════════════════════════════
+
+function createLogger(resolver: Resolver, namespace: string) {
+  return {
+    info: (msg: string) => console.log(`[${namespace}] ℹ️ ${msg}`),
+    warn: (msg: string) => console.warn(`[${namespace}] ⚠️ ${msg}`),
+    error: (msg: string) => console.error(`[${namespace}] ❌ ${msg}`),
+  }
+}
+
+// Usage in a store:
+setup({ get, create }) {
+  const api = get(apiService)                    // Cached
+  const logger = create(createLogger, 'user')    // Fresh instance with namespace
+}
 ```
 
 ### Typed Services with `service()`
 
-For better TypeScript support, use the `service()` helper:
+For better TypeScript support, wrap services with `service()`:
 
 ```ts
-import { service } from 'storion';
+import { service } from 'storion'
 
+// Define the interface
 interface ApiService {
-  get: (path: string) => Promise<unknown>;
-  post: (path: string, data: unknown) => Promise<unknown>;
+  get: <T>(path: string) => Promise<T>
+  post: <T>(path: string, data: unknown) => Promise<T>
 }
 
+// Create typed service
 const apiService = service<ApiService>(() => ({
   get: (path) => fetch(path).then(r => r.json()),
   post: (path, data) => fetch(path, {
     method: 'POST',
     body: JSON.stringify(data),
   }).then(r => r.json()),
-}));
+}))
+
+// Now get() returns correctly typed service
+const api = get(apiService)  // Type: ApiService
+api.get<User>('/users/1')    // Autocomplete works!
 ```
+
+---
 
 ## Reactivity
 
-Storion's reactivity system automatically tracks which state each component uses and only re-renders when that specific state changes.
+> **Analogy:** Storion's reactivity is like a "smart delivery service" — it tracks who ordered what, and only delivers to the addresses that actually need updates.
 
-### How It Works
-
-1. **State is wrapped in a Proxy** that intercepts property access
-2. **During render**, reads are recorded as dependencies
-3. **On state change**, only subscribers of changed properties are notified
+### The Problem With Manual Tracking
 
 ```tsx
-function UserName() {
+// ❌ Redux/Zustand: You must manually specify what to watch
+const count = useSelector(state => state.counter.count)
+
+// What if you forget to extract deeply?
+const counter = useSelector(state => state.counter)
+// Now EVERY counter property change causes re-render! 💥
+
+// Need to remember equality functions
+const user = useSelector(state => state.user, shallowEqual)
+```
+
+### The Solution: Auto-Tracking
+
+Storion automatically records what you access:
+
+```tsx
+// ✅ Storion: Just use state, tracking is automatic
+function UserProfile() {
   const { name } = useStore(({ get }) => {
-    const [state] = get(userStore);
+    const [state] = get(userStore)
     
-    // Accessing state.profile.name is tracked
-    return { name: state.profile.name };
-  });
-  
+    // Storion sees: "This component accessed state.profile.name"
+    // It records this dependency automatically
+    return { name: state.profile.name }
+  })
+
   // This component ONLY re-renders when profile.name changes
-  // Changes to profile.email, preferences, etc. are ignored
-  return <h1>{name}</h1>;
+  // Changes to profile.email, profile.age, etc. are ignored!
+  return <h1>Hello, {name}</h1>
 }
+```
+
+### How It Works Under the Hood
+
+```
+1. SETUP PHASE
+   ┌─────────────────────────────────────────────────────────────────────┐
+   │ Store state is wrapped in a Proxy that intercepts property access  │
+   └─────────────────────────────────────────────────────────────────────┘
+
+2. RENDER PHASE
+   ┌─────────────────────────────────────────────────────────────────────┐
+   │ Component renders → selector runs → Proxy records all accesses    │
+   │                                                                     │
+   │ useStore(({ get }) => {                                            │
+   │   const [state] = get(userStore)                                   │
+   │   return { name: state.profile.name }  // ← Proxy records this!   │
+   │ })                                                                  │
+   │                                                                     │
+   │ Dependencies recorded: ["profile", "name"]                         │
+   └─────────────────────────────────────────────────────────────────────┘
+
+3. UPDATE PHASE
+   ┌─────────────────────────────────────────────────────────────────────┐
+   │ Action mutates state → Storion checks who subscribed               │
+   │                                                                     │
+   │ state.profile.name = "New Name"                                    │
+   │ ↓                                                                   │
+   │ Storion: "Who depends on profile.name? → Notify only them"        │
+   └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Tracking Granularity
 
-Storion tracks **first-level property access**:
+Storion tracks **first-level property access** by default:
 
 ```tsx
+// Tracks the entire "profile" object
 const { profile } = useStore(({ get }) => {
-  const [state] = get(userStore);
-  return { profile: state.profile }; // Tracks "profile"
-});
-
+  const [state] = get(userStore)
+  return { profile: state.profile }  // Tracks "profile"
+})
 // Re-renders when ANY property of profile changes
-// (name, email, etc.)
+
+// vs
+
+// Tracks only specific nested properties
+const { name, email } = useStore(({ get }) => {
+  const [state] = get(userStore)
+  return {
+    name: state.profile.name,    // Tracks "profile.name"
+    email: state.profile.email,  // Tracks "profile.email"
+  }
+})
+// Only re-renders when name OR email changes
 ```
 
-For finer control, use `pick()`:
+### Fine-Grained Control with `pick()`
+
+For maximum precision, use `pick()`:
 
 ```tsx
-import { pick } from 'storion';
+import { pick } from 'storion'
 
-const { name } = useStore(({ get }) => {
-  const [state] = get(userStore);
-  return { name: pick(() => state.profile.name) }; // Tracks only "name"
-});
-
-// Only re-renders when profile.name specifically changes
+const { fullName } = useStore(({ get }) => {
+  const [state] = get(userStore)
+  
+  // pick() creates a tracked computed value
+  // Only re-renders if the computed result changes
+  return {
+    fullName: pick(() => `${state.profile.firstName} ${state.profile.lastName}`),
+  }
+})
 ```
 
-### Comparison with Other Libraries
+### Comparison With Other Libraries
 
-| Library | Tracking | Re-render Control |
-|---------|----------|-------------------|
+| Library | Tracking Style | Re-render Control |
+|---------|----------------|-------------------|
 | **Redux** | Manual selectors | `useSelector(fn, equalityFn)` |
 | **Zustand** | Manual selectors | `useStore(fn, shallow)` |
-| **MobX** | Auto (deep) | `observer()` HOC |
-| **Jotai** | Per-atom | N/A |
+| **MobX** | Auto (deep, all properties) | `observer()` HOC |
+| **Jotai** | Per-atom (manual setup) | N/A |
 | **Storion** | Auto (first-level) | `pick()` for fine-tuning |
 
-## Middleware
+---
 
-**Middleware** intercepts store creation for cross-cutting concerns like logging, persistence, or devtools.
+## How Everything Works Together
 
-```ts
-import { container, applyFor, compose } from 'storion';
+Here's a complete example showing all concepts:
 
-// Define middleware
-const loggingMiddleware = (ctx) => {
-  console.log(`Creating store: ${ctx.displayName}`);
-  const instance = ctx.next(); // Create the store
-  console.log(`Created: ${instance.id}`);
-  return instance;
-};
+```tsx
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. SERVICES — Infrastructure
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Apply to container
-const app = container({
-  middleware: [
-    loggingMiddleware,
-    // Apply only to specific stores
-    applyFor('user*', persistMiddleware),
-  ],
-});
-```
+const apiService = service<ApiService>(() => ({
+  get: (url) => fetch(url).then(r => r.json()),
+  post: (url, data) => fetch(url, { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+}))
 
-See [Middleware](/api/container#middleware) for more details.
-
-## Meta
-
-**Meta** attaches metadata to stores for middleware to consume. It's a declarative way to configure cross-cutting concerns:
-
-```ts
-import { meta } from 'storion';
-
-// Define meta types
-const persist = meta();           // Boolean flag
-const priority = meta<number>();  // Typed value
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. STORES — Domain Logic
+// ═══════════════════════════════════════════════════════════════════════════
 
 const userStore = store({
   name: 'user',
-  state: { name: '', token: '' },
-  meta: [
-    persist(),                     // Mark entire store for persistence
-    notPersisted.for('token'),     // Except the token field
-    priority(10),                  // Custom priority value
-  ],
-});
+  state: { profile: null as User | null },
+  setup({ state, get }) {
+    const api = get(apiService)
+    return {
+      fetchUser: async (id: string) => {
+        state.profile = await api.get(`/users/${id}`)
+      },
+    }
+  },
+})
 
-// Middleware reads meta
-const persistMiddleware = (ctx) => {
-  const instance = ctx.next();
-  
-  if (ctx.getMeta(persist)) {
-    // This store should be persisted
-    const excludedFields = ctx.getMeta(notPersisted);
-    // ... implement persistence logic
-  }
-  
-  return instance;
-};
+const cartStore = store({
+  name: 'cart',
+  state: { items: [] as CartItem[] },
+  setup({ state, get }) {
+    const api = get(apiService)
+    const [userState] = get(userStore)  // Cross-store dependency!
+    
+    return {
+      addItem: async (product: Product) => {
+        await api.post('/cart', { userId: userState.profile?.id, product })
+        state.items.push({ ...product, quantity: 1 })
+      },
+    }
+  },
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. CONTAINER — Instance Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+const app = container()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. REACT — UI Layer
+// ═══════════════════════════════════════════════════════════════════════════
+
+function App() {
+  return (
+    <StoreProvider container={app}>
+      <UserProfile />
+      <Cart />
+    </StoreProvider>
+  )
+}
+
+function UserProfile() {
+  const { name } = useStore(({ get }) => {
+    const [state] = get(userStore)
+    return { name: state.profile?.name }  // Only re-renders on name change
+  })
+  return <h1>{name}</h1>
+}
+
+function Cart() {
+  const { itemCount, addItem } = useStore(({ get }) => {
+    const [state, actions] = get(cartStore)
+    return {
+      itemCount: state.items.length,  // Only re-renders on length change
+      addItem: actions.addItem,
+    }
+  })
+  return <span>Cart: {itemCount}</span>
+}
 ```
 
-See [Meta](/api/meta) for more details.
+---
 
-## Summary
+## Summary Table
 
-| Concept | Purpose | Key Insight |
-|---------|---------|-------------|
-| **Store** | State + actions | Co-locate data with the logic that modifies it |
-| **Container** | Instance management | Dependency injection without the ceremony |
-| **Service** | Shared utilities | Non-reactive infrastructure (API, logging) |
-| **Reactivity** | Auto-tracking | Read state naturally, updates are automatic |
-| **Middleware** | Cross-cutting | Intercept store creation for logging, persistence |
-| **Meta** | Store metadata | Declarative configuration for middleware |
+| Concept | What It Is | Why It Exists | Key Method |
+|---------|------------|---------------|------------|
+| **Store** | State + actions in one place | Co-locate data with logic that modifies it | `store({...})` |
+| **Container** | Instance management hub | Dependency injection without the ceremony | `container()` |
+| **Service** | Non-reactive utility | Infrastructure that doesn't need re-renders | `service(fn)` |
+| **Reactivity** | Auto-tracking system | No manual dependency management | Automatic! |
+
+---
 
 ## Next Steps
 
-- **[Stores](/guide/stores)** — Deep dive into state mutation and focus
-- **[Reactivity](/guide/reactivity)** — Understanding the tracking system
-- **[Effects](/guide/effects)** — Reactive side effects
-- **[Async](/guide/async)** — Loading states and data fetching
+Now that you understand the architecture:
+
+| Topic | What You'll Learn |
+|-------|-------------------|
+| [Stores](/guide/stores) | Deep dive into state, actions, `update()`, `focus()` |
+| [Reactivity](/guide/reactivity) | How auto-tracking works, `pick()`, optimization |
+| [Actions](/guide/actions) | Sync/async actions, composition patterns |
+| [Effects](/guide/effects) | Side effects that react to state changes |
+| [Dependency Injection](/guide/dependency-injection) | Testing, mocking, services |
+
+---
+
+**Ready to dive deeper?** [Learn about Stores →](/guide/stores)
