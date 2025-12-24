@@ -28,7 +28,6 @@ import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
 import { AsyncFunctionError, ScopedOutsideSelectorError } from "../errors";
 import { isSpec } from "../is";
-import { dev } from "../dev";
 import { storeTuple } from "../utils/storeTuple";
 
 /**
@@ -282,9 +281,10 @@ export function useStore<T extends object>(
 
 const isServer = typeof window === "undefined";
 const useIsomorphicLayoutEffect = isServer ? useEffect : useLayoutEffect;
-// only schedule dispose if in development mode and useLayoutEffect is available
+// Always use microtask for disposal in browser to handle StrictMode correctly
+// The microtask allows StrictMode's effect re-run to commit before disposal check
 const shouldScheduleDispose =
-  !isServer && typeof useLayoutEffect === "function" && dev();
+  !isServer && typeof useLayoutEffect === "function";
 
 class ScopeController {
   /** Whether the effect has committed (is active) */
@@ -292,6 +292,9 @@ class ScopeController {
 
   /** Whether this controller has been disposed */
   private _disposed = false;
+
+  /** Whether a disposal check microtask is pending */
+  private _pendingDisposalCheck = false;
 
   private _stores = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
 
@@ -319,13 +322,16 @@ class ScopeController {
    * - On real unmount, no re-commit happens, so disposal proceeds
    */
   private _disposeIfUnused = () => {
-    // Skip if already committed or disposed
-    if (this._committed || this._disposed) return;
+    // Skip if already committed, disposed, or a check is already pending
+    if (this._committed || this._disposed || this._pendingDisposalCheck) return;
 
     if (shouldScheduleDispose) {
+      // Mark that a disposal check is pending to prevent duplicate microtasks
+      this._pendingDisposalCheck = true;
       // Defer check to next microtask
       // This allows StrictMode's effect re-run to commit before we check
       Promise.resolve().then(() => {
+        this._pendingDisposalCheck = false;
         // If still not committed after microtask, it's a real unmount
         if (!this._committed) {
           this.dispose();
@@ -351,7 +357,9 @@ class ScopeController {
       this._stores.set(spec, store);
     }
 
-    if (shouldScheduleDispose) {
+    // Only schedule disposal check if not already committed
+    // This prevents race conditions when selector runs multiple times
+    if (shouldScheduleDispose && !this._committed) {
       // Schedule cleanup if effect never commits (render-only)
       this._disposeIfUnused();
     }
@@ -365,6 +373,8 @@ class ScopeController {
    */
   commit = () => {
     this._committed = true;
+    // Clear pending check flag since we're now committed
+    this._pendingDisposalCheck = false;
   };
 
   /**
