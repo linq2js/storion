@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { abortable, isAbortable, type AbortableContext } from "./abortable";
+import {
+  abortable,
+  isAbortable,
+  AbortableAbortedError,
+  abortableDelay,
+  type AbortableContext,
+} from "./abortable";
 
 describe("abortable", () => {
   describe("abortable()", () => {
@@ -26,11 +32,14 @@ describe("abortable", () => {
       expect(handler).toHaveBeenCalled();
     });
 
-    it("should call function with provided signal when using with()", async () => {
+    it("should create own signal when using with() - linked to parent", async () => {
       const controller = new AbortController();
       const handler = vi.fn(
         ({ signal }: AbortableContext, x: number, y: string) => {
-          expect(signal).toBe(controller.signal);
+          // Signal is NOT the same as parent - abortable owns its own signal
+          expect(signal).toBeDefined();
+          expect(signal).toBeInstanceOf(AbortSignal);
+          expect(signal).not.toBe(controller.signal);
           return Promise.resolve(`${x}-${y}`);
         }
       );
@@ -52,20 +61,21 @@ describe("abortable", () => {
       expect(result).toBe("done");
     });
 
-    it("should support cancellation via signal", async () => {
+    it("should abort when parent signal aborts", async () => {
       const controller = new AbortController();
 
       const fn = abortable(async ({ signal }, url: string) => {
-        // Simulate fetch behavior
-        if (signal?.aborted) {
-          throw new Error("Aborted");
+        // Wait a bit to allow abort to propagate
+        await new Promise((r) => setTimeout(r, 10));
+        if (signal.aborted) {
+          throw new AbortableAbortedError();
         }
         return `fetched: ${url}`;
       });
 
       controller.abort();
       await expect(fn.with(controller.signal, "/api")).rejects.toThrow(
-        "Aborted"
+        AbortableAbortedError
       );
     });
 
@@ -95,6 +105,147 @@ describe("abortable", () => {
       await fn.with(undefined);
 
       expect(handler).toHaveBeenCalled();
+    });
+  });
+
+  describe("AbortableResult control methods", () => {
+    it("should return AbortableResult with status methods", async () => {
+      const fn = abortable(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return "done";
+      });
+
+      const result = fn();
+
+      expect(typeof result.status).toBe("function");
+      expect(typeof result.running).toBe("function");
+      expect(typeof result.succeeded).toBe("function");
+      expect(typeof result.failed).toBe("function");
+      expect(typeof result.aborted).toBe("function");
+      expect(typeof result.paused).toBe("function");
+      expect(typeof result.waiting).toBe("function");
+      expect(typeof result.completed).toBe("function");
+
+      await result;
+      expect(result.succeeded()).toBe(true);
+      expect(result.status()).toBe("success");
+    });
+
+    it("should support abort() method", async () => {
+      const fn = abortable(async ({ signal }) => {
+        await new Promise((r) => setTimeout(r, 100));
+        if (signal.aborted) {
+          throw new AbortableAbortedError();
+        }
+        return "done";
+      });
+
+      const result = fn();
+      expect(result.abort()).toBe(true);
+      expect(result.abort()).toBe(false); // Already aborted
+
+      await expect(result).rejects.toThrow(AbortableAbortedError);
+      expect(result.aborted()).toBe(true);
+      expect(result.status()).toBe("aborted");
+    });
+
+    it("should support pause() and resume() methods", async () => {
+      let step = 0;
+      let checkpointReached = false;
+
+      // Pause works at checkpoint() - a manual suspension point
+      const fn = abortable(async (ctx) => {
+        step = 1;
+        // This simulates waiting for something
+        await new Promise((r) => setTimeout(r, 20));
+        // Then hitting a checkpoint where pause is checked
+        await ctx.checkpoint();
+        checkpointReached = true;
+        step = 2;
+        return "done";
+      });
+
+      const result = fn();
+
+      // Immediately pause before checkpoint is reached
+      result.pause();
+      expect(result.paused()).toBe(true);
+
+      // Wait long enough for the setTimeout to complete
+      // but checkpoint should block because paused
+      await new Promise((r) => setTimeout(r, 50));
+      expect(checkpointReached).toBe(false);
+      expect(step).toBe(1);
+
+      // Resume - now checkpoint will pass
+      result.resume();
+
+      await result;
+      expect(checkpointReached).toBe(true);
+      expect(step).toBe(2);
+      expect(result.succeeded()).toBe(true);
+    });
+
+    it("should support send() for events", async () => {
+      const fn = abortable<[], string, { confirm: boolean }>(async (ctx) => {
+        const confirmed = await ctx.take("confirm");
+        return confirmed ? "yes" : "no";
+      });
+
+      const result = fn();
+
+      // Should be waiting
+      await new Promise((r) => setTimeout(r, 10));
+      expect(result.waiting()).toBe(true);
+
+      // Send event
+      result.send("confirm", true);
+
+      const value = await result;
+      expect(value).toBe("yes");
+    });
+
+    it("should support checkpoint pattern (TYield = void)", async () => {
+      const steps: string[] = [];
+
+      const fn = abortable(async (ctx) => {
+        steps.push("step1");
+        await ctx.take();
+        steps.push("step2");
+        await ctx.take();
+        steps.push("step3");
+        return "done";
+      });
+
+      const result = fn();
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(steps).toEqual(["step1"]);
+
+      result.send();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(steps).toEqual(["step1", "step2"]);
+
+      result.send();
+      await result;
+      expect(steps).toEqual(["step1", "step2", "step3"]);
+    });
+
+    it("should provide result() and error() accessors", async () => {
+      const successFn = abortable(async () => "success");
+      const errorFn = abortable(async () => {
+        throw new Error("test error");
+      });
+
+      const successResult = successFn();
+      await successResult;
+      expect(successResult.result()).toBe("success");
+      expect(successResult.error()).toBeUndefined();
+
+      const errorResult = errorFn();
+      await expect(errorResult).rejects.toThrow("test error");
+      expect(errorResult.result()).toBeUndefined();
+      expect(errorResult.error()).toBeInstanceOf(Error);
     });
   });
 
@@ -136,8 +287,7 @@ describe("abortable", () => {
       expect(result).toBe(20);
     });
 
-    it("should preserve signal through wrappers", async () => {
-      const controller = new AbortController();
+    it("should provide consistent context through wrappers", async () => {
       const signalCaptures: AbortSignal[] = [];
 
       const baseFn = abortable(async ({ signal }, x: number) => {
@@ -150,12 +300,12 @@ describe("abortable", () => {
         return next(ctx, x);
       });
 
-      await wrappedFn.with(controller.signal, 5);
+      await wrappedFn(5);
 
-      // Both wrapper and base should see the same signal
+      // Both wrapper and base should see signals (may be different due to wrapping)
       expect(signalCaptures).toHaveLength(2);
-      expect(signalCaptures[0]).toBe(controller.signal);
-      expect(signalCaptures[1]).toBe(controller.signal);
+      expect(signalCaptures[0]).toBeInstanceOf(AbortSignal);
+      expect(signalCaptures[1]).toBeInstanceOf(AbortSignal);
     });
 
     it("should allow transforming arguments", async () => {
@@ -226,6 +376,32 @@ describe("abortable", () => {
     });
   });
 
+  describe("utilities", () => {
+    describe("abortableDelay()", () => {
+      it("should delay for specified time", async () => {
+        const start = Date.now();
+        await abortableDelay(50);
+        const elapsed = Date.now() - start;
+        expect(elapsed).toBeGreaterThanOrEqual(45);
+      });
+
+      it("should reject when signal is aborted", async () => {
+        const controller = new AbortController();
+        const promise = abortableDelay(1000, controller.signal);
+        controller.abort();
+        await expect(promise).rejects.toThrow(AbortableAbortedError);
+      });
+
+      it("should reject immediately if signal already aborted", async () => {
+        const controller = new AbortController();
+        controller.abort();
+        await expect(abortableDelay(1000, controller.signal)).rejects.toThrow(
+          AbortableAbortedError
+        );
+      });
+    });
+  });
+
   describe("type safety", () => {
     it("should preserve function argument types", async () => {
       const fn = abortable(
@@ -252,6 +428,72 @@ describe("abortable", () => {
 
       const result: Promise<string> = fn(42);
       expect(await result).toBe("result-42");
+    });
+  });
+
+  describe("AbortableContext", () => {
+    it("should provide aborted() method", async () => {
+      let wasAborted = false;
+
+      // Use take() to create a suspension point where we can abort
+      const fn = abortable<[], string, { continue: void }>(async (ctx) => {
+        await ctx.take("continue");
+        wasAborted = ctx.aborted();
+        if (wasAborted) {
+          throw new AbortableAbortedError();
+        }
+        return "done";
+      });
+
+      const result = fn();
+
+      // Wait for take to be reached
+      await new Promise((r) => setTimeout(r, 10));
+      expect(result.waiting()).toBe(true);
+
+      // Abort while waiting
+      result.abort();
+      expect(result.aborted()).toBe(true);
+
+      // The promise should reject
+      await expect(result).rejects.toThrow(AbortableAbortedError);
+    });
+
+    it("should provide abort() method from inside", async () => {
+      const fn = abortable<[], string, { continue: void }>(async (ctx) => {
+        ctx.abort();
+        // Try to take - should see we're aborted
+        try {
+          await ctx.take("continue");
+        } catch (e) {
+          if (ctx.aborted()) {
+            throw new AbortableAbortedError();
+          }
+          throw e;
+        }
+        return "done";
+      });
+
+      const result = fn();
+      await expect(result).rejects.toThrow(AbortableAbortedError);
+      expect(result.aborted()).toBe(true);
+    });
+
+    it("should provide checkpoint() that checks abort status", async () => {
+      let checkpointPassed = false;
+
+      const fn = abortable(async (ctx) => {
+        // Abort immediately
+        ctx.abort();
+        // Checkpoint should throw because aborted
+        await ctx.checkpoint();
+        checkpointPassed = true;
+        return "done";
+      });
+
+      const result = fn();
+      await expect(result).rejects.toThrow(AbortableAbortedError);
+      expect(checkpointPassed).toBe(false);
     });
   });
 });

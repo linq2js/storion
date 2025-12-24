@@ -87,9 +87,11 @@ describe("wrappers", () => {
         throw new Error("fail");
       }).use(retry(3));
 
+      // When parent signal is already aborted, abortable rejects immediately
+      // without executing the function (correct behavior)
       controller.abort();
       await expect(fn.with(controller.signal)).rejects.toThrow();
-      expect(attempts).toBe(1);
+      expect(attempts).toBe(0); // Never executed because already aborted
     });
 
     it("should cancel delay when aborted", async () => {
@@ -342,7 +344,7 @@ describe("wrappers", () => {
       }).use(fallback("default"));
 
       controller.abort();
-      await expect(fn.with(controller.signal)).rejects.toThrow("Aborted");
+      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
     });
   });
 
@@ -559,9 +561,9 @@ describe("wrappers", () => {
       controller.abort();
 
       // Aborts shouldn't count toward threshold
-      await expect(fn.with(controller.signal)).rejects.toThrow("Aborted");
-      await expect(fn.with(controller.signal)).rejects.toThrow("Aborted");
-      await expect(fn.with(controller.signal)).rejects.toThrow("Aborted");
+      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
+      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
+      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
 
       // Circuit should still be closed
       const freshController = new AbortController();

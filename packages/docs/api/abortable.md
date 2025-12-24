@@ -1,6 +1,6 @@
 # abortable()
 
-Create cancellable async functions with automatic signal management and composable wrappers.
+Create async functions with full lifecycle control: cancellation, pause/resume, external events, and composable wrappers.
 
 ## Why abortable()?
 
@@ -75,31 +75,67 @@ const userQuery = async.action(focus("user"), getUserWithPosts);
 ## Signature
 
 ```ts
-function abortable<TArgs extends any[], TResult>(
-  fn: (ctx: AbortableContext, ...args: TArgs) => Promise<TResult>
-): Abortable<TArgs, TResult>;
+function abortable<
+  TArgs extends any[],
+  TResult,
+  TYield extends void | object = void
+>(
+  fn: (ctx: AbortableContext<TYield>, ...args: TArgs) => Promise<TResult>
+): Abortable<TArgs, TResult, TYield>;
 
-interface AbortableContext {
+interface AbortableContext<TYield extends void | object = void> {
   /** AbortSignal for cancellation */
   signal: AbortSignal;
   /** Safe execution utility */
   safe: SafeFn;
+  /** Wait for external event */
+  take: AbortableTake<TYield>;
+  /** Check if aborted */
+  aborted(): boolean;
+  /** Abort from inside */
+  abort(): boolean;
+  /** Manual pause point */
+  checkpoint(): Promise<void>;
 }
 
-interface Abortable<TArgs, TResult> {
-  /** Call without signal (creates new AbortController) */
-  (...args: TArgs): Promise<TResult>;
+interface AbortableResult<TResult, TYield> extends Promise<TResult> {
+  /** Send event to the function */
+  send: AbortableSend<TYield>;
+  /** Control methods */
+  pause(): boolean;
+  resume(): boolean;
+  abort(): boolean;
+  /** Status checks */
+  status(): "running" | "success" | "error" | "paused" | "waiting" | "aborted";
+  running(): boolean;
+  waiting(): boolean;
+  paused(): boolean;
+  succeeded(): boolean;
+  failed(): boolean;
+  aborted(): boolean;
+  completed(): boolean;
+  /** Result accessors */
+  result(): Awaited<TResult> | undefined;
+  error(): Error | undefined;
+}
 
-  /** Call with explicit signal */
-  with(signal: AbortSignal | undefined, ...args: TArgs): Promise<TResult>;
+interface Abortable<TArgs, TResult, TYield> {
+  /** Call without signal (creates new AbortController) */
+  (...args: TArgs): AbortableResult<TResult, TYield>;
+
+  /** Call with parent signal (parent abort → this aborts) */
+  with(
+    signal: AbortSignal | undefined,
+    ...args: TArgs
+  ): AbortableResult<TResult, TYield>;
 
   /** Apply wrapper, returns new Abortable */
   use<TNewArgs, TNewResult>(
     wrapper: AbortableWrapper
-  ): Abortable<TNewArgs, TNewResult>;
+  ): Abortable<TNewArgs, TNewResult, TYield>;
 
   /** Type assertion for return type */
-  as<T>(): Abortable<TArgs, T>;
+  as<T>(): Abortable<TArgs, T, TYield>;
 }
 ```
 
@@ -130,11 +166,12 @@ const userService = {
 
 ```ts
 // 1. Direct call (creates new AbortController)
-const user = await userService.getUser("123");
+const result = userService.getUser("123");
+const user = await result;
 
-// 2. With explicit signal
+// 2. With parent signal (parent abort → this aborts)
 const controller = new AbortController();
-const user = await userService.getUser.with(controller.signal, "123");
+const result = userService.getUser.with(controller.signal, "123");
 
 // 3. Pass directly to async.action() - signal auto-injected
 const userQuery = async.action(focus("user"), userService.getUser);
@@ -143,6 +180,162 @@ const userQuery = async.action(focus("user"), userService.getUser);
 const userQuery = async.action(focus("user"), (ctx, id: string) =>
   ctx.safe(userService.getUser, id)
 );
+```
+
+## Lifecycle Control
+
+Every call returns an `AbortableResult` with control methods:
+
+```ts
+const result = userService.getUser("123");
+
+// Status checks
+result.status(); // "running" | "success" | "error" | "paused" | "waiting" | "aborted"
+result.running(); // boolean
+result.waiting(); // boolean (waiting for event or async op)
+result.paused(); // boolean
+result.succeeded(); // boolean
+result.failed(); // boolean
+result.aborted(); // boolean
+result.completed(); // boolean (success | error | aborted)
+
+// Control
+result.pause(); // Pause at next checkpoint (returns false if already paused)
+result.resume(); // Resume execution (returns false if not paused)
+result.abort(); // Abort execution (returns false if already completed)
+
+// Result access
+result.result(); // Get result if succeeded, undefined otherwise
+result.error(); // Get error if failed, undefined otherwise
+```
+
+### Pause/Resume Behavior
+
+Pause is automatically checked at three points:
+
+| Method         | Pause Check            |
+| -------------- | ---------------------- |
+| `checkpoint()` | Explicit pause point   |
+| `safe()`       | After promise resolves |
+| `take()`       | After event arrives    |
+
+This means any `await safe(...)` or `await take(...)` call is a potential pause point:
+
+```ts
+const processFiles = abortable(async (ctx, files: File[]) => {
+  for (const file of files) {
+    // safe() checks pause AFTER the upload completes
+    await ctx.safe(uploadFile, file);
+  }
+  return "done";
+});
+
+const result = processFiles(files);
+
+// Pause - will take effect after current upload finishes
+result.pause();
+
+// Resume later
+result.resume();
+await result;
+```
+
+Use `checkpoint()` when you need an explicit pause point without an async operation:
+
+```ts
+const compute = abortable(async (ctx, items: Item[]) => {
+  for (const item of items) {
+    processSync(item); // Synchronous work
+    await ctx.checkpoint(); // Allow pause between sync operations
+  }
+  return "done";
+});
+```
+
+## External Events (take/send)
+
+Use the `TYield` type parameter to define events that can be sent to the function:
+
+```ts
+// Define event types
+type CheckoutEvents = {
+  paymentMethod: PaymentMethod;
+  confirm: boolean;
+};
+
+const checkout = abortable<[Cart], Receipt, CheckoutEvents>(
+  async ({ signal, safe, take }, cart) => {
+    // Validate cart
+    await safe(validateCart, cart);
+
+    // Wait for payment method selection
+    const payment = await take("paymentMethod");
+
+    // Wait for confirmation
+    const confirmed = await take("confirm");
+    if (!confirmed) throw new Error("Cancelled by user");
+
+    // Process payment
+    return await safe(processPayment, cart, payment);
+  }
+);
+
+// Usage
+const result = checkout(cart);
+
+// Send events from UI
+onPaymentSelected((method) => result.send("paymentMethod", method));
+onConfirmClicked(() => result.send("confirm", true));
+
+const receipt = await result;
+```
+
+### Checkpoint Pattern (void events)
+
+When `TYield` is `void`, `take()` acts as a checkpoint that waits for `send()`:
+
+```ts
+const wizard = abortable(async (ctx) => {
+  // Step 1
+  doStep1();
+  await ctx.take(); // Wait for send()
+
+  // Step 2
+  doStep2();
+  await ctx.take(); // Wait for send()
+
+  // Step 3
+  doStep3();
+  return "completed";
+});
+
+const result = wizard();
+
+// Advance through steps
+result.send(); // Complete step 1
+result.send(); // Complete step 2
+await result; // "completed"
+```
+
+## Signal Relationship
+
+When using `with(parentSignal)`:
+
+- **Parent abort → This aborts**: If the parent signal aborts, this abortable aborts too
+- **This abort → Parent unaffected**: Aborting this abortable does NOT abort the parent
+
+```ts
+const parent = new AbortController();
+const result = myFn.with(parent.signal, args);
+
+// Parent abort propagates to child
+parent.abort();
+result.aborted(); // true
+
+// But child abort doesn't affect parent
+const result2 = myFn.with(parent.signal, args);
+result2.abort();
+parent.signal.aborted; // false (parent unaffected)
 ```
 
 ## Nested Abortable Calls
@@ -156,6 +349,45 @@ const getUserWithPosts = abortable(async ({ signal, safe }, userId: string) => {
   const posts = await safe(postService.getPosts, userId);
 
   return { user, posts };
+});
+```
+
+## Utility Functions
+
+### abortableDelay()
+
+Create a delay that respects abort signal:
+
+```ts
+import { abortableDelay } from "storion/async";
+
+const myFn = abortable(async ({ signal }) => {
+  console.log("Starting...");
+  await abortableDelay(1000, signal); // Respects abort
+  console.log("After 1 second");
+});
+
+const result = myFn();
+result.abort(); // Cancels the delay
+```
+
+### Using Promise.all/Promise.race with safe()
+
+Use `ctx.safe()` to wrap `Promise.all()` or `Promise.race()` - it respects abort signal and allows pausing:
+
+```ts
+const myFn = abortable(async ({ signal, safe }) => {
+  // Parallel fetching with abort support
+  const [user, posts] = await safe(
+    Promise.all([fetchUser(signal), fetchPosts(signal)])
+  );
+
+  // Racing with abort support
+  const result = await safe(
+    Promise.race([fetchData(signal), timeout(5000, signal)])
+  );
+
+  return { user, posts, result };
 });
 ```
 
