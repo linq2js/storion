@@ -53,7 +53,7 @@ const withSafe = abortable(async ({ safe }, id: number) => {
 withSafe satisfies Abortable<[number], { id: number }>;
 
 // =============================================================================
-// Direct call and .with() method
+// Direct call and .withSignal() method
 // =============================================================================
 
 // Direct call - should accept the args
@@ -61,14 +61,14 @@ const _directResult: Promise<string> = noArgs();
 const _directResult2: Promise<{ id: string; name: string }> = singleArg("123");
 const _directResult3: Promise<number> = multiArgs(1, "test", true);
 
-// .with() method - should accept signal + args
+// .withSignal() method - should accept signal + args
 const controller = new AbortController();
-const _withResult: Promise<string> = noArgs.with(controller.signal);
-const _withResult2: Promise<{ id: string; name: string }> = singleArg.with(
+const _withResult: Promise<string> = noArgs.withSignal(controller.signal);
+const _withResult2: Promise<{ id: string; name: string }> = singleArg.withSignal(
   controller.signal,
   "123"
 );
-const _withResult3: Promise<number> = multiArgs.with(
+const _withResult3: Promise<number> = multiArgs.withSignal(
   controller.signal,
   1,
   "test",
@@ -132,7 +132,7 @@ const fullChain = singleArg
 fullChain satisfies Abortable<[string], { id: string; name: string }>;
 const _chainResult: Promise<{ id: string; name: string }> =
   fullChain("test-id");
-const _chainWithSignal: Promise<{ id: string; name: string }> = fullChain.with(
+const _chainWithSignal: Promise<{ id: string; name: string }> = fullChain.withSignal(
   controller.signal,
   "test-id"
 );
@@ -272,7 +272,7 @@ const _wrongMultiArgs: Promise<number> = multiArgChain(
 );
 
 // @ts-expect-error - wrong arg with signal
-const _wrongWithArg: Promise<{ id: string; name: string }> = fullChain.with(
+const _wrongWithArg: Promise<{ id: string; name: string }> = fullChain.withSignal(
   controller.signal,
   999
 );

@@ -90,7 +90,7 @@ describe("wrappers", () => {
       // When parent signal is already aborted, abortable rejects immediately
       // without executing the function (correct behavior)
       controller.abort();
-      await expect(fn.with(controller.signal)).rejects.toThrow();
+      await expect(fn.withSignal(controller.signal)).rejects.toThrow();
       expect(attempts).toBe(0); // Never executed because already aborted
     });
 
@@ -103,7 +103,7 @@ describe("wrappers", () => {
         throw new Error("fail");
       }).use(retry({ count: 3, delay: 5000 })); // Long delay
 
-      const promise = fn.with(controller.signal);
+      const promise = fn.withSignal(controller.signal);
 
       // Abort after first attempt
       setTimeout(() => controller.abort(), 50);
@@ -344,7 +344,7 @@ describe("wrappers", () => {
       }).use(fallback("default"));
 
       controller.abort();
-      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
+      await expect(fn.withSignal(controller.signal)).rejects.toThrow("aborted");
     });
   });
 
@@ -462,7 +462,7 @@ describe("wrappers", () => {
       const p1 = fn();
 
       // Second call gets queued
-      const p2 = fn.with(controller.signal);
+      const p2 = fn.withSignal(controller.signal);
 
       // Abort the queued call
       controller.abort();
@@ -561,13 +561,13 @@ describe("wrappers", () => {
       controller.abort();
 
       // Aborts shouldn't count toward threshold
-      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
-      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
-      await expect(fn.with(controller.signal)).rejects.toThrow("aborted");
+      await expect(fn.withSignal(controller.signal)).rejects.toThrow("aborted");
+      await expect(fn.withSignal(controller.signal)).rejects.toThrow("aborted");
+      await expect(fn.withSignal(controller.signal)).rejects.toThrow("aborted");
 
       // Circuit should still be closed
       const freshController = new AbortController();
-      const result = await fn.with(freshController.signal);
+      const result = await fn.withSignal(freshController.signal);
       expect(result).toBe("success");
     });
 

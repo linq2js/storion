@@ -437,7 +437,7 @@ const userQuery = async(focus("user"), (ctx, id: string) =>
 const user = await userService.getUser(id);
 
 // Explicit signal
-const user = await userService.getUser.with(controller.signal, id);
+const user = await userService.getUser.withSignal(controller.signal, id);
 
 // Chainable wrappers with use()
 import { retry, catchError, timeout } from "storion/async";

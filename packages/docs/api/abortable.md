@@ -124,7 +124,7 @@ interface Abortable<TArgs, TResult, TYield> {
   (...args: TArgs): AbortableResult<TResult, TYield>;
 
   /** Call with parent signal (parent abort → this aborts) */
-  with(
+  withSignal(
     signal: AbortSignal | undefined,
     ...args: TArgs
   ): AbortableResult<TResult, TYield>;
@@ -171,7 +171,7 @@ const user = await result;
 
 // 2. With parent signal (parent abort → this aborts)
 const controller = new AbortController();
-const result = userService.getUser.with(controller.signal, "123");
+const result = userService.getUser.withSignal(controller.signal, "123");
 
 // 3. Pass directly to async.action() - signal auto-injected
 const userQuery = async.action(focus("user"), userService.getUser);
@@ -319,21 +319,21 @@ await result; // "completed"
 
 ## Signal Relationship
 
-When using `with(parentSignal)`:
+When using `withSignal(parentSignal)`:
 
 - **Parent abort → This aborts**: If the parent signal aborts, this abortable aborts too
 - **This abort → Parent unaffected**: Aborting this abortable does NOT abort the parent
 
 ```ts
 const parent = new AbortController();
-const result = myFn.with(parent.signal, args);
+const result = myFn.withSignal(parent.signal, args);
 
 // Parent abort propagates to child
 parent.abort();
 result.aborted(); // true
 
 // But child abort doesn't affect parent
-const result2 = myFn.with(parent.signal, args);
+const result2 = myFn.withSignal(parent.signal, args);
 result2.abort();
 parent.signal.aborted; // false (parent unaffected)
 ```
@@ -399,7 +399,7 @@ Use `isAbortable()` to check if a function is abortable:
 import { isAbortable } from "storion/async";
 
 if (isAbortable(fn)) {
-  fn.with(signal, ...args);
+  fn.withSignal(signal, ...args);
 } else {
   fn(...args);
 }

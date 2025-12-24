@@ -122,13 +122,13 @@ export type AsyncMixinResult<T, M extends AsyncMode, TArgs extends any[]> = [
 
 /**
  * Convert an Abortable to an AsyncHandler.
- * Automatically calls fn.with(ctx.signal, ...args).
+ * Automatically calls fn.withSignal(ctx.signal, ...args).
  */
 function wrapAbortable<T, TArgs extends any[]>(
   fn: Abortable<TArgs, T>
 ): AsyncHandler<T, TArgs> {
   return (ctx: AsyncContext, ...args: TArgs): T | PromiseLike<T> => {
-    return fn.with(ctx.signal, ...args) as T | PromiseLike<T>;
+    return fn.withSignal(ctx.signal, ...args) as T | PromiseLike<T>;
   };
 }
 

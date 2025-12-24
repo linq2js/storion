@@ -132,7 +132,7 @@ export function createSafe(
     // Case 2: Abortable - call with signal and wrap result
     if (isAbortable(input)) {
       const signal = getSignal();
-      const result = input.with(signal, ...args);
+      const result = input.withSignal(signal, ...args);
       return wrapResult(result);
     }
 

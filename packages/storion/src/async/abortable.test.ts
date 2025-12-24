@@ -12,7 +12,7 @@ describe("abortable", () => {
       const fn = abortable(({}, x: number) => Promise.resolve(x * 2));
 
       expect(typeof fn).toBe("function");
-      expect(typeof fn.with).toBe("function");
+      expect(typeof fn.withSignal).toBe("function");
       expect(typeof fn.use).toBe("function");
       expect(isAbortable(fn)).toBe(true);
     });
@@ -31,7 +31,7 @@ describe("abortable", () => {
       expect(handler).toHaveBeenCalled();
     });
 
-    it("should create own signal when using with() - linked to parent", async () => {
+    it("should create own signal when using withSignal() - linked to parent", async () => {
       const controller = new AbortController();
       const handler = vi.fn(
         ({ signal }: AbortableContext, x: number, y: string) => {
@@ -44,14 +44,14 @@ describe("abortable", () => {
       );
 
       const fn = abortable(handler);
-      const result = await fn.with(controller.signal, 42, "hello");
+      const result = await fn.withSignal(controller.signal, 42, "hello");
 
       expect(result).toBe("42-hello");
       expect(handler).toHaveBeenCalled();
     });
 
     it("should work with async functions", async () => {
-      const fn = abortable(async ({ signal }, delay: number) => {
+      const fn = abortable(async ({}, delay: number) => {
         await new Promise((r) => setTimeout(r, delay));
         return "done";
       });
@@ -73,7 +73,7 @@ describe("abortable", () => {
       });
 
       controller.abort();
-      await expect(fn.with(controller.signal, "/api")).rejects.toThrow(
+      await expect(fn.withSignal(controller.signal, "/api")).rejects.toThrow(
         AbortableAbortedError
       );
     });
@@ -93,7 +93,7 @@ describe("abortable", () => {
       expect(result).toBe("outer-hello-inner-test");
     });
 
-    it("should create new AbortController when with() receives undefined", async () => {
+    it("should create new AbortController when withSignal() receives undefined", async () => {
       const handler = vi.fn(({ signal }: AbortableContext) => {
         expect(signal).toBeDefined();
         expect(signal).toBeInstanceOf(AbortSignal);
@@ -101,7 +101,7 @@ describe("abortable", () => {
       });
 
       const fn = abortable(handler);
-      await fn.with(undefined);
+      await fn.withSignal(undefined);
 
       expect(handler).toHaveBeenCalled();
     });
@@ -388,7 +388,7 @@ describe("abortable", () => {
       expect(r1).toBe("1-test");
 
       // With signal
-      const r2: string = await fn.with(undefined, 2, "hello");
+      const r2: string = await fn.withSignal(undefined, 2, "hello");
       expect(r2).toBe("2-hello");
     });
 

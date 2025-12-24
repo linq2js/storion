@@ -284,12 +284,12 @@ export type IdentityWrapper = <
  * An abortable function with full lifecycle control.
  *
  * - Direct call: `fn(...args)` - creates new AbortController
- * - With signal: `fn.with(signal, ...args)` - links to parent signal
+ * - With signal: `fn.withSignal(signal, ...args)` - links to parent signal
  * - Chainable: `fn.use(wrapper)` - returns new Abortable with wrapper applied
  *
  * Signal relationship:
  * - Abortable creates its own internal AbortController
- * - When `with(parentSignal)` is called:
+ * - When `withSignal(parentSignal)` is called:
  *   - If parent aborts → this abortable aborts
  *   - If this abortable aborts → parent NOT affected
  */
@@ -305,7 +305,7 @@ export interface Abortable<
    * Call with parent signal.
    * Parent abort → this aborts. This abort → parent unaffected.
    */
-  with(
+  withSignal(
     signal: AbortSignal | undefined,
     ...args: TArgs
   ): AbortableResult<TResult, TYield>;
@@ -748,8 +748,8 @@ export function abortable<
     return executeAbortable(fn, args);
   }) as Abortable<TArgs, TResult, TYield>;
 
-  // Add with() method for parent signal linkage
-  wrapper.with = (
+  // Add withSignal() method for parent signal linkage
+  wrapper.withSignal = (
     signal: AbortSignal | undefined,
     ...args: TArgs
   ): AbortableResult<TResult, TYield> => {
