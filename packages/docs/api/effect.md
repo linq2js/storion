@@ -162,7 +162,7 @@ type EffectErrorStrategy =
 
 interface EffectRetryConfig {
   /** Number of retry attempts */
-  count: number;
+  retries: number;
   
   /** Delay strategy or milliseconds */
   delay?: number 
@@ -313,7 +313,7 @@ effect(
     if (state.shouldFail) throw new Error('Failed');
     console.log('Success');
   },
-  { onError: { count: 3, delay: 'backoff' } }
+  { onError: { retries: 3, delay: 'backoff' } }
 );
 ```
 
@@ -322,7 +322,7 @@ effect(
 ```ts
 effect(
   () => { /* ... */ },
-  { onError: { count: 5, delay: 1000 } }  // 1 second between retries
+  { onError: { retries: 5, delay: 1000 } }  // 1 second between retries
 );
 ```
 

@@ -32,7 +32,7 @@ import {
 /** Options for retry wrapper */
 export interface RetryOptions {
   /** Number of retry attempts (default: 3) */
-  count?: number;
+  retries?: number;
   /** Delay between retries: ms, strategy name, or custom function */
   delay?: number | RetryStrategyName | AsyncRetryDelayFn;
 }
@@ -80,26 +80,26 @@ type CircuitState = "closed" | "open" | "half-open";
  * fn.use(retry("linear"))
  *
  * // Retry 5 times with linear delay
- * fn.use(retry({ count: 5, delay: "linear" }))
+ * fn.use(retry({ retries: 5, delay: "linear" }))
  *
  * // Custom delay function
- * fn.use(retry({ count: 3, delay: (attempt) => attempt * 1000 }))
+ * fn.use(retry({ retries: 3, delay: (attempt) => attempt * 1000 }))
  * ```
  */
-export function retry(count?: number): IdentityWrapper;
+export function retry(retries?: number): IdentityWrapper;
 export function retry(strategy: RetryStrategyName): IdentityWrapper;
 export function retry(options: RetryOptions): IdentityWrapper;
 export function retry(
-  countOrStrategyOrOptions?: number | RetryStrategyName | RetryOptions
+  retriesOrStrategyOrOptions?: number | RetryStrategyName | RetryOptions
 ): IdentityWrapper {
   const options: RetryOptions =
-    typeof countOrStrategyOrOptions === "number"
-      ? { count: countOrStrategyOrOptions }
-      : typeof countOrStrategyOrOptions === "string"
-      ? { delay: countOrStrategyOrOptions }
-      : countOrStrategyOrOptions ?? {};
+    typeof retriesOrStrategyOrOptions === "number"
+      ? { retries: retriesOrStrategyOrOptions }
+      : typeof retriesOrStrategyOrOptions === "string"
+      ? { delay: retriesOrStrategyOrOptions }
+      : retriesOrStrategyOrOptions ?? {};
 
-  const count = options.count ?? 3;
+  const retries = options.retries ?? 3;
   const delayOption = options.delay ?? "backoff";
 
   // Get delay function
@@ -114,7 +114,7 @@ export function retry(
     async (ctx, ...args) => {
       let lastError: Error;
 
-      for (let attempt = 0; attempt < count; attempt++) {
+      for (let attempt = 0; attempt < retries; attempt++) {
         try {
           return await next(ctx, ...args);
         } catch (error) {
@@ -126,7 +126,7 @@ export function retry(
           }
 
           // Don't delay on last attempt
-          if (attempt < count - 1) {
+          if (attempt < retries - 1) {
             const delayResult = getDelay(attempt, lastError);
 
             if (typeof delayResult === "number") {
@@ -208,8 +208,8 @@ export function timeout(
         ctx.signal.addEventListener("abort", () => clearTimeout(timer));
       });
 
-      // Race between operation and timeout
-      return Promise.race([next(ctx, ...args), timeoutPromise]);
+      // Race between operation and timeout (cancellation-aware)
+      return ctx.safe.race([next(ctx, ...args), timeoutPromise]);
     };
 }
 

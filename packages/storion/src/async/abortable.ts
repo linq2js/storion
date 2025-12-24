@@ -10,7 +10,7 @@
  * Similar to saga pattern but uses async/await instead of suspense.
  */
 
-import { createSafe, type SafeFn } from "./safe";
+import { createSafe, type SafeFnWithUtils } from "./safe";
 
 // =============================================================================
 // SYMBOLS & CONSTANTS
@@ -203,8 +203,10 @@ export interface AbortableContext<TYield extends void | object = void> {
   /**
    * Safe execution utility.
    * Wraps async operations to handle abort gracefully.
+   *
+   * Includes utilities: `.all()`, `.race()`, `.any()`, `.settled()`, `.callback()`
    */
-  safe: SafeFn;
+  safe: SafeFnWithUtils;
 
   /**
    * Wait for an external event.
@@ -469,6 +471,12 @@ function createAbortableContext<TYield extends void | object>(
     }
   };
 
+  // Helper to chain pause/abort check after promise resolution
+  const afterCheck = async <T>(value: T): Promise<T> => {
+    await checkPauseAndAbort();
+    return value;
+  };
+
   // Join function - coordinates multiple abortable results
   // Defined first because safe() uses it for abortable functions
   const join = ((
@@ -520,7 +528,7 @@ function createAbortableContext<TYield extends void | object>(
     () => signal.aborted
   );
 
-  const safe: typeof baseSafe = async (fnOrPromise: any, ...args: any[]) => {
+  const safeFn = async (fnOrPromise: any, ...args: any[]) => {
     // If it's an abortable, use withSignal and join for proper abort propagation
     if (isAbortable(fnOrPromise)) {
       const abortableResult = fnOrPromise.withSignal(signal, ...args);
@@ -534,6 +542,15 @@ function createAbortableContext<TYield extends void | object>(
     return result;
   };
 
+  // Attach utility methods from baseSafe (.all, .race, .settled, .any, .callback)
+  const safe: typeof baseSafe = Object.assign(safeFn, {
+    all: baseSafe.all,
+    race: baseSafe.race,
+    settled: baseSafe.settled,
+    any: baseSafe.any,
+    callback: baseSafe.callback,
+  });
+
   const take = ((key?: keyof TYield) => {
     const takeKey = String(key ?? "__checkpoint__");
 
@@ -545,11 +562,7 @@ function createAbortableContext<TYield extends void | object>(
     // Check if already resolved
     const existing = takeState.pendingTakes.get(takeKey);
     if (existing) {
-      // Still need to check pause after getting cached value
-      return existing.promise.then(async (value) => {
-        await checkPauseAndAbort();
-        return value;
-      });
+      return existing.promise.then(afterCheck);
     }
 
     // Create new pending take
@@ -567,11 +580,7 @@ function createAbortableContext<TYield extends void | object>(
     });
     setStatus("waiting");
 
-    // After event arrives, check pause/abort before returning
-    return promise.then(async (value) => {
-      await checkPauseAndAbort();
-      return value;
-    });
+    return promise.then(afterCheck);
   }) as AbortableTake<TYield>;
 
   return {

@@ -1,12 +1,18 @@
 import { defineConfig } from "vitepress";
+import { withMermaid } from "vitepress-plugin-mermaid";
 
-export default defineConfig({
+export default withMermaid({
   title: "Storion",
   description:
     "Reactive stores for modern apps. Type-safe. Auto-tracked. Effortlessly composable.",
 
   base: "/storion/",
 
+  vite: {
+    optimizeDeps: {
+      include: ["mermaid"],
+    },
+  },
 
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/storion/logo.svg" }],
@@ -107,6 +113,7 @@ export default defineConfig({
           items: [
             { text: "async()", link: "/api/async" },
             { text: "abortable()", link: "/api/abortable" },
+            { text: "safe", link: "/api/safe" },
           ],
         },
         {

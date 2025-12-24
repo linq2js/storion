@@ -15,7 +15,7 @@ import {
 
 describe("wrappers", () => {
   describe("retry()", () => {
-    it("should retry on failure with default count", async () => {
+    it("should retry on failure with default retries", async () => {
       let attempts = 0;
 
       const fn = abortable(async () => {
@@ -54,7 +54,7 @@ describe("wrappers", () => {
           throw new Error("fail");
         }
         return "success";
-      }).use(retry({ count: 2, delay: () => 50 }));
+      }).use(retry({ retries: 2, delay: () => 50 }));
 
       await fn();
       expect(attempts).toBe(2);
@@ -70,7 +70,7 @@ describe("wrappers", () => {
           throw new Error("fail");
         }
         return "done";
-      }).use(retry({ count: 2, delay: "immediate" }));
+      }).use(retry({ retries: 2, delay: "immediate" }));
 
       const result = await fn();
       expect(result).toBe("done");
@@ -101,7 +101,7 @@ describe("wrappers", () => {
       const fn = abortable(async () => {
         attempts++;
         throw new Error("fail");
-      }).use(retry({ count: 3, delay: 5000 })); // Long delay
+      }).use(retry({ retries: 3, delay: 5000 })); // Long delay
 
       const promise = fn.withSignal(controller.signal);
 

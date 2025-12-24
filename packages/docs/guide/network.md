@@ -170,7 +170,7 @@ const robustFetch = fetchData.use(retry("backoff"));
 // Custom retry options
 const robustFetch = fetchData.use(
   retry({
-    count: 5,
+    retries: 5,
     delay: "fibonacci",
   })
 );
@@ -178,7 +178,7 @@ const robustFetch = fetchData.use(
 // Add jitter to prevent thundering herd
 const robustFetch = fetchData.use(
   retry({
-    count: 3,
+    retries: 3,
     delay: retryStrategy.withJitter(retryStrategy.backoff),
   })
 );
@@ -371,7 +371,7 @@ Prevent thundering herd after reconnection:
 
 ```ts
 retry({
-  count: 3,
+  retries: 3,
   delay: retryStrategy.withJitter(retryStrategy.backoff),
 });
 ```

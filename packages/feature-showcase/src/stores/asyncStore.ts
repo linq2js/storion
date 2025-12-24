@@ -10,7 +10,13 @@
  * - Loading states
  */
 import { store } from "storion";
-import { async, abortable, retry, catchError, type AsyncState } from "storion/async";
+import {
+  async,
+  abortable,
+  retry,
+  catchError,
+  type AsyncState,
+} from "storion/async";
 
 // Simulated API with abortable functions
 const fakeApi = {
@@ -66,7 +72,7 @@ export const asyncStore = store({
     // Create async action for fetching user (fresh mode) with retry and error handling
     const [, setUser] = focus("user");
     const robustFetchUser = fakeApi.fetchUser
-      .use(retry({ count: 2, delay: 500 }))
+      .use(retry({ retries: 2, delay: 500 }))
       .use(catchError((error) => console.error("User fetch failed:", error)));
 
     const userQuery = async.action(focus("user"), robustFetchUser);

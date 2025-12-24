@@ -14,6 +14,7 @@
     "dev:pokemon": "pnpm --filter pokemon dev",
     "dev:chat": "pnpm --filter chat dev",
     "dev:all": "pnpm --filter storion --filter expense-manager dev",
+    "dev:docs": "pnpm --filter storion-docs dev",
     "bench": "pnpm --filter @storion/performance bench"
   },
   "devDependencies": {

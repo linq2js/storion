@@ -258,7 +258,7 @@ describe("effect", () => {
             throw new Error(`Attempt ${runCount}`);
           }
         },
-        { onError: { count: 3, delay: 100 } }
+        { onError: { retries: 3, delay: 100 } }
       );
 
       expect(runCount).toBe(1);
@@ -283,7 +283,7 @@ describe("effect", () => {
           runCount++;
           throw new Error(`Attempt ${runCount}`);
         },
-        { onError: { count: 3 } }
+        { onError: { retries: 3 } }
       );
 
       expect(runCount).toBe(1);
@@ -319,7 +319,7 @@ describe("effect", () => {
             throw new Error(`Attempt ${runCount}`);
           }
         },
-        { onError: { count: 3, delay: customDelay } }
+        { onError: { retries: 3, delay: customDelay } }
       );
 
       expect(runCount).toBe(1);
@@ -346,7 +346,7 @@ describe("effect", () => {
           runCount++;
           throw new Error("Always fails");
         },
-        { onError: { count: 2, delay: 50 } }
+        { onError: { retries: 2, delay: 50 } }
       );
 
       // Initial run
@@ -557,7 +557,7 @@ describe("effect", () => {
               runCount++;
               throw new Error("Keep retrying");
             },
-            { onError: { count: 10, delay: 100 } }
+            { onError: { retries: 10, delay: 100 } }
           );
         }
       );
@@ -590,7 +590,7 @@ describe("effect", () => {
             () => {
               throw new Error("Retry");
             },
-            { onError: { count: 5, delay: 100 } }
+            { onError: { retries: 5, delay: 100 } }
           );
         }
       );
@@ -712,7 +712,7 @@ describe("effect", () => {
               throw new Error("Force re-run");
             }
           },
-          { onError: { count: 3, delay: 0 } }
+          { onError: { retries: 3, delay: 0 } }
         );
 
         // Wait for retries

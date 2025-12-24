@@ -14,7 +14,7 @@ import {
   type Hooks,
 } from "./tracking";
 import { EffectRefreshError, AsyncFunctionError } from "../errors";
-import { createSafe } from "../async/safe";
+import { createSafe, type SafeFnWithUtils } from "../async/safe";
 import { retryStrategy, type RetryStrategyName } from "../async/types";
 
 // =============================================================================
@@ -35,7 +35,7 @@ export type EffectRetryDelay =
  */
 export interface EffectRetryConfig {
   /** Number of retry attempts */
-  count: number;
+  retries: number;
   /** Delay between retries: ms, strategy name, or custom function (default: "backoff") */
   delay?: EffectRetryDelay;
 }
@@ -137,6 +137,13 @@ export interface EffectContext {
    * 2. `safe(fn, ...args)` - Call function, wrap result if promise
    * 3. `safe(Abortable, ...args)` - Call with signal, wrap result if promise
    *
+   * Utilities:
+   * - `safe.all([...])` - Like Promise.all, cancellation-aware
+   * - `safe.race([...])` - Like Promise.race, cancellation-aware
+   * - `safe.any([...])` - Like Promise.any, cancellation-aware
+   * - `safe.settled([...])` - Like Promise.allSettled, cancellation-aware
+   * - `safe.callback(fn)` - Wrap callback to only execute if not stale
+   *
    * @example
    * ```ts
    * effect((ctx) => {
@@ -145,21 +152,17 @@ export interface EffectContext {
    *     state.data = data;
    *   });
    *
-   *   // Call a function
-   *   ctx.safe(processData, arg1, arg2);
-   *
-   *   // Call an abortable function (auto-injects signal)
-   *   ctx.safe(getUser, userId).then(user => {
-   *     state.user = user;
+   *   // Concurrent operations
+   *   ctx.safe.all([fetchA(), fetchB()]).then(([a, b]) => {
+   *     state.data = { a, b };
    *   });
+   *
+   *   // Wrap event callback
+   *   const onClick = ctx.safe.callback(() => state.clicked = true);
    * });
    * ```
    */
-  safe<T>(promise: Promise<T>): Promise<T>;
-  safe<TArgs extends any[], TResult>(
-    fn: (...args: TArgs) => TResult,
-    ...args: TArgs
-  ): TResult extends Promise<infer U> ? Promise<U> : TResult;
+  safe: SafeFnWithUtils;
 
   /**
    * Manually trigger a re-run of the effect.
@@ -324,7 +327,7 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
  * // With retry on error
  * effect((ctx) => {
  *   fetchData();
- * }, { onError: { count: 3, delay: 1000 } });
+ * }, { onError: { retries: 3, delay: 1000 } });
  *
  * @example
  * // Custom error handler
@@ -444,7 +447,7 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
     }
 
     const retryConfig = errorStrategy as EffectRetryConfig;
-    if (retryCount < retryConfig.count) {
+    if (retryCount < retryConfig.retries) {
       const delay = getRetryDelay(retryConfig, retryCount);
       retryCount++;
       retryTimeout = setTimeout(() => {
@@ -452,7 +455,10 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
         execute();
       }, delay);
     } else {
-      console.error(`Effect failed after ${retryConfig.count} retries:`, error);
+      console.error(
+        `Effect failed after ${retryConfig.retries} retries:`,
+        error
+      );
     }
   };
 

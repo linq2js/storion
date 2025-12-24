@@ -85,16 +85,16 @@ withRetry satisfies Abortable<[string], { id: string; name: string }>;
 const _retryResult: Promise<{ id: string; name: string }> = withRetry("test");
 
 // retry() with options
-const withRetryOptions = singleArg.use(retry({ count: 5, delay: "linear" }));
+const withRetryOptions = singleArg.use(retry({ retries: 5, delay: "linear" }));
 withRetryOptions satisfies Abortable<[string], { id: string; name: string }>;
 
 // retry() with number delay
-const withRetryDelay = singleArg.use(retry({ count: 3, delay: 500 }));
+const withRetryDelay = singleArg.use(retry({ retries: 3, delay: 500 }));
 withRetryDelay satisfies Abortable<[string], { id: string; name: string }>;
 
 // retry() with custom delay function
 const withRetryCustom = singleArg.use(
-  retry({ count: 3, delay: (attempt) => attempt * 1000 })
+  retry({ retries: 3, delay: (attempt) => attempt * 1000 })
 );
 withRetryCustom satisfies Abortable<[string], { id: string; name: string }>;
 
@@ -139,7 +139,7 @@ const _chainWithSignal: Promise<{ id: string; name: string }> = fullChain.withSi
 
 // Chain with multi-arg function
 const multiArgChain = multiArgs
-  .use(retry({ count: 2, delay: "fibonacci" }))
+  .use(retry({ retries: 2, delay: "fibonacci" }))
   .use(timeout(10000));
 
 multiArgChain satisfies Abortable<[number, string, boolean], number>;
@@ -213,7 +213,7 @@ const userApi = {
 
 // Wrap with retry and error handling
 const robustGetUser = userApi.getUser
-  .use(retry({ count: 3, delay: "backoff" }))
+  .use(retry({ retries: 3, delay: "backoff" }))
   .use(catchError((err) => console.error("Failed to get user:", err)))
   .use(timeout(10000));
 
@@ -322,7 +322,7 @@ const complexFn = abortable(
 );
 
 const wrappedComplex = complexFn
-  .use(retry({ count: 3, delay: 1000 }))
+  .use(retry({ retries: 3, delay: 1000 }))
   .use(timeout(5000));
 
 wrappedComplex satisfies Abortable<[number, number], ComplexData>;

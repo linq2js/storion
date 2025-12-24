@@ -577,3 +577,62 @@ All demo builds should be copied to `packages/docs/.vitepress/dist/demos/`:
 | Demo doesn't load on click | VitePress client-side routing | Force `window.location.href`    |
 | 404 on refresh             | GitHub Pages tries Jekyll     | Add `.nojekyll` file            |
 | Styles broken              | Wrong asset paths             | Correct Vite `base` path        |
+
+## Writing Documentation
+
+Documentation lives in `packages/docs/`. Follow these conventions:
+
+### Directory Structure
+
+| Directory   | Content Type                                               |
+| ----------- | ---------------------------------------------------------- |
+| `guide/`    | Basic, essentials, and advanced examples with explanations |
+| `api/`      | API reference with best practices and detailed signatures  |
+| `examples/` | Standalone runnable examples                               |
+
+### Linking Rules
+
+**Always link API mentions** - When mentioning functions, methods, classes, or types in documentation, link to their corresponding `api/*` page:
+
+```md
+<!-- ✅ CORRECT - link to API reference -->
+
+Use [`store()`](/api/store) to define reactive state.
+The [`async()`](/api/async) function handles async operations.
+Configure persistence with [`persist`](/api/persist-middleware) middleware.
+
+<!-- ❌ WRONG - no link -->
+
+Use `store()` to define reactive state.
+```
+
+### Content Guidelines
+
+**`guide/` pages:**
+
+- Start with basic concepts, progress to advanced usage
+- Include practical examples with explanations
+- Focus on "how to use" and "when to use"
+- Link to `api/*` pages for detailed signatures and options
+
+**`api/` pages:**
+
+- Include complete function signatures and types
+- Document all parameters and return values
+- Add best practices and common pitfalls
+- Include short, focused code examples
+
+### Example Links
+
+| Mention              | Link Path                 |
+| -------------------- | ------------------------- |
+| `store()`            | `/api/store`              |
+| `async()`            | `/api/async`              |
+| `abortable()`        | `/api/abortable`          |
+| `effect()`           | `/api/effect`             |
+| `trigger()`          | `/api/trigger`            |
+| `useStore()`         | `/api/use-store`          |
+| `meta()`             | `/api/meta`               |
+| `container()`        | `/api/container`          |
+| `StoreProvider`      | `/api/store-provider`     |
+| `persist` middleware | `/api/persist-middleware` |

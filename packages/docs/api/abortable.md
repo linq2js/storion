@@ -311,11 +311,20 @@ const wizard = abortable(async (ctx) => {
 
 const result = wizard();
 
-// Advance through steps
+// Allow step 1 to execute and reach take()
+await new Promise((r) => setTimeout(r, 10));
 result.send(); // Complete step 1
+
+// Allow step 2 to execute and reach take()
+await new Promise((r) => setTimeout(r, 10));
 result.send(); // Complete step 2
+
 await result; // "completed"
 ```
+
+::: tip
+`send()` only resolves if there's a pending `take()` waiting. If called before execution reaches `take()`, the send is a no-op.
+:::
 
 ## Signal Relationship
 
@@ -565,7 +574,7 @@ fn.use(cache(60000)).use(retry(3));
 
 ## retry()
 
-Retry on failure with configurable count and delay strategy.
+Retry on failure with configurable retries and delay strategy.
 
 ```ts
 import { retry } from "storion/async";
@@ -578,13 +587,13 @@ fn.use(retry("linear"));
 fn.use(retry("backoff"));
 
 // Retry 5 times with linear delay
-fn.use(retry({ count: 5, delay: "linear" }));
+fn.use(retry({ retries: 5, delay: "linear" }));
 
 // Custom delay function
-fn.use(retry({ count: 3, delay: (attempt) => attempt * 1000 }));
+fn.use(retry({ retries: 3, delay: (attempt) => attempt * 1000 }));
 
 // Wait for condition (Promise<void>)
-fn.use(retry({ count: 10, delay: () => waitForOnline() }));
+fn.use(retry({ retries: 10, delay: () => waitForOnline() }));
 ```
 
 **Retry Options:**
@@ -592,7 +601,7 @@ fn.use(retry({ count: 10, delay: () => waitForOnline() }));
 ```ts
 interface RetryOptions {
   /** Number of retry attempts (default: 3) */
-  count?: number;
+  retries?: number;
   /** Delay strategy or custom function */
   delay?:
     | "backoff"

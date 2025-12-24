@@ -204,24 +204,23 @@ The selector function is tracked. Any state you read inside it becomes a depende
 
 Let's trace what happens when a user clicks the increment button:
 
-```
-1. User clicks "+" button
-   └─→ onClick={increment} fires
+```mermaid
+sequenceDiagram
+    participant User
+    participant Button as + Button
+    participant Action as increment()
+    participant Proxy as Storion Proxy
+    participant Store as counterStore
+    participant Component as Counter Component
 
-2. increment() runs
-   └─→ state.count++
-       └─→ Storion's Proxy intercepts the write
-           └─→ Records: "count changed from 0 to 1"
-
-3. Storion checks: "Who's subscribed to count?"
-   └─→ Counter component is subscribed (it read state.count)
-   └─→ Other components that don't read count are NOT notified
-
-4. Counter re-renders
-   └─→ Selector runs again
-   └─→ get(counterStore) returns same instance (cached)
-   └─→ state.count is now 1
-   └─→ Component renders with new count
+    User->>Button: Click
+    Button->>Action: onClick fires
+    Action->>Proxy: state.count++
+    Proxy->>Store: Record: count 0 → 1
+    Store->>Store: Check subscribers
+    Note right of Store: Counter reads count ✓<br/>Other components ✗
+    Store->>Component: Notify change
+    Component->>Component: Re-render with count = 1
 ```
 
 ## The Shorthand: `create()`

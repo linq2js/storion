@@ -63,11 +63,10 @@ features:
 
 ## See Storion in 30 Seconds
 
-Here's a complete, working counter — no setup or Provider needed:
+Here's a complete, working counter:
 
 ```tsx
-import { store } from 'storion'
-import { useStore } from 'storion/react'
+import { store, StoreProvider, useStore } from 'storion/react'
 
 // STEP 1: Define your store ─────────────────────────────────────────────────
 const counterStore = store({
@@ -86,7 +85,7 @@ const counterStore = store({
   },
 })
 
-// STEP 2: Use in React — that's it! ─────────────────────────────────────────
+// STEP 2: Use in React ──────────────────────────────────────────────────────
 function Counter() {
   // The selector function receives a context with `get` to access stores
   const { count, increment, decrement } = useStore(({ get }) => {
@@ -111,7 +110,52 @@ function Counter() {
     </div>
   )
 }
+
+// STEP 3: Wrap with Provider ────────────────────────────────────────────────
+function App() {
+  return (
+    <StoreProvider>
+      <Counter />
+    </StoreProvider>
+  )
+}
 ```
+
+::: details Don't like Providers? Use `create()` instead
+
+```tsx
+import { create } from 'storion/react'
+
+const [counter, useCounter] = create({
+  state: { count: 0 },
+  setup({ state }) {
+    return {
+      increment: () => { state.count++ },
+      decrement: () => { state.count-- },
+    }
+  },
+})
+
+// No Provider needed!
+function Counter() {
+  const { count, increment, decrement } = useCounter((state, actions) => ({
+    count: state.count,
+    increment: actions.increment,
+    decrement: actions.decrement,
+  }))
+
+  return (
+    <div>
+      <button onClick={decrement}>-</button>
+      <span>{count}</span>
+      <button onClick={increment}>+</button>
+    </div>
+  )
+}
+```
+
+:::
+
 
 ### What's Happening Here?
 
@@ -119,7 +163,7 @@ function Counter() {
 |----------------|-------------------|
 | `state.count++` | Detects mutation → notifies subscribers |
 | `state.count` in selector | Tracks this property → re-renders when it changes |
-| Nothing else | No Provider, no context, no boilerplate |
+| `StoreProvider` | Manages store instances and enables sharing across components |
 
 ::: tip Copy, paste, run
 The example above works as-is. Just `npm install storion` and try it.

@@ -298,23 +298,23 @@ effect(fn, { onError: "ignore" });
 ```ts
 // Retry with default backoff strategy (1s, 2s, 4s...)
 effect(fn, {
-  onError: { count: 3 },
+  onError: { retries: 3 },
 });
 
 // Retry with fixed delay
 effect(fn, {
-  onError: { count: 3, delay: 1000 },
+  onError: { retries: 3, delay: 1000 },
 });
 
 // Retry with named strategy: "backoff" | "linear" | "fixed" | "fibonacci" | "immediate"
 effect(fn, {
-  onError: { count: 5, delay: "linear" }, // 1s, 2s, 3s, 4s, 5s
+  onError: { retries: 5, delay: "linear" }, // 1s, 2s, 3s, 4s, 5s
 });
 
 // Retry with custom delay function
 effect(fn, {
   onError: {
-    count: 3,
+    retries: 3,
     delay: (attempt) => Math.min(100 * 2 ** attempt, 5000),
   },
 });
