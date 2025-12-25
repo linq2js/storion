@@ -176,30 +176,37 @@ The example above works as-is. Just `npm install storion` and try it.
 ### The Problem with Other Libraries
 
 ```tsx
-// ❌ Redux: Lots of boilerplate
-const INCREMENT = 'INCREMENT'
-const increment = () => ({ type: INCREMENT })
-const reducer = (state, action) => {
-  switch (action.type) {
-    case INCREMENT: return { ...state, count: state.count + 1 }
-    default: return state
-  }
+// ❌ Zustand: One store per hook, manual selectors, memoize actions
+function Component({ step }) {
+  // Returning object? Need shallow compare or it re-renders every time!
+  const { count, name } = useCounterStore(
+    (state) => ({ count: state.count, name: state.name }),
+    shallow  // forget this? re-renders on EVERY state change!
+  )
+  
+  // Action uses props → need useCallback with deps
+  const increment = useCallback(() => {
+    useCounterStore.getState().incrementBy(step)
+  }, [step])  // forget this dep? stale closure bug!
+  
+  return <ChildComponent onIncrement={increment} />
 }
 
-// ❌ Zustand: Manual selectors for optimization
-const useStore = create((set) => ({
-  count: 0,
-  increment: () => set((state) => ({ count: state.count + 1 })),
-}))
-// If you don't add selectors, EVERY component re-renders on ANY change
-const count = useStore((state) => state.count) // must remember to do this!
-
-// ✅ Storion: Just mutate state, auto-tracked
-const { count, increment } = useStore(({ get }) => {
-  const [state, actions] = get(counterStore)
-  return { count: state.count, increment: actions.increment }
-})
-// Component only re-renders when count changes — automatically
+// ✅ Storion: Tracks state access, not selector result
+function Component({ step }) {
+  const { count, name, increment } = useStore(({ get }) => {
+    const [counter, counterActions] = get(counterStore)
+    const [user] = get(userStore)
+    return {
+      count: counter.count,    // ← Storion tracks this access
+      name: user.name,         // ← and this access
+      increment: () => counterActions.incrementBy(step),
+    }
+  })
+  // No shallow compare needed — we track state.count and state.name changes
+  // Not the selector result object. Return any shape you want!
+  return <ChildComponent onIncrement={increment} />
+}
 ```
 
 ### Feature Comparison
@@ -207,6 +214,9 @@ const { count, increment } = useStore(({ get }) => {
 | Feature | Redux | Zustand | Jotai | **Storion** |
 |---------|-------|---------|-------|-------------|
 | Auto-tracking | ❌ Manual selectors | ❌ Manual selectors | ✅ | ✅ |
+| Cross-store selection | ⚠️ Verbose | ❌ One hook per store | ❌ | ✅ **One hook** |
+| Stable actions | ⚠️ useCallback | ⚠️ Extra selectors | ⚠️ | ✅ **Automatic** |
+| Object selectors | ⚠️ Reselect | ⚠️ Need `shallow` | ✅ | ✅ **No compareFn** |
 | TypeScript | ⚠️ Verbose | ✅ Good | ✅ Good | ✅ Excellent |
 | Dependency Injection | ❌ | ❌ | ❌ | ✅ Built-in |
 | Async State | ❌ External lib | ⚠️ Basic | ⚠️ Basic | ✅ First-class |
