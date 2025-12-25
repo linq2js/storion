@@ -2,7 +2,7 @@
  * Equality utilities for comparing values.
  */
 
-import type { Equality, EqualityShorthand } from "../types";
+import type { AnyFunc, Equality, EqualityShorthand } from "../types";
 import isEqual from "lodash/isEqual";
 
 /**
@@ -89,69 +89,94 @@ export function equality(shorthand: EqualityShorthand) {
 // Value Stabilization
 // =============================================================================
 
-/**
- * Check if value is a Date instance.
- */
-function isDate(value: unknown): value is Date {
-  return value instanceof Date;
-}
+export type StableFn<TArgs extends any[], TResult> = {
+  getOriginal: () => (...args: TArgs) => TResult;
+  getCurrent: () => (...args: TArgs) => TResult;
+  setCurrent: (newFn: (...args: TArgs) => TResult) => void;
+};
 
-/**
- * Get the appropriate equality function for a value.
- *
- * - Custom equality if provided
- * - Deep equality for Date objects (compares by timestamp)
- * - Strict equality (Object.is) for everything else
- */
-function getEqualityFn<T>(
-  value: T,
-  customEqualityFn?: (a: T, b: T) => boolean
-): (a: T, b: T) => boolean {
-  if (customEqualityFn) {
-    return customEqualityFn;
-  }
-  // Use deep equality for dates (lodash isEqual compares by timestamp)
-  if (isDate(value)) {
-    return deepEqual as (a: T, b: T) => boolean;
-  }
-  // Default: strict equality
-  return strictEqual;
-}
-
-/**
- * Stabilize a value: if equal to previous, return previous reference.
- *
- * This is useful for preventing unnecessary re-renders when values are
- * semantically equal but have different references.
- *
- * Auto-handles:
- * - Date objects (compared by timestamp)
- * - Primitives (strict equality)
- *
- * @param prev - Previous value
- * @param next - New value
- * @param equalityFn - Optional custom equality function or strategy name
- * @returns prev if equal, next otherwise
- *
- * @example
- * ```ts
- * // Basic usage - keeps previous reference if equal
- * const stableDate = stabilize(prevDate, new Date(sameTimestamp));
- * stableDate === prevDate // true
- *
- * // With custom equality
- * const stableObj = stabilize(prevObj, newObj, "shallow");
- * const stableItem = stabilize(prevItem, newItem, (a, b) => a.id === b.id);
- * ```
- */
-export function stabilize<T>(
-  prev: T,
-  next: T,
-  equalityFn?: Equality<T>
-): T {
-  const resolvedFn = getEqualityFn(
-    next,
-    equalityFn ? resolveEquality(equalityFn) : undefined
+export function createStableFn<TArgs extends any[], TResult>(
+  fn: (...args: TArgs) => TResult
+): StableFn<TArgs, TResult> {
+  const originalFn = fn;
+  let currentFn = fn;
+  return Object.assign(
+    (...args: TArgs) => {
+      return currentFn(...args);
+    },
+    {
+      getOriginal: () => originalFn,
+      getCurrent: () => currentFn,
+      setCurrent(newFn: (...args: TArgs) => TResult) {
+        currentFn = newFn;
+      },
+    }
   );
-  return resolvedFn(prev, next) ? prev : next;
+}
+
+/**
+ * Check if a value is a stable function wrapper.
+ */
+export function isStableFn<TArgs extends any[], TResult>(
+  value: unknown
+): value is StableFn<TArgs, TResult> {
+  return (
+    typeof value === "function" &&
+    "getOriginal" in value &&
+    "getCurrent" in value &&
+    "setCurrent" in value
+  );
+}
+
+/**
+ * Stabilize a value with automatic function wrapper support.
+ *
+ * - Functions: Creates/updates stable wrapper (reference never changes)
+ * - Date objects: Compared by timestamp (uses deepEqual)
+ * - Other values: Returns previous if equal per equalityFn
+ *
+ * @param prev - Previous value container (or undefined for first call)
+ * @param next - New value
+ * @param equalityFn - Equality function for non-function/non-date values
+ * @returns Tuple of [stabilized value, wasStable]
+ */
+export function tryStabilize<T>(
+  prev: { value: T } | undefined,
+  next: T,
+  equalityFn: (a: T, b: T) => boolean
+): [T, boolean] {
+  // First time - no previous value
+  if (!prev) {
+    if (typeof next === "function") {
+      return [createStableFn(next as AnyFunc) as T, false];
+    }
+    return [next, false];
+  }
+
+  // Handle functions with stable wrapper pattern
+  if (typeof next === "function") {
+    if (isStableFn(prev.value)) {
+      // Update existing stable wrapper with new function
+      prev.value.setCurrent(next as AnyFunc);
+      return [prev.value as T, true];
+    }
+    // Previous wasn't a stable fn, create new wrapper
+    return [createStableFn(next as AnyFunc) as T, false];
+  }
+
+  if (next && next instanceof Date) {
+    if (prev.value && prev.value instanceof Date) {
+      if (next.getTime() === prev.value.getTime()) {
+        return [prev.value, true];
+      }
+    }
+    return [next, false];
+  }
+
+  // Non-functions: use equality comparison
+  if (equalityFn(prev.value, next)) {
+    return [prev.value, true];
+  }
+
+  return [next, false];
 }

@@ -87,7 +87,7 @@ import {
   type Ref,
 } from "react";
 import type { Equality } from "../types";
-import { stabilize } from "../core/equality";
+import { tryStabilize, resolveEquality } from "../core/equality";
 
 // =============================================================================
 // Types
@@ -111,14 +111,13 @@ export type PropEqualityConfig<TProps extends object> = {
 
 /**
  * Internal refs for stable component.
+ * Uses { value: T } containers for tryStabilize compatibility.
  */
-interface StableRefs<TProps extends object> {
-  /** Latest props (always updated) */
-  fresh: TProps;
-  /** Stable function wrappers (created once per key) */
-  stableFns: Map<string, Function>;
-  /** Previous non-function values for equality comparison */
-  prevValues: Map<string, unknown>;
+interface StableRefs {
+  /** Previous values (containers for tryStabilize) */
+  prevValues: Map<string, { value: unknown }>;
+  /** Resolved equality functions per key */
+  equalityFns: Map<string, (a: unknown, b: unknown) => boolean>;
 }
 
 // =============================================================================
@@ -151,51 +150,39 @@ export function stable<TProps extends object, TRef = unknown>(
     const inputProps = props as TProps;
 
     // Initialize refs once (stable across renders)
-    const [refs] = useState<StableRefs<TProps>>(() => ({
-      fresh: inputProps,
-      stableFns: new Map(),
+    const [refs] = useState<StableRefs>(() => ({
       prevValues: new Map(),
+      equalityFns: new Map(),
     }));
 
-    // Always update fresh props (so stable wrappers call latest)
-    refs.fresh = inputProps;
-
-    // Build stable props
+    // Build stable props using tryStabilize for each key
     const stableProps = {} as TProps;
 
     for (const key of Object.keys(inputProps) as Array<keyof TProps>) {
+      const keyStr = key as string;
       const value = inputProps[key];
 
-      if (typeof value === "function") {
-        // For functions: use stable wrapper pattern (like useStore)
-        // The wrapper reference never changes, but always calls latest function
-        const keyStr = key as string;
-        if (!refs.stableFns.has(keyStr)) {
-          refs.stableFns.set(keyStr, (...args: unknown[]) => {
-            // Always call the latest function from fresh props
-            const fn = (refs.fresh as any)[keyStr];
-            return fn?.(...args);
-          });
-        }
-        (stableProps as any)[key] = refs.stableFns.get(keyStr);
-      } else {
-        // For non-functions: use equality-based stabilization
-        const keyStr = key as string;
-        const prevValue = refs.prevValues.get(keyStr);
+      // Get or create resolved equality function for this key
+      if (!refs.equalityFns.has(keyStr)) {
         const equalityConfig = customEquality?.[key] as
           | Equality<unknown>
           | undefined;
+        refs.equalityFns.set(keyStr, resolveEquality(equalityConfig));
+      }
+      const equalityFn = refs.equalityFns.get(keyStr)!;
 
-        if (refs.prevValues.has(keyStr)) {
-          // Have previous value, stabilize using shared utility
-          const stableValue = stabilize(prevValue, value, equalityConfig);
-          (stableProps as any)[key] = stableValue;
-          refs.prevValues.set(keyStr, stableValue);
-        } else {
-          // First time seeing this key
-          (stableProps as any)[key] = value;
-          refs.prevValues.set(keyStr, value);
-        }
+      // Get previous value container (undefined if first time)
+      const prev = refs.prevValues.get(keyStr);
+
+      // Stabilize: handles both functions (stable wrapper) and values (equality)
+      const [stableValue] = tryStabilize(prev, value, equalityFn);
+      (stableProps as any)[key] = stableValue;
+
+      // Store for next render
+      if (prev) {
+        prev.value = stableValue;
+      } else {
+        refs.prevValues.set(keyStr, { value: stableValue });
       }
     }
 

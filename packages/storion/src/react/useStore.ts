@@ -27,6 +27,7 @@ import {
 import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
 import { AsyncFunctionError, ScopedOutsideSelectorError } from "../errors";
+import { tryStabilize, strictEqual } from "../core/equality";
 import { isSpec } from "../is";
 import { storeTuple } from "../utils/storeTuple";
 import { emitter } from "../emitter";
@@ -43,8 +44,8 @@ import { emitter } from "../emitter";
  * - Works with pick() for value-level granularity
  */
 interface UseStoreRefs {
-  fresh: any;
-  stableFns: Map<string, Function>;
+  /** Previous values (containers for tryStabilize) */
+  prevValues: Map<string, { value: unknown }>;
   trackedDeps: Map<string, ReadEvent>;
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
   id: string; // unique id for this component instance
@@ -64,8 +65,7 @@ export function useStoreWithContainer<T extends object>(
 
   // Combined ref for all mutable values
   const [refs] = useState<UseStoreRefs>(() => ({
-    fresh: undefined,
-    stableFns: new Map(),
+    prevValues: new Map(),
     trackedDeps: new Map(),
     subscriptions: new Map(),
     id,
@@ -168,25 +168,23 @@ export function useStoreWithContainer<T extends object>(
           );
         }
 
-        // Store fresh result for stable function wrappers
-        refs.fresh = result;
-
-        // Build output with stable functions (preserve array vs object)
+        // Build output with stable values (preserve array vs object)
         // This is inside withHooks so Object.entries reads are tracked
         const out = (Array.isArray(result) ? [] : {}) as StableResult<T>;
 
         for (const [key, value] of Object.entries(result)) {
-          if (typeof value === "function") {
-            // Get or create stable function wrapper
-            if (!refs.stableFns.has(key)) {
-              refs.stableFns.set(key, (...args: unknown[]) => {
-                // Run fresh selector and call the function
-                return (refs.fresh as any)?.[key]?.(...args);
-              });
-            }
-            (out as any)[key] = refs.stableFns.get(key);
+          // Get previous value container (undefined if first time)
+          const prev = refs.prevValues.get(key);
+
+          // Stabilize: handles both functions (stable wrapper) and values (equality)
+          const [stableValue] = tryStabilize(prev, value, strictEqual);
+          (out as any)[key] = stableValue;
+
+          // Store for next render
+          if (prev) {
+            prev.value = stableValue;
           } else {
-            (out as any)[key] = value;
+            refs.prevValues.set(key, { value: stableValue });
           }
         }
 

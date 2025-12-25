@@ -89,7 +89,6 @@ export {
   shallowEqual,
   deepEqual,
   strictEqual,
-  stabilize,
 } from "./core/equality";
 
 // Trigger utility
