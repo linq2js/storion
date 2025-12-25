@@ -494,6 +494,27 @@ function UserProfile({ userId }: { userId: string }) {
 - Use `jest` with `it()` (not `test()`)
 - Write tests first, then code, then run and fix
 
+## README Sync: Root to packages/storion
+
+When syncing content from root `README.md` to `packages/storion/README.md`:
+
+| Content | Action |
+| ------- | ------ |
+| Header, badges, tagline | ✅ Sync |
+| Why Storion, Features | ✅ Sync |
+| Installation, Quick Start | ✅ Sync |
+| Documentation links (absolute URLs like `https://linq2js.github.io/storion/`) | ✅ Sync as-is |
+| **Packages** section | ❌ Exclude (relative links like `./packages/storion` don't work on npm) |
+| **Development** section | ❌ Exclude (pnpm workspace commands not relevant for npm users) |
+| Package-specific examples (e.g., "Async State") | ✅ Keep in `packages/storion/README.md` |
+
+**Key points:**
+
+- Root README is the "full" version with monorepo info
+- `packages/storion/README.md` is the npm package README (what users see on npmjs.com)
+- All absolute documentation URLs work in both locations
+- Relative paths (`./packages/*`) only work in root README
+
 ## GitHub Pages Demo Deployment
 
 When deploying demos (SPAs) alongside VitePress docs to GitHub Pages, follow these rules to avoid navigation issues between docs and demos:

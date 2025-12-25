@@ -52,10 +52,41 @@ npm install storion
 **Read state → Storion tracks it. State changes → Only affected components re-render.**
 
 ```tsx
-import { store } from "storion";
-import { useStore } from "storion/react";
+import { create } from "storion/react";
 
-// Define a store
+// Create store and hook in one call - no Provider needed!
+const [counter, useCounter] = create({
+  state: { count: 0 },
+  setup({ state }) {
+    return {
+      inc: () => state.count++,
+      dec: () => state.count--,
+    };
+  },
+});
+
+function Counter() {
+  const { count, inc, dec } = useCounter((state, actions) => ({
+    count: state.count,
+    ...actions,
+  }));
+
+  return (
+    <div>
+      <button onClick={dec}>-</button>
+      <span>{count}</span>
+      <button onClick={inc}>+</button>
+    </div>
+  );
+}
+```
+
+<details>
+<summary>Multi-store apps with StoreProvider</summary>
+
+```tsx
+import { store, useStore, StoreProvider } from "storion/react";
+
 const counterStore = store({
   name: "counter",
   state: { count: 0 },
@@ -67,7 +98,6 @@ const counterStore = store({
   },
 });
 
-// Use in React
 function Counter() {
   const { count, inc, dec } = useStore(({ get }) => {
     const [state, actions] = get(counterStore);
@@ -82,7 +112,17 @@ function Counter() {
     </div>
   );
 }
+
+function App() {
+  return (
+    <StoreProvider>
+      <Counter />
+    </StoreProvider>
+  );
+}
 ```
+
+</details>
 
 ## Async State
 
