@@ -74,6 +74,7 @@ export default withMermaid({
             { text: "Network", link: "/guide/network" },
             { text: "Network Layer Architecture", link: "/guide/network-layer" },
             { text: "Dependency Injection", link: "/guide/dependency-injection" },
+            { text: "Sharing Logic", link: "/guide/sharing-logic" },
             { text: "Middleware", link: "/guide/middleware" },
             { text: "Persistence", link: "/guide/persistence" },
             { text: "Testing", link: "/guide/testing" },
@@ -96,6 +97,7 @@ export default withMermaid({
           items: [
             { text: "store()", link: "/api/store" },
             { text: "container()", link: "/api/container" },
+            { text: "pool()", link: "/api/pool" },
             { text: "effect()", link: "/api/effect" },
             { text: "trigger()", link: "/api/trigger" },
           ],

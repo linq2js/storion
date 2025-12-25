@@ -111,3 +111,4 @@ export {
 // Meta utilities
 export { meta } from "./meta/meta";
 export { withMeta } from "./meta/withMeta";
+export { pool } from "./pool";

@@ -37,7 +37,7 @@ import { generateSpecName, generateStoreId } from "./generator";
 import { wrapFn } from "./fnWrapper";
 
 import { emitter, Emitter } from "../emitter";
-import { collection } from "../collection";
+import { pool } from "../pool";
 
 // =============================================================================
 // Store Spec Factory
@@ -168,10 +168,9 @@ export function createStoreInstance<
   const disposeEmitter = emitter<void>();
 
   // Property emitters - created lazily on first subscription
-  const propertyEmitters = collection<
-    keyof TState,
-    Emitter<PropertyChangeEvent>
-  >(() => emitter<PropertyChangeEvent>());
+  const propertyEmitters = pool<Emitter<PropertyChangeEvent>, keyof TState>(
+    () => emitter<PropertyChangeEvent>()
+  );
 
   // ==========================================================================
   // Action Dispatch Tracking
@@ -193,7 +192,7 @@ export function createStoreInstance<
   };
 
   /** Emitters for action dispatches - created lazily per action name */
-  const actionEmitters = collection<string, Emitter<ActionEmitterEvent>>(() =>
+  const actionEmitters = pool<Emitter<ActionEmitterEvent>, string>(() =>
     emitter<ActionEmitterEvent>()
   );
 
@@ -268,7 +267,7 @@ export function createStoreInstance<
 
     // Notify property subscribers (using emitter)
     // Effects subscribe via this mechanism through the hooks system
-    propertyEmitters.with(key as keyof TState, (em) =>
+    propertyEmitters.tap(key as keyof TState, (em) =>
       em.emit({ newValue, oldValue })
     );
 
