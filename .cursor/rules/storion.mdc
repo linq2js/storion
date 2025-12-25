@@ -635,4 +635,175 @@ Use `store()` to define reactive state.
 | `meta()`             | `/api/meta`               |
 | `container()`        | `/api/container`          |
 | `StoreProvider`      | `/api/store-provider`     |
+| `withStore()`        | `/api/with-store`         |
+| `stable()`           | `/api/stable`             |
 | `persist` middleware | `/api/persist-middleware` |
+
+### VitePress Documentation Style
+
+#### Page Structure
+
+- **Title (H1)**: Brief noun phrase (e.g., "Getting Started", "Core Concepts")
+- **Intro**: 1-2 sentences explaining what this covers and why it matters
+- **Time estimate**: Add "**Time to read:** ~X minutes" for guides >5 min
+- **Separators**: Use `---` between major conceptual sections
+
+#### Section Patterns
+
+- **Problem→Solution flow**: Use "### The Problem" → "### The Solution" pattern
+- **Analogies**: Start sections with `> **Analogy:** ...` blockquote for complex concepts
+- **Subsections**: Use "### What's Happening Here?" after code blocks to explain
+
+#### Code Examples in Docs
+
+- **Inline comments**: Explain each significant line with `// comment`
+- **Wrong/Right contrast**: Use `// ❌ WRONG` and `// ✅ CORRECT` prefixes
+- **Show progression**: First show the problem code, then the fix
+- **Numbered lists in comments**: `// 1. First step` for multi-step explanations
+
+#### VitePress Callouts
+
+```md
+::: tip Title - Helpful suggestions, best practices
+::: info Title - Requirements, neutral information
+::: warning Title - Important cautions, breaking behaviors
+::: details Title - Expandable content for deeper info
+:::
+```
+
+#### API Reference Format (in `/api/` pages)
+
+```md
+# functionName()
+
+Brief one-line description.
+
+## Signature
+
+\`\`\`ts
+function name<T>(args): ReturnType
+\`\`\`
+
+## Options
+
+### optionName
+
+Description.
+
+- **Type:** `TypeHere`
+- **Required:** Yes/No (default if No)
+
+## Example
+
+\`\`\`ts
+// Practical usage
+\`\`\`
+
+## Return Value
+
+Description of what's returned.
+```
+
+#### Tables & Diagrams
+
+- **Tables**: Use for comparisons ("When to Use Which?"), feature matrices, type mappings
+- **Mermaid `sequenceDiagram`**: For interaction flows
+- **Mermaid `flowchart TB`**: For architecture overviews
+- Add emoji icons in node labels for visual distinction
+
+#### Writing Tone
+
+- Second person: "you", "your app"
+- Conversational: rhetorical questions ("What if you forget?")
+- Explain WHY before HOW
+- Use "**Fix:**" after explaining a problem
+
+## JSDoc Style for Source Files
+
+### File-Level Comment
+
+```ts
+/**
+ * ModuleName - Brief one-line description.
+ *
+ * Additional context sentence(s) explaining purpose.
+ * - Key feature 1
+ * - Key feature 2
+ */
+```
+
+### Section Separators
+
+```ts
+// =============================================================================
+// SECTION NAME
+// =============================================================================
+```
+
+### Type/Interface Documentation
+
+````ts
+/**
+ * Brief description on first line.
+ * Additional details if needed.
+ *
+ * @example
+ * ```ts
+ * // usage example
+ * ```
+ */
+export type MyType = ...;
+
+export interface MyInterface {
+  /** Description of property */
+  prop: string;
+  /** Detailed description - can be multi-line */
+  complex: number;
+}
+````
+
+### Function Documentation
+
+````ts
+/**
+ * Brief description of what the function does.
+ *
+ * ## Key Features (use markdown headers for sections)
+ *
+ * - Feature point
+ * - Another point
+ *
+ * @example
+ * ```tsx
+ * // Basic usage
+ * const result = myFunction(arg);
+ * ```
+ *
+ * @example
+ * ```tsx
+ * // Advanced usage
+ * const result = myFunction(arg, options);
+ * ```
+ */
+````
+
+### Grouped Examples with Headers
+
+```ts
+ * @example
+ * // ============================================================
+ * // PATTERN NAME (e.g., REUSABILITY PATTERNS)
+ * // ============================================================
+ *
+ * // 1. First pattern
+ * code...
+ *
+ * // 2. Second pattern
+ * code...
+```
+
+### Inline Comments
+
+- Use `// Note:` for important notes inline
+- Use `// ===== Section Name =====` for minor subsections
+- Keep helper functions brief: single-line JSDoc or inline comment

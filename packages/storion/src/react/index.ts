@@ -30,5 +30,8 @@ export {
   type WithCreatedStore,
 } from "./create";
 
+// Stabilization HOC
+export { stable, type PropEqualityConfig } from "./stable";
+
 // Re-export core functions for convenience
 export * from "../index";

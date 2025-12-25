@@ -106,6 +106,7 @@ export default withMermaid({
             { text: "useStore()", link: "/api/use-store" },
             { text: "StoreProvider", link: "/api/store-provider" },
             { text: "withStore()", link: "/api/with-store" },
+            { text: "stable()", link: "/api/stable" },
           ],
         },
         {
