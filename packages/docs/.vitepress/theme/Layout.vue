@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { useData } from "vitepress";
+import { useData, useRouter } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import { ref, onMounted, watch } from "vue";
 
 const { Layout } = DefaultTheme;
 const { page } = useData();
+const router = useRouter();
 
 const isDemo = ref(false);
 
@@ -16,7 +17,57 @@ const checkIsDemo = () => {
   }
 };
 
-onMounted(checkIsDemo);
+onMounted(() => {
+  checkIsDemo();
+
+  const SCROLL_KEY = "vitepress-scroll-positions";
+
+  // Get saved positions from sessionStorage
+  const getPositions = (): Record<string, number> => {
+    try {
+      return JSON.parse(sessionStorage.getItem(SCROLL_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  };
+
+  // Save positions to sessionStorage
+  const savePosition = (path: string, scrollY: number) => {
+    const positions = getPositions();
+    positions[path] = scrollY;
+    sessionStorage.setItem(SCROLL_KEY, JSON.stringify(positions));
+  };
+
+  // Restore scroll position on page load (handles reload)
+  const currentPath = window.location.pathname;
+  const positions = getPositions();
+  if (positions[currentPath] !== undefined) {
+    requestAnimationFrame(() => {
+      window.scrollTo(0, positions[currentPath]);
+    });
+  }
+
+  // Save current scroll position before leaving
+  router.onBeforeRouteChange = () => {
+    savePosition(window.location.pathname, window.scrollY);
+  };
+
+  // Restore scroll position on navigation
+  router.onAfterRouteChanged = (to) => {
+    const positions = getPositions();
+    if (positions[to] !== undefined) {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, positions[to]);
+      });
+    }
+  };
+
+  // Save scroll position before page unload (handles reload/close)
+  window.addEventListener("beforeunload", () => {
+    savePosition(window.location.pathname, window.scrollY);
+  });
+});
+
 watch(() => page.value.relativePath, checkIsDemo);
 </script>
 

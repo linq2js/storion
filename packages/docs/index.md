@@ -200,11 +200,11 @@ function Component({ step }) {
     return {
       count: counter.count,    // ← Storion tracks this access
       name: user.name,         // ← and this access
-      increment: () => counterActions.incrementBy(step),
+      increment: () => counterActions.incrementBy(step),  // ← auto-stable!
     }
   })
-  // No shallow compare needed — we track state.count and state.name changes
-  // Not the selector result object. Return any shape you want!
+  // No shallow compare — we track state.count and state.name, not result object
+  // increment is auto-stabilized — same reference, always fresh `step` value
   return <ChildComponent onIncrement={increment} />
 }
 ```
@@ -214,13 +214,14 @@ function Component({ step }) {
 | Feature | Redux | Zustand | Jotai | **Storion** |
 |---------|-------|---------|-------|-------------|
 | Auto-tracking | ❌ Manual selectors | ❌ Manual selectors | ✅ | ✅ |
-| Cross-store selection | ⚠️ Verbose | ❌ One hook per store | ❌ | ✅ **One hook** |
+| Multiple stores | ✅ Single store | ⚠️ One hook each | ✅ Atoms | ✅ **One hook** |
+| Cross-store deps | ⚠️ Verbose | ❌ Manual | ❌ | ✅ **Auto-resolved** |
 | Stable actions | ⚠️ useCallback | ⚠️ Extra selectors | ⚠️ | ✅ **Automatic** |
 | Object selectors | ⚠️ Reselect | ⚠️ Need `shallow` | ✅ | ✅ **No compareFn** |
 | TypeScript | ⚠️ Verbose | ✅ Good | ✅ Good | ✅ Excellent |
 | Dependency Injection | ❌ | ❌ | ❌ | ✅ Built-in |
 | Async State | ❌ External lib | ⚠️ Basic | ⚠️ Basic | ✅ First-class |
-| Middleware | ✅ | ✅ | ❌ | ✅ |
+| Middleware | ✅ Complex setup | ⚠️ Per-store only | ❌ | ✅ **Global + per-store** |
 | DevTools | ✅ | ✅ | ⚠️ | ✅ |
 | Bundle Size | ~2KB | ~1KB | ~2KB | ~4KB |
 | Learning Curve | Steep | Easy | Medium | **Easy** |
