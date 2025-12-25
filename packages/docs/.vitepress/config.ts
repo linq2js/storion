@@ -75,6 +75,7 @@ export default withMermaid({
             { text: "Network Layer Architecture", link: "/guide/network-layer" },
             { text: "Dependency Injection", link: "/guide/dependency-injection" },
             { text: "Sharing Logic", link: "/guide/sharing-logic" },
+            { text: "Dynamic Nested State", link: "/guide/dynamic-stores" },
             { text: "Middleware", link: "/guide/middleware" },
             { text: "Persistence", link: "/guide/persistence" },
             { text: "Testing", link: "/guide/testing" },
@@ -100,6 +101,13 @@ export default withMermaid({
             { text: "pool()", link: "/api/pool" },
             { text: "effect()", link: "/api/effect" },
             { text: "trigger()", link: "/api/trigger" },
+          ],
+        },
+        {
+          text: "Focus Helpers",
+          items: [
+            { text: "list()", link: "/api/list" },
+            { text: "map()", link: "/api/map" },
           ],
         },
         {

@@ -180,14 +180,6 @@ export function createStoreContext<
 
     // Implementation handles StoreSpec, Factory, and parameterized Factory overloads
     create(specOrFactory: any, ...args: any[]): any {
-      // Prevent dynamic store creation outside setup phase
-      if (!isSetupPhase()) {
-        throw new SetupPhaseError(
-          "create",
-          "Declare all child stores at the top of your setup function."
-        );
-      }
-
       // Handle plain factory functions (including parameterized factories)
       if (!isSpec(specOrFactory)) {
         // Create fresh instance (no caching)
@@ -201,16 +193,6 @@ export function createStoreContext<
       }
 
       const childSpec = specOrFactory as StoreSpec<any, any>;
-
-      // Check lifetime compatibility:
-      // A keepAlive store cannot create an autoDispose child store
-      const childLifetime = childSpec.options.lifetime ?? "keepAlive";
-
-      if (currentLifetime === "keepAlive" && childLifetime === "autoDispose") {
-        const currentName = spec.options.name ?? "unknown";
-        const childName = childSpec.name ?? "unknown";
-        throw new LifetimeMismatchError(currentName, childName, "create");
-      }
 
       // Get full instance from resolver
       const instance = resolver.create(childSpec);

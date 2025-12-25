@@ -423,6 +423,9 @@ export interface StoreSpec<
   (resolver: Resolver): StoreInstance<TState, TActions>;
 }
 
+export type StoreInstanceOf<TSpec extends StoreSpec<any, any>> =
+  ReturnType<TSpec>;
+
 // =============================================================================
 // Mixins
 // =============================================================================

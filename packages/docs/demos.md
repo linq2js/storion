@@ -90,6 +90,34 @@ Try Storion in action with these interactive demos.
 
 <div class="demo-grid">
   <div class="demo-card">
+    <h3>✅ Task Manager</h3>
+    <p>Full-featured task management app with categories, priorities, and filters. Showcases list() and map() helpers.</p>
+    <div class="tags">
+      <span class="tag">list()</span>
+      <span class="tag">map()</span>
+      <span class="tag">Focus Helpers</span>
+    </div>
+    <div class="actions">
+      <a href="/storion/demos/tasks/" class="primary demo-link">Live Demo →</a>
+      <a href="https://github.com/linq2js/storion/tree/main/packages/task-manager" class="secondary">Source</a>
+    </div>
+  </div>
+
+  <div class="demo-card">
+    <h3>📊 Widget Dashboard</h3>
+    <p>Dynamic dashboard with customizable widgets. Add, remove, edit, and duplicate widgets using map() helper.</p>
+    <div class="tags">
+      <span class="tag">map()</span>
+      <span class="tag">Dynamic State</span>
+      <span class="tag">CRUD</span>
+    </div>
+    <div class="actions">
+      <a href="/storion/demos/dashboard/" class="primary demo-link">Live Demo →</a>
+      <a href="https://github.com/linq2js/storion/tree/main/packages/dashboard" class="secondary">Source</a>
+    </div>
+  </div>
+
+  <div class="demo-card">
     <h3>🎯 Feature Showcase</h3>
     <p>Comprehensive demo showcasing all Storion features: stores, effects, async state, persistence, and more.</p>
     <div class="tags">
@@ -171,6 +199,8 @@ cd storion
 pnpm install
 
 # Run a specific demo
+pnpm --filter task-manager dev
+pnpm --filter dashboard dev
 pnpm --filter feature-showcase dev
 pnpm --filter pokemon dev
 pnpm --filter chat dev

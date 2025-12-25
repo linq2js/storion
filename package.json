@@ -9,6 +9,8 @@
     "test": "pnpm --filter storion test",
     "test:all": "pnpm -r test",
     "dev": "pnpm --filter storion dev",
+    "dev:tasks": "pnpm --filter task-manager dev",
+    "dev:dashboard": "pnpm --filter dashboard dev",
     "dev:expense": "pnpm --filter expense-manager dev",
     "dev:showcase": "pnpm --filter feature-showcase dev",
     "dev:pokemon": "pnpm --filter pokemon dev",

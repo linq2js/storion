@@ -8,6 +8,8 @@ on:
     paths:
       - "packages/docs/**"
       - "packages/storion/**"
+      - "packages/task-manager/**"
+      - "packages/dashboard/**"
       - "packages/feature-showcase/**"
       - "packages/pokemon/**"
       - "packages/chat/**"
@@ -79,6 +81,8 @@ jobs:
         env:
           VITE_BASE_PATH: /storion/demos/
         run: |
+          pnpm --filter task-manager build --base /storion/demos/tasks/
+          pnpm --filter dashboard build --base /storion/demos/dashboard/
           pnpm --filter feature-showcase build --base /storion/demos/showcase/
           pnpm --filter pokemon build --base /storion/demos/pokemon/
           pnpm --filter chat build --base /storion/demos/chat/
@@ -87,6 +91,8 @@ jobs:
       - name: Copy demo apps to docs
         run: |
           mkdir -p packages/docs/.vitepress/dist/demos
+          cp -r packages/task-manager/dist packages/docs/.vitepress/dist/demos/tasks
+          cp -r packages/dashboard/dist packages/docs/.vitepress/dist/demos/dashboard
           cp -r packages/feature-showcase/dist packages/docs/.vitepress/dist/demos/showcase
           cp -r packages/pokemon/dist packages/docs/.vitepress/dist/demos/pokemon
           cp -r packages/chat/dist packages/docs/.vitepress/dist/demos/chat
@@ -96,7 +102,7 @@ jobs:
         run: |
           # Copy index.html as 404.html for each demo
           # This allows GitHub Pages to serve the SPA for any sub-route
-          for demo in showcase pokemon chat expense; do
+          for demo in tasks dashboard showcase pokemon chat expense; do
             cp packages/docs/.vitepress/dist/demos/$demo/index.html packages/docs/.vitepress/dist/demos/$demo/404.html
           done
           
@@ -110,7 +116,7 @@ jobs:
             <script>
               // Redirect to the correct demo based on path
               var path = window.location.pathname;
-              var demos = ['showcase', 'pokemon', 'chat', 'expense'];
+              var demos = ['tasks', 'dashboard', 'showcase', 'pokemon', 'chat', 'expense'];
               for (var i = 0; i < demos.length; i++) {
                 if (path.indexOf('/demos/' + demos[i]) !== -1) {
                   window.location.replace('/storion/demos/' + demos[i] + '/');

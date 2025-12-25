@@ -572,56 +572,6 @@ describe("create() - child stores", () => {
     expect(childInstance.disposed()).toBe(true);
   });
 
-  it("should throw when create() is called outside setup phase", () => {
-    const child = store({
-      name: "child",
-      state: { value: 0 },
-      setup: () => ({}),
-    });
-
-    const parent = store({
-      name: "parent",
-      state: { count: 0 },
-      setup: ({ create }) => ({
-        tryCreateChild: () => {
-          create(child); // This should throw
-        },
-      }),
-    });
-
-    const stores = container();
-    const instance = stores.get(parent);
-
-    expect(() => {
-      instance.actions.tryCreateChild();
-    }).toThrow(/can only be called during setup phase/i);
-  });
-
-  it("should throw when keepAlive parent creates autoDispose child", () => {
-    const child = store({
-      name: "child",
-      state: { value: 0 },
-      lifetime: "autoDispose",
-      setup: () => ({}),
-    });
-
-    const parent = store({
-      name: "parent",
-      state: { count: 0 },
-      lifetime: "keepAlive",
-      setup: ({ create }) => {
-        create(child); // This should throw
-        return {};
-      },
-    });
-
-    const stores = container();
-
-    expect(() => {
-      stores.get(parent);
-    }).toThrow(/lifetime mismatch/i);
-  });
-
   it("should allow keepAlive parent to create keepAlive child", () => {
     const child = store({
       name: "child",

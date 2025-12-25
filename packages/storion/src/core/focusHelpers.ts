@@ -13,15 +13,99 @@ import { tryDispose } from "./disposable";
 // =============================================================================
 
 /**
- * Dispose items asynchronously to avoid blocking the main thread.
+ * Check if value is an object (can have dispose method).
+ * Primitives (string, number, boolean, etc.) are skipped for disposal tracking.
  */
-function disposeAsync(items: unknown[]): void {
-  if (items.length === 0) return;
-  queueMicrotask(() => {
-    for (const item of items) {
-      tryDispose(item);
-    }
-  });
+function isObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
+/**
+ * Creates a disposal tracker that handles async disposal with cancellation support.
+ *
+ * Supports the use case where items are removed and re-added before disposal runs.
+ * Uses immutable Set references to detect changes and skip stale disposals.
+ *
+ * Only tracks objects - primitives are skipped since they can't have dispose methods.
+ */
+function createDisposalTracker() {
+  let pendingDisposedItems: Set<object> = new Set();
+  let disposalScheduled = false;
+
+  return {
+    /**
+     * Schedule items for async disposal.
+     * Items will be disposed in a microtask unless cancelled.
+     * Only objects are tracked - primitives are skipped.
+     */
+    scheduleDisposal(items: unknown[]): void {
+      if (items.length === 0) return;
+
+      // Add only objects to pending set (create new immutable set)
+      const newPending = new Set(pendingDisposedItems);
+      let hasNewItems = false;
+      for (const item of items) {
+        if (isObject(item)) {
+          newPending.add(item);
+          hasNewItems = true;
+        }
+      }
+
+      if (!hasNewItems) return;
+
+      pendingDisposedItems = newPending;
+
+      // Schedule disposal if not already scheduled
+      if (!disposalScheduled) {
+        disposalScheduled = true;
+        queueMicrotask(() => {
+          disposalScheduled = false;
+          const toDispose = pendingDisposedItems;
+          pendingDisposedItems = new Set();
+
+          for (const item of toDispose) {
+            tryDispose(item);
+          }
+        });
+      }
+    },
+
+    /**
+     * Cancel disposal for items that are being re-added.
+     * Call this when items are pushed/inserted back into the collection.
+     * Only objects are checked - primitives are skipped.
+     */
+    cancelDisposal(items: unknown[]): void {
+      if (items.length === 0 || pendingDisposedItems.size === 0) return;
+
+      // Check if any object items need cancellation
+      let hasChanges = false;
+      for (const item of items) {
+        if (isObject(item) && pendingDisposedItems.has(item)) {
+          hasChanges = true;
+          break;
+        }
+      }
+
+      if (!hasChanges) return;
+
+      // Remove items from pending set (create new immutable set)
+      const newPending = new Set(pendingDisposedItems);
+      for (const item of items) {
+        if (isObject(item)) {
+          newPending.delete(item);
+        }
+      }
+      pendingDisposedItems = newPending;
+    },
+
+    /**
+     * Check if an item is pending disposal.
+     */
+    isPending(item: unknown): boolean {
+      return isObject(item) && pendingDisposedItems.has(item);
+    },
+  };
 }
 
 // =============================================================================
@@ -235,9 +319,7 @@ export interface FocusList<T> {
   /** Filter items (read-only, doesn't mutate) */
   filter(predicate: (item: T, index: number) => boolean): T[];
   /** Create a pick selector for fine-grained reactivity */
-  pick(equality?: PickEquality<T[] | undefined | null>): T[] | undefined | null;
-  /** The underlying focus */
-  readonly focus: Focus<T[] | undefined | null>;
+  pick(equality?: PickEquality<T[] | undefined | null>): T[];
 }
 
 /**
@@ -263,18 +345,30 @@ export interface FocusList<T> {
  */
 export function list<T>(
   options?: ListOptions
-): (focus: Focus<T[] | undefined | null>) => FocusList<T> {
+): (
+  focus:
+    | Focus<T[] | undefined | null>
+    | Focus<T[] | undefined>
+    | Focus<T[] | null>
+    | Focus<T[]>
+) => FocusList<T> {
   const autoDispose = options?.autoDispose ?? false;
 
-  return (focus) => {
+  return (inputFocus) => {
+    // Cast to nullable type for internal use (implementation handles undefined/null)
+    const focus = inputFocus as Focus<T[] | undefined | null>;
     const [getter, setter] = focus;
+    const defaultValue: T[] = [];
+    const tracker = autoDispose ? createDisposalTracker() : null;
 
-    const getArray = (): T[] => getter() ?? [];
+    const getArray = (): T[] => getter() ?? defaultValue;
 
-    const dispose = (items: unknown[]): void => {
-      if (autoDispose && items.length > 0) {
-        disposeAsync(items);
-      }
+    const scheduleDisposal = (items: unknown[]): void => {
+      tracker?.scheduleDisposal(items);
+    };
+
+    const cancelDisposal = (items: unknown[]): void => {
+      tracker?.cancelDisposal(items);
     };
 
     const get = ((index?: number): T[] | T | undefined => {
@@ -304,6 +398,7 @@ export function list<T>(
       },
 
       push(...items: T[]): void {
+        cancelDisposal(items);
         setter((draft) => {
           const arr = draft ?? [];
           arr.push(...items);
@@ -312,6 +407,7 @@ export function list<T>(
       },
 
       unshift(...items: T[]): void {
+        cancelDisposal(items);
         setter((draft) => {
           const arr = draft ?? [];
           arr.unshift(...items);
@@ -329,7 +425,7 @@ export function list<T>(
           arr.pop();
           return arr;
         });
-        dispose([removed]);
+        scheduleDisposal([removed]);
         return removed;
       },
 
@@ -343,7 +439,7 @@ export function list<T>(
           arr.shift();
           return arr;
         });
-        dispose([removed]);
+        scheduleDisposal([removed]);
         return removed;
       },
 
@@ -373,7 +469,7 @@ export function list<T>(
           }
           return arr;
         });
-        dispose(removed);
+        scheduleDisposal(removed);
         return removed.length;
       },
 
@@ -387,7 +483,7 @@ export function list<T>(
           arr.splice(index, 1);
           return arr;
         });
-        dispose([removed]);
+        scheduleDisposal([removed]);
         return removed;
       },
 
@@ -416,11 +512,12 @@ export function list<T>(
           }
           return arr;
         });
-        dispose(removed);
+        scheduleDisposal(removed);
         return removed.length;
       },
 
       insert(index: number, ...items: T[]): void {
+        cancelDisposal(items);
         setter((draft) => {
           const arr = draft ?? [];
           arr.splice(index, 0, ...items);
@@ -438,6 +535,11 @@ export function list<T>(
         // If reducer/updater and item doesn't exist, do nothing
         if (isFunction && (index < 0 || index >= currentArray.length)) {
           return;
+        }
+
+        // Cancel disposal if setting a value that was pending disposal
+        if (!isFunction) {
+          cancelDisposal([itemOrReducerOrUpdater]);
         }
 
         // Capture old value from original array BEFORE mutation
@@ -466,21 +568,23 @@ export function list<T>(
         });
         // Only dispose if old value was replaced with a different value
         const newValue = getArray()[index];
-        if (old !== undefined && old !== newValue) dispose([old]);
+        if (old !== undefined && old !== newValue) scheduleDisposal([old]);
       },
 
       clear(): void {
         const old = getArray();
         setter([]);
-        dispose(old);
+        scheduleDisposal(old);
       },
 
       replace(items: T[]): void {
+        // Cancel disposal for items being re-added
+        cancelDisposal(items);
         const old = getArray();
         setter(items);
         // Dispose items that were removed (not in new array)
         const toDispose = old.filter((item) => !items.includes(item));
-        dispose(toDispose);
+        scheduleDisposal(toDispose);
       },
 
       find(predicate: (item: T, index: number) => boolean): T | undefined {
@@ -503,9 +607,9 @@ export function list<T>(
         return getArray().filter(predicate);
       },
 
-      pick: focus.pick,
-
-      focus,
+      pick(equality) {
+        return focus.pick(equality) ?? defaultValue;
+      },
     };
   };
 }
@@ -563,9 +667,7 @@ export interface FocusMap<T> {
   /** Create a pick selector for fine-grained reactivity */
   pick(
     equality?: PickEquality<Record<string, T> | undefined | null>
-  ): Record<string, T> | undefined | null;
-  /** The underlying focus */
-  readonly focus: Focus<Record<string, T> | undefined | null>;
+  ): Record<string, T>;
 }
 
 /**
@@ -592,18 +694,30 @@ export interface FocusMap<T> {
  */
 export function map<T>(
   options?: MapOptions
-): (focus: Focus<Record<string, T> | undefined | null>) => FocusMap<T> {
+): (
+  focus:
+    | Focus<Record<string, T> | undefined | null>
+    | Focus<Record<string, T> | undefined>
+    | Focus<Record<string, T> | null>
+    | Focus<Record<string, T>>
+) => FocusMap<T> {
   const autoDispose = options?.autoDispose ?? false;
+  const defaultValue: Record<string, T> = {};
 
-  return (focus) => {
+  return (inputFocus) => {
+    // Cast to nullable type for internal use (implementation handles undefined/null)
+    const focus = inputFocus as Focus<Record<string, T> | undefined | null>;
     const [getter, setter] = focus;
+    const tracker = autoDispose ? createDisposalTracker() : null;
 
-    const getRecord = (): Record<string, T> => getter() ?? {};
+    const getRecord = (): Record<string, T> => getter() ?? defaultValue;
 
-    const dispose = (items: unknown[]): void => {
-      if (autoDispose && items.length > 0) {
-        disposeAsync(items);
-      }
+    const scheduleDisposal = (items: unknown[]): void => {
+      tracker?.scheduleDisposal(items);
+    };
+
+    const cancelDisposal = (items: unknown[]): void => {
+      tracker?.cancelDisposal(items);
     };
 
     return {
@@ -635,6 +749,11 @@ export function map<T>(
         // If reducer/updater and key doesn't exist, do nothing
         if (isFunction && !(key in currentRecord)) return;
 
+        // Cancel disposal if setting a value that was pending disposal
+        if (!isFunction) {
+          cancelDisposal([valueOrReducerOrUpdater]);
+        }
+
         // Capture old value from original record BEFORE mutation
         const old: T | undefined = currentRecord[key];
 
@@ -656,7 +775,7 @@ export function map<T>(
         });
         // Only dispose if old value was replaced with a different value
         const newValue = getRecord()[key];
-        if (old !== undefined && old !== newValue) dispose([old]);
+        if (old !== undefined && old !== newValue) scheduleDisposal([old]);
       },
 
       delete(...keys: string[]): number {
@@ -681,7 +800,7 @@ export function map<T>(
           }
           return rec;
         });
-        dispose(removed);
+        scheduleDisposal(removed);
         return removed.length;
       },
 
@@ -707,17 +826,19 @@ export function map<T>(
           }
           return rec;
         });
-        dispose(removed);
+        scheduleDisposal(removed);
         return removed.length;
       },
 
       clear(): void {
         const old = Object.values(getRecord());
         setter({});
-        dispose(old);
+        scheduleDisposal(old);
       },
 
       replace(record: Record<string, T>): void {
+        // Cancel disposal for values being re-added
+        cancelDisposal(Object.values(record));
         const old = getRecord();
         setter(record);
         // Dispose values that were removed (not in new record)
@@ -725,7 +846,7 @@ export function map<T>(
         const toDispose = Object.entries(old)
           .filter(([key]) => !newKeys.has(key))
           .map(([, value]) => value);
-        dispose(toDispose);
+        scheduleDisposal(toDispose);
       },
 
       keys(): string[] {
@@ -740,9 +861,9 @@ export function map<T>(
         return Object.entries(getRecord());
       },
 
-      pick: focus.pick,
-
-      focus,
+      pick(equality) {
+        return focus.pick(equality) ?? defaultValue;
+      },
     };
   };
 }

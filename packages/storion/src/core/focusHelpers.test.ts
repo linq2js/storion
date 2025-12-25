@@ -193,6 +193,115 @@ describe("list()", () => {
     expect(dispose1).toHaveBeenCalled();
     expect(dispose2).toHaveBeenCalled();
   });
+
+  describe("disposal cancellation", () => {
+    it("should cancel disposal when item is re-added via push before microtask", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+
+      const items = createListStore([item], { autoDispose: true });
+
+      // Remove and re-add in same synchronous block
+      items.remove(item);
+      items.push(item);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+      expect(items.get()).toEqual([item]);
+    });
+
+    it("should cancel disposal when item is re-added via unshift before microtask", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+
+      const items = createListStore([item], { autoDispose: true });
+
+      items.remove(item);
+      items.unshift(item);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+      expect(items.get()).toEqual([item]);
+    });
+
+    it("should cancel disposal when item is re-added via insert before microtask", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+
+      const items = createListStore([item], { autoDispose: true });
+
+      items.remove(item);
+      items.insert(0, item);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+      expect(items.get()).toEqual([item]);
+    });
+
+    it("should cancel disposal when item is re-added via set before microtask", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+      const placeholder = { id: 2, dispose: vi.fn() };
+
+      const items = createListStore([item, placeholder], { autoDispose: true });
+
+      items.remove(item);
+      items.set(0, item); // Re-add by setting at index 0
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+    });
+
+    it("should cancel disposal when item is re-added via replace before microtask", async () => {
+      const dispose1 = vi.fn();
+      const dispose2 = vi.fn();
+      const item1 = { id: 1, dispose: dispose1 };
+      const item2 = { id: 2, dispose: dispose2 };
+
+      const items = createListStore([item1, item2], { autoDispose: true });
+
+      items.clear(); // Schedule disposal for both
+      items.replace([item1]); // Re-add item1
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose1).not.toHaveBeenCalled(); // item1 was re-added
+      expect(dispose2).toHaveBeenCalled(); // item2 was not re-added
+    });
+
+    it("should still dispose items that were not re-added", async () => {
+      const dispose1 = vi.fn();
+      const dispose2 = vi.fn();
+      const item1 = { id: 1, dispose: dispose1 };
+      const item2 = { id: 2, dispose: dispose2 };
+
+      const items = createListStore([item1, item2], { autoDispose: true });
+
+      // Remove both, re-add only item1
+      items.remove(item1, item2);
+      items.push(item1);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose1).not.toHaveBeenCalled();
+      expect(dispose2).toHaveBeenCalled();
+    });
+
+    it("should handle multiple remove/re-add cycles correctly", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+
+      const items = createListStore([item], { autoDispose: true });
+
+      // Multiple cycles in same tick
+      items.remove(item);
+      items.push(item);
+      items.remove(item);
+      items.push(item);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+      expect(items.get()).toEqual([item]);
+    });
+  });
 });
 
 // =============================================================================
@@ -307,6 +416,88 @@ describe("map()", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(dispose1).toHaveBeenCalled();
     expect(dispose2).toHaveBeenCalled();
+  });
+
+  describe("disposal cancellation", () => {
+    it("should cancel disposal when value is re-added via set before microtask", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+
+      const cache = createMapStore({ key: item }, { autoDispose: true });
+
+      // Delete and re-add in same synchronous block
+      cache.delete("key");
+      cache.set("key", item);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+      expect(cache.at("key")).toBe(item);
+    });
+
+    it("should cancel disposal when value is re-added under different key", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+
+      const cache = createMapStore({ oldKey: item }, { autoDispose: true });
+
+      // Delete from old key and add to new key
+      cache.delete("oldKey");
+      cache.set("newKey", item);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+      expect(cache.at("newKey")).toBe(item);
+    });
+
+    it("should cancel disposal when value is re-added via replace before microtask", async () => {
+      const dispose1 = vi.fn();
+      const dispose2 = vi.fn();
+      const item1 = { id: 1, dispose: dispose1 };
+      const item2 = { id: 2, dispose: dispose2 };
+
+      const cache = createMapStore({ a: item1, b: item2 }, { autoDispose: true });
+
+      cache.clear(); // Schedule disposal for both
+      cache.replace({ a: item1 }); // Re-add item1
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose1).not.toHaveBeenCalled(); // item1 was re-added
+      expect(dispose2).toHaveBeenCalled(); // item2 was not re-added
+    });
+
+    it("should still dispose values that were not re-added", async () => {
+      const dispose1 = vi.fn();
+      const dispose2 = vi.fn();
+      const item1 = { id: 1, dispose: dispose1 };
+      const item2 = { id: 2, dispose: dispose2 };
+
+      const cache = createMapStore({ a: item1, b: item2 }, { autoDispose: true });
+
+      // Delete both, re-add only item1
+      cache.delete("a", "b");
+      cache.set("a", item1);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose1).not.toHaveBeenCalled();
+      expect(dispose2).toHaveBeenCalled();
+    });
+
+    it("should handle multiple delete/re-add cycles correctly", async () => {
+      const dispose = vi.fn();
+      const item = { id: 1, dispose };
+
+      const cache = createMapStore({ key: item }, { autoDispose: true });
+
+      // Multiple cycles in same tick
+      cache.delete("key");
+      cache.set("key", item);
+      cache.delete("key");
+      cache.set("key", item);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(dispose).not.toHaveBeenCalled();
+      expect(cache.at("key")).toBe(item);
+    });
   });
 });
 
