@@ -5,7 +5,7 @@
 <h1 align="center">Storion</h1>
 
 <p align="center">
-  <strong>Reactive state management with automatic dependency tracking</strong>
+  <strong>State management that gets out of your way</strong>
 </p>
 
 <p align="center">
@@ -24,115 +24,108 @@
 
 ---
 
-## Why Storion?
-
-**Simple at first. Powerful as you grow.**
-
-Start with basic stores and direct mutations. As your app grows, layer in async state, effects, dependency injection, and middleware — all without rewriting existing code.
-
-## Features
-
-|                      |                                          |
-| -------------------- | ---------------------------------------- |
-| 🎯 **Auto-tracking** | Dependencies tracked when you read state |
-| ⚡ **Fine-grained**  | Only re-render what changed              |
-| 🔒 **Type-safe**     | Full TypeScript with excellent inference |
-| 📦 **Tiny**          | ~4KB minified + gzipped                  |
-| ⏳ **Async**         | First-class loading states with Suspense |
-| 🛠️ **DevTools**      | Built-in debugging panel                 |
-
-## Installation
-
-```bash
-npm install storion
-```
-
-## Quick Start
-
-**Read state → Storion tracks it. State changes → Only affected components re-render.**
+## The Simplest Counter You'll Ever Write
 
 ```tsx
 import { create } from "storion/react";
 
-// Create store and hook in one call - no Provider needed!
-const [counter, useCounter] = create({
+const [_, useCounter] = create({
   state: { count: 0 },
-  setup({ state }) {
-    return {
-      inc: () => state.count++,
-      dec: () => state.count--,
-    };
-  },
+  setup: ({ state }) => ({
+    inc: () => state.count++,
+    dec: () => state.count--,
+  }),
 });
 
 function Counter() {
-  const { count, inc, dec } = useCounter((state, actions) => ({
-    count: state.count,
-    ...actions,
-  }));
-
-  return (
-    <div>
-      <button onClick={dec}>-</button>
-      <span>{count}</span>
-      <button onClick={inc}>+</button>
-    </div>
-  );
+  const { count, inc, dec } = useCounter((s, a) => ({ count: s.count, ...a }));
+  return <button onClick={inc}>{count}</button>;
 }
 ```
 
-<details>
-<summary>Multi-store apps with StoreProvider</summary>
+**That's it.** No Provider. No boilerplate. No ceremony.
+
+---
+
+## Why Storion?
+
+| Pain Point                | Storion's Answer                                |
+| ------------------------- | ----------------------------------------------- |
+| 🤯 Too much boilerplate   | One `create()` call. Done.                      |
+| 🐌 Unnecessary re-renders | Auto-tracks what you read, updates only that    |
+| 😵 Complex async handling | Built-in loading states, cancellation, Suspense |
+| 🔧 Provider hell          | Optional. Use it when you need it               |
+| 📦 Bundle anxiety         | ~4KB gzipped. Seriously.                        |
+
+---
+
+## Features at a Glance
+
+```
+✦ Auto-tracking     Read state → automatically subscribed
+✦ Fine-grained      Change count? Only Counter re-renders
+✦ Type-safe         Full inference, zero manual types
+✦ Async-first       Loading, error, stale states built-in
+✦ DevTools          Time-travel debugging included
+✦ Scalable          From counter to enterprise, same API
+```
+
+---
+
+## Growing With You
+
+**Start simple:**
 
 ```tsx
-import { store, useStore, StoreProvider } from "storion/react";
-
-const counterStore = store({
-  name: "counter",
-  state: { count: 0 },
-  setup({ state }) {
-    return {
-      inc: () => state.count++,
-      dec: () => state.count--,
-    };
-  },
+const [_, useAuth] = create({
+  state: { user: null },
+  setup: ({ state }) => ({
+    login: (user) => {
+      state.user = user;
+    },
+    logout: () => {
+      state.user = null;
+    },
+  }),
 });
-
-function Counter() {
-  const { count, inc, dec } = useStore(({ get }) => {
-    const [state, actions] = get(counterStore);
-    return { count: state.count, ...actions };
-  });
-
-  return (
-    <div>
-      <button onClick={dec}>-</button>
-      <span>{count}</span>
-      <button onClick={inc}>+</button>
-    </div>
-  );
-}
-
-function App() {
-  return (
-    <StoreProvider>
-      <Counter />
-    </StoreProvider>
-  );
-}
 ```
 
-</details>
+**Add async when ready:**
+
+```tsx
+const [_, useUsers] = create({
+  state: { users: async.stale([]) },
+  setup: ({ focus }) => {
+    const query = async(focus("users"), (ctx) =>
+      fetch("/api/users", { signal: ctx.signal }).then((r) => r.json())
+    );
+    return { fetch: query.dispatch, refresh: query.refresh };
+  },
+});
+```
+
+**Scale to multi-store apps:**
+
+```tsx
+// When you need shared containers, dependency injection, middleware...
+<StoreProvider>
+  <App />
+</StoreProvider>
+```
+
+---
 
 ## Documentation
 
-📚 **[Full Documentation](https://linq2js.github.io/storion/)** — Guides, examples, and API reference
+📚 **[Full Documentation](https://linq2js.github.io/storion/)** — Everything you need
 
-- [Getting Started](https://linq2js.github.io/storion/guide/getting-started.html)
-- [Core Concepts](https://linq2js.github.io/storion/guide/core-concepts.html)
-- [Async State](https://linq2js.github.io/storion/guide/async.html)
-- [API Reference](https://linq2js.github.io/storion/api/store.html)
-- [Live Demos](https://linq2js.github.io/storion/demos.html)
+- [Getting Started](https://linq2js.github.io/storion/guide/getting-started.html) — 5 min setup
+- [Core Concepts](https://linq2js.github.io/storion/guide/core-concepts.html) — How it works
+- [Async State](https://linq2js.github.io/storion/guide/async.html) — Loading states made easy
+- [API Reference](https://linq2js.github.io/storion/api/store.html) — Every function documented
+- [Live Demos](https://linq2js.github.io/storion/demos.html) — See it in action
+
+---
 
 ## Packages
 
@@ -148,17 +141,10 @@ function App() {
 ## Development
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Build core library
-pnpm --filter storion build
-
-# Run tests
-pnpm --filter storion test
-
-# Start docs dev server
-pnpm --filter storion-docs dev
+pnpm install              # Install dependencies
+pnpm --filter storion build   # Build core library
+pnpm --filter storion test    # Run tests
+pnpm --filter storion-docs dev # Start docs dev server
 ```
 
 ## License
@@ -168,5 +154,5 @@ MIT © [linq2js](https://github.com/linq2js)
 ---
 
 <p align="center">
-  <sub>Built with ❤️ for the React community</sub>
+  <sub>Built with ❤️ for developers who value simplicity</sub>
 </p>
