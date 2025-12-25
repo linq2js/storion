@@ -122,17 +122,6 @@ interface StableRefs<TProps extends object> {
 }
 
 // =============================================================================
-// Utility functions
-// =============================================================================
-
-/**
- * Check if value is a function.
- */
-function isFunction(value: unknown): value is Function {
-  return typeof value === "function";
-}
-
-// =============================================================================
 // Main stable() function
 // =============================================================================
 
@@ -177,7 +166,7 @@ export function stable<TProps extends object, TRef = unknown>(
     for (const key of Object.keys(inputProps) as Array<keyof TProps>) {
       const value = inputProps[key];
 
-      if (isFunction(value)) {
+      if (typeof value === "function") {
         // For functions: use stable wrapper pattern (like useStore)
         // The wrapper reference never changes, but always calls latest function
         const keyStr = key as string;
