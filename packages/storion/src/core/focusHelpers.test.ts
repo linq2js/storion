@@ -44,9 +44,9 @@ describe("list()", () => {
 
   it("should get item at index", () => {
     const items = createListStore(["a", "b", "c"]);
-    expect(items.get(0)).toBe("a");
-    expect(items.get(1)).toBe("b");
-    expect(items.get(10)).toBeUndefined();
+    expect(items.at(0)).toBe("a");
+    expect(items.at(1)).toBe("b");
+    expect(items.at(10)).toBeUndefined();
   });
 
   it("should return empty array when array is undefined", () => {
@@ -659,7 +659,7 @@ describe("reducers with list/map", () => {
     c.get(testStore);
 
     users!.set(0, merge({ age: 26 }));
-    expect(users!.get(0)).toEqual({ name: "Alice", age: 26 });
+    expect(users!.at(0)).toEqual({ name: "Alice", age: 26 });
   });
 
   it("should use clamp with list.set", () => {

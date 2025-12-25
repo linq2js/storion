@@ -51,14 +51,19 @@ connections.clear();            // All items disposed
 
 ### get()
 
-Get the current array or item at index.
+Get the entire array.
 
 ```ts
-// Get entire array
 const allItems = items.get();
+```
 
-// Get item at index
-const firstItem = items.get(0);
+### at(index)
+
+Get item at index.
+
+```ts
+const firstItem = items.at(0);
+const lastItem = items.at(items.length() - 1);
 ```
 
 ### length()

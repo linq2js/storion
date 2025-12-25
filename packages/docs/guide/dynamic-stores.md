@@ -78,7 +78,7 @@ const taskStore = store({
       
       // Read operations
       getTasks: () => tasks.get(),
-      getTask: (index: number) => tasks.get(index),
+      getTask: (index: number) => tasks.at(index),
       count: () => tasks.length(),
     };
   },
@@ -92,7 +92,7 @@ The `list()` helper provides array-like methods:
 | Method                      | Description                          |
 | --------------------------- | ------------------------------------ |
 | `get()`                     | Get entire array                     |
-| `get(index)`                | Get item at index                    |
+| `at(index)`                 | Get item at index                    |
 | `length()`                  | Get array length                     |
 | `isEmpty()`                 | Check if empty                       |
 | `first()` / `last()`        | Get first/last item                  |

@@ -263,13 +263,10 @@ export interface ListOptions {
  * List API returned by the list() helper.
  */
 export interface FocusList<T> {
-  /** Get the current array or item at index */
-  get: {
-    /** Get the current array (returns defaultValue if undefined/null) */
-    (): T[];
-    /** Get item at index */
-    (index: number): T | undefined;
-  };
+  /** Get the current array (returns empty array if undefined/null) */
+  get(): T[];
+  /** Get item at index */
+  at(index: number): T | undefined;
   /** Get the length of the array */
   length(): number;
   /** Check if array is empty */
@@ -371,14 +368,14 @@ export function list<T>(
       tracker?.cancelDisposal(items);
     };
 
-    const get = ((index?: number): T[] | T | undefined => {
-      const arr = getArray();
-      if (index === undefined) return arr;
-      return arr[index];
-    }) as FocusList<T>["get"];
-
     return {
-      get,
+      get(): T[] {
+        return getArray();
+      },
+
+      at(index: number): T | undefined {
+        return getArray()[index];
+      },
 
       length(): number {
         return getArray().length;
