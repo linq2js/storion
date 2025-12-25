@@ -2,24 +2,106 @@
 
 As your application grows, you'll find patterns that repeat across stores. Storion provides several approaches to share and reuse logic effectively.
 
-**Time to read:** ~12 minutes
+## The Problem
 
----
+When building real applications, you'll encounter these situations:
 
-## Overview
+### 1. Duplicated Store Structure
 
-| Approach | Use Case | Shared Context |
-|----------|----------|----------------|
-| **Store Factories** | Same structure, different instances | No (separate stores) |
-| **Mixins** | Reusable actions/state chunks | Yes (same store) |
-| **Store Pools** | Dynamic store creation by key | No (separate stores) |
-| **Composition** | Cross-store coordination | Via `get()` |
+You need multiple stores with the same shape but for different entity types:
 
----
+```ts
+// ❌ PROBLEM: Copy-pasting the same structure
+const userStore = store({
+  name: "users",
+  state: { items: [] as User[], loading: false, selectedId: null },
+  setup({ state }) {
+    return {
+      setItems: (items: User[]) => {
+        state.items = items;
+      },
+      select: (id: string) => {
+        state.selectedId = id;
+      },
+      // ... same logic repeated
+    };
+  },
+});
+
+const productStore = store({
+  name: "products",
+  state: { items: [] as Product[], loading: false, selectedId: null },
+  setup({ state }) {
+    return {
+      setItems: (items: Product[]) => {
+        state.items = items;
+      },
+      select: (id: string) => {
+        state.selectedId = id;
+      },
+      // ... same logic repeated again
+    };
+  },
+});
+
+// And again for orders, categories, comments...
+```
+
+### 2. Repeated Cross-Cutting Concerns
+
+Every list store needs pagination, selection, or filtering logic:
+
+```ts
+// ❌ PROBLEM: Same pagination logic in every list store
+const userListStore = store({
+  state: { items: [] as User[], page: 0, pageSize: 20, total: 0 },
+  setup({ state }) {
+    return {
+      nextPage: () => {
+        if ((state.page + 1) * state.pageSize < state.total) state.page++;
+      },
+      prevPage: () => {
+        if (state.page > 0) state.page--;
+      },
+      setPage: (page: number) => {
+        state.page = page;
+      },
+    };
+  },
+});
+
+const productListStore = store({
+  state: { items: [] as Product[], page: 0, pageSize: 20, total: 0 },
+  setup({ state }) {
+    return {
+      nextPage: () => {
+        // Same logic copy-pasted
+        if ((state.page + 1) * state.pageSize < state.total) state.page++;
+      },
+      prevPage: () => {
+        if (state.page > 0) state.page--;
+      },
+      setPage: (page: number) => {
+        state.page = page;
+      },
+    };
+  },
+});
+
+// Same for selection, filtering, sorting...
+```
+
+## Solutions Overview
+
+| Problem              | Solution            | Description                      |
+| -------------------- | ------------------- | -------------------------------- |
+| Duplicated structure | **Store Factories** | Same shape, different types      |
+| Repeated concerns    | **Mixins**          | Pagination, selection, filtering |
+| Cross-store data     | **Composition**     | Access other stores via `get()`  |
 
 ## Store Factories
 
-> **Analogy:** Like a cookie cutter — same shape, different cookies.
+> **Solves:** Duplicated store structure across entity types.
 
 When multiple stores share the same structure but manage different data, create a factory function:
 
@@ -89,11 +171,9 @@ function UserList() {
 - Feature stores with identical structure
 - Stores that differ only in their data type
 
----
-
 ## Mixins
 
-> **Analogy:** Like ingredients you can add to any recipe.
+> **Solves:** Repeated cross-cutting concerns (pagination, selection, filtering).
 
 Mixins let you inject reusable state and actions into any store. They share the store's context.
 
@@ -154,8 +234,8 @@ const userStore = store({
   },
   setup(ctx) {
     const { state } = ctx;
-    // Apply mixin - shares same state context
-    const loadingActions = withLoadingState(ctx);
+    // Apply mixin via ctx.mixin() - shares same state context
+    const loadingActions = ctx.mixin(withLoadingState);
 
     return {
       ...loadingActions,
@@ -195,9 +275,9 @@ function withPagination<TState extends object>(
   };
 }
 
-// Selection mixin
-function withSelection<TState extends object, T extends { id: string }>(
-  ctx: SetupContext<TState & { items: T[]; selectedIds: Set<string> }>
+// Selection mixin - generic T is the item type
+function withSelection<T extends { id: string }>(
+  ctx: SetupContext<{ items: T[]; selectedIds: Set<string> }>
 ) {
   const { state, update } = ctx;
   return {
@@ -253,9 +333,9 @@ const productListStore = store({
   },
   setup(ctx) {
     const { state } = ctx;
-    const loading = withLoadingState(ctx);
-    const pagination = withPagination(ctx);
-    const selection = withSelection<typeof ctx.state, Product>(ctx);
+    const loading = ctx.mixin(withLoadingState);
+    const pagination = ctx.mixin(withPagination);
+    const selection = ctx.mixin(withSelection<Product>);
 
     return {
       ...loading,
@@ -285,155 +365,9 @@ const productListStore = store({
 - Shared behavior that needs access to store context
 - Building blocks that combine to form complete stores
 
----
-
-## Store Pools
-
-> **Analogy:** Like a vending machine — select a key, get a store.
-
-Use [`pool()`](/api/pool) for dynamic store creation when you don't know all stores at compile time.
-
-### The Pattern
-
-```ts
-import { store, pool } from "storion/react";
-
-// Define a store factory
-const createChatRoomStore = (roomId: string) =>
-  store({
-    name: `chatRoom:${roomId}`,
-    state: {
-      messages: [] as Message[],
-      participants: [] as User[],
-      typing: [] as string[],
-    },
-    setup({ state }) {
-      return {
-        addMessage: (msg: Message) => {
-          state.messages = [...state.messages, msg];
-        },
-        setTyping: (userId: string, isTyping: boolean) => {
-          if (isTyping && !state.typing.includes(userId)) {
-            state.typing = [...state.typing, userId];
-          } else if (!isTyping) {
-            state.typing = state.typing.filter((id) => id !== userId);
-          }
-        },
-      };
-    },
-  });
-
-// Create a pool of chat room stores
-const chatRoomPool = pool(createChatRoomStore);
-```
-
-### Using Pool Stores in Components
-
-```tsx
-function ChatRoom({ roomId }: { roomId: string }) {
-  const { messages, addMessage } = useStore(({ get }) => {
-    // Get or create the store for this room
-    const roomStore = chatRoomPool.get(roomId);
-    const [state, actions] = get(roomStore);
-
-    return {
-      messages: state.messages,
-      addMessage: actions.addMessage,
-    };
-  });
-
-  return (
-    <div>
-      <MessageList messages={messages} />
-      <MessageInput onSend={addMessage} />
-    </div>
-  );
-}
-```
-
-### Pool with Complex Keys
-
-```ts
-import { pool } from "storion/react";
-
-// Store per user-channel combination
-type ChannelKey = { userId: string; channelId: string };
-
-const channelStorePool = pool(
-  (key: ChannelKey) =>
-    store({
-      name: `channel:${key.userId}:${key.channelId}`,
-      state: { unreadCount: 0, lastRead: null as Date | null },
-      setup({ state }) {
-        return {
-          markRead: () => {
-            state.unreadCount = 0;
-            state.lastRead = new Date();
-          },
-        };
-      },
-    }),
-  {
-    // Use keyOf for O(1) lookup with object keys
-    keyOf: (key) => `${key.userId}:${key.channelId}`,
-  }
-);
-
-// Usage
-function ChannelBadge({ userId, channelId }: ChannelKey) {
-  const { unreadCount } = useStore(({ get }) => {
-    const channelStore = channelStorePool.get({ userId, channelId });
-    const [state] = get(channelStore);
-    return { unreadCount: state.unreadCount };
-  });
-
-  return unreadCount > 0 ? <Badge count={unreadCount} /> : null;
-}
-```
-
-### Pool with Auto-Dispose
-
-```ts
-const formStorePool = pool(
-  (formId: string) =>
-    store({
-      name: `form:${formId}`,
-      state: { values: {}, errors: {}, dirty: false },
-      setup({ state }) {
-        return {
-          setValue: (field: string, value: unknown) => {
-            state.values[field] = value;
-            state.dirty = true;
-          },
-          dispose: () => {
-            // Cleanup when form is removed from pool
-            console.log(`Form ${formId} disposed`);
-          },
-        };
-      },
-    }),
-  {
-    // Auto-call dispose() when items are removed
-    autoDispose: true,
-  }
-);
-
-// Later: cleanup unused forms
-formStorePool.delete("checkout-form"); // Calls store's dispose()
-```
-
-### When to Use Pools
-
-- Entity-specific stores (chat rooms, user profiles, documents)
-- Dynamic forms with independent state
-- Multi-tenant scenarios
-- Any case where store identity is determined at runtime
-
----
-
 ## Composition via get()
 
-> **Analogy:** Like departments in a company — independent but coordinating.
+> **Solves:** Cross-store coordination when stores need to access each other.
 
 Stores can access other stores via `get()` in setup for cross-store coordination.
 
@@ -550,18 +484,13 @@ const globalStore = store({
 });
 ```
 
----
-
 ## Comparison
 
-| Approach | Shared State | Dynamic | Use Case |
-|----------|-------------|---------|----------|
-| **Factory** | No | Compile-time | Same structure, different types |
-| **Mixin** | Yes | No | Reusable behaviors |
-| **Pool** | No | Runtime | Key-based store instances |
-| **Composition** | Read-only | No | Cross-store coordination |
-
----
+| Approach        | Shared State | Use Case                        |
+| --------------- | ------------ | ------------------------------- |
+| **Factory**     | No           | Same structure, different types |
+| **Mixin**       | Yes          | Reusable behaviors              |
+| **Composition** | Read-only    | Cross-store coordination        |
 
 ## Best Practices
 
@@ -574,17 +503,7 @@ const loading = withLoadingState(ctx);
 // ❌ Avoid: Duplicating loading logic in every store
 ```
 
-### 2. Use Pools for Runtime-Determined Stores
-
-```ts
-// ✅ Good: Pool when store identity is dynamic
-const chatStore = chatRoomPool.get(roomId);
-
-// ❌ Avoid: Creating stores inline in components
-const [store] = useState(() => store({ ... }));
-```
-
-### 3. Keep Store Dependencies Shallow
+### 2. Keep Store Dependencies Shallow
 
 ```ts
 // ✅ Good: Direct dependencies
@@ -600,7 +519,7 @@ setup({ get }) {
 }
 ```
 
-### 4. Document Mixin Requirements
+### 3. Document Mixin Requirements
 
 ```ts
 /**
@@ -608,21 +527,17 @@ setup({ get }) {
  * @requires state.loading - boolean
  * @requires state.error - string | null
  */
-function withLoadingState<TState extends { loading: boolean; error: string | null }>(
-  ctx: SetupContext<TState>
-) {
+function withLoadingState<
+  TState extends { loading: boolean; error: string | null }
+>(ctx: SetupContext<TState>) {
   // ...
 }
 ```
-
----
 
 ## Summary
 
 - **Store Factories**: Create multiple stores with the same structure
 - **Mixins**: Inject reusable actions into any store (same context)
-- **Store Pools**: Dynamic store creation by key (separate contexts)
 - **Composition**: Cross-store access via `get()` in setup
 
-Choose based on whether you need shared context (mixin) or separate instances (factory/pool), and whether store identity is known at compile-time (factory) or runtime (pool).
-
+Choose based on whether you need shared context (mixin) or separate instances (factory).

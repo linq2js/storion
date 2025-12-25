@@ -94,6 +94,8 @@ export function useStoreWithContainer<T extends object>(
 
       id: refs.id,
 
+      container,
+
       // Implementation handles both StoreSpec and Factory overloads
       get(specOrFactory: any): any {
         // Handle plain factory functions

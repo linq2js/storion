@@ -466,10 +466,13 @@ describe("async", () => {
       const [focus, { getState }] = createMockFocus(async.fresh<string>());
       let callCount = 0;
 
-      const { dispatch, refresh } = async.action(focus, async (_ctx, name: string) => {
-        callCount++;
-        return `${name}-${callCount}`;
-      });
+      const { dispatch, refresh } = async.action(
+        focus,
+        async (_ctx, name: string) => {
+          callCount++;
+          return `${name}-${callCount}`;
+        }
+      );
 
       await dispatch("test");
       expect(getState().data).toBe("test-1");
@@ -1312,16 +1315,17 @@ describe("async", () => {
       const mixin = async.mixin(fetchData);
 
       // Mock selector context
+      const testContainer = container();
       const mockContext = {
         get: vi.fn() as any,
         scoped: vi.fn((spec) => {
-          const app = container();
-          const instance = app.get(spec);
+          const instance = testContainer.get(spec);
           return storeTuple(instance);
         }) as any,
         mixin: vi.fn() as any,
         once: vi.fn() as any,
         id: "test-id",
+        container: testContainer,
       } as SelectorContext;
 
       // Use mixin
@@ -2032,6 +2036,7 @@ describe("asyncState()", () => {
           const mockContext: SelectorContext = {
             [Symbol.for("storion")]: "selector.context",
             id: {},
+            container: testContainer,
             get: (spec: any) => testContainer.get(spec),
             mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
             once: () => {},
@@ -2078,6 +2083,7 @@ describe("asyncState()", () => {
           const mockContext: SelectorContext = {
             [Symbol.for("storion")]: "selector.context",
             id: {},
+            container: testContainer,
             get: (spec: any) => testContainer.get(spec),
             mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
             once: () => {},
@@ -2125,6 +2131,7 @@ describe("asyncState()", () => {
           const mockContext: SelectorContext = {
             [Symbol.for("storion")]: "selector.context",
             id: {},
+            container: testContainer,
             get: (spec: any) => testContainer.get(spec),
             mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
             once: () => {},
@@ -2163,6 +2170,7 @@ describe("asyncState()", () => {
           const mockContext: SelectorContext = {
             [Symbol.for("storion")]: "selector.context",
             id: {},
+            container: testContainer,
             get: (spec: any) => testContainer.get(spec),
             mixin: (m: any, ...args: any[]) => m(mockContext, ...args),
             once: () => {},

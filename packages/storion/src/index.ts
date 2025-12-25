@@ -64,6 +64,28 @@ export { createResolver as resolver } from "./core/createResolver";
 // Fine-grained reactivity
 export { pick } from "./core/pick";
 
+// Focus helpers
+export {
+  list,
+  map,
+  // Reducer helpers
+  toggle,
+  increment,
+  decrement,
+  multiply,
+  divide,
+  clamp,
+  append,
+  prepend,
+  merge,
+  reset,
+  // Types
+  type ListOptions,
+  type MapOptions,
+  type FocusList,
+  type FocusMap,
+} from "./core/focusHelpers";
+
 export {
   effect,
   type EffectFn,

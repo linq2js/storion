@@ -714,7 +714,11 @@ export function createStoreInstance<
   // After this, any write creates a new currentState object
   initialState = currentState;
 
-  Object.assign(instance, { deps: Array.from(deps) });
+  Object.assign(instance, {
+    deps: Array.from(deps),
+    toJSON: () => currentState,
+  });
+
   deps.clear();
 
   // ==========================================================================

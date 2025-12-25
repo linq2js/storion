@@ -275,6 +275,29 @@ export type Focus<TValue> = [
   reset(): void;
 
   /**
+   * Transform this focus using a helper function.
+   * Useful for adding convenient methods for arrays, objects, etc.
+   *
+   * @param helper - Function that receives this focus and returns enhanced API
+   * @returns The result of the helper function
+   *
+   * @example
+   * ```ts
+   * // With list() helper for arrays
+   * const items = focus('items').as(list());
+   * items.push(newItem);
+   * items.remove(item);
+   * items.clear();
+   *
+   * // With record() helper for objects
+   * const cache = focus('cache').as(record());
+   * cache.set('key', value);
+   * cache.delete('key');
+   * ```
+   */
+  as<TResult>(helper: (focus: Focus<TValue>) => TResult): TResult;
+
+  /**
    * Create a pick selector from this focus for fine-grained reactivity.
    * Equivalent to `pick(() => focusGetter())`.
    *
@@ -1435,6 +1458,18 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
    * });
    */
   readonly id: string;
+
+  /**
+   * The store container used by this selector context.
+   * Useful for accessing the container directly when needed.
+   *
+   * @example
+   * const { container } = useStore(({ container }) => {
+   *   // Access the container for advanced use cases
+   *   return { container };
+   * });
+   */
+  readonly container: StoreContainer;
 
   /**
    * Run a callback once when the component mounts.

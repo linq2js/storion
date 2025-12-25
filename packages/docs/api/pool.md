@@ -1,6 +1,25 @@
 # pool()
 
-A lazy-instantiation Map with factory function. Items are created on-demand via `get()`.
+A lazy-instantiation cache with factory function. Items are created on first access and reused thereafter.
+
+## When to Use
+
+Use `pool` when you need **keyed singletons** — the same key always returns the same instance:
+
+- **Services by endpoint**: API clients, database connections
+- **Resource management**: WebSocket connections, workers
+- **Cached objects**: Expensive computations, parsed configurations
+- **Keyed singletons**: Loggers per module, validators per schema
+
+```ts
+// ✅ Good: Same key = same instance
+const loggerPool = pool((module: string) => createLogger(module));
+loggerPool("auth"); // Creates logger
+loggerPool("auth"); // Returns same logger
+
+// ❌ Not for: Per-call instances (just use a function)
+const createForm = (id: string) => new Form(id);
+```
 
 ## Signature
 
@@ -68,67 +87,84 @@ formPool.delete("checkout"); // Calls form.dispose()
 
 ## Return Value
 
-Returns a `Pool<TKey, TValue>` with these methods:
+Returns a `Pool<TKey, TValue>` that is **callable** and has these methods:
 
 | Method | Description |
 |--------|-------------|
+| `(key)` | **Callable** - same as `get(key)` |
 | `get(key)` | Get or create item by key |
 | `has(key)` | Check if key exists (doesn't create) |
 | `set(key, value)` | Explicitly set an item |
 | `delete(key)` | Remove item (calls dispose if enabled) |
 | `clear()` | Remove all items (calls dispose if enabled) |
 | `tap(key, fn)` | Call fn if key exists (doesn't create) |
-| `size` | Number of items |
+| `size()` | Number of items |
 | `keys()` | Iterator over keys |
 | `values()` | Iterator over values |
 | `entries()` | Iterator over [key, value] pairs |
 
 ## Examples
 
-### Basic Usage
+### API Clients by Endpoint
 
 ```ts
 import { pool } from "storion";
 
-// Simple string keys
-const emitters = pool((key: string) => emitter<void>());
+// One client per base URL
+const apiClientPool = pool((baseUrl: string) => ({
+  baseUrl,
+  fetch: async (path: string, options?: RequestInit) => {
+    const res = await fetch(`${baseUrl}${path}`, options);
+    return res.json();
+  },
+}));
 
-const countEmitter = emitters.get("count"); // Creates emitter
-const sameEmitter = emitters.get("count"); // Returns same instance
-
-console.log(emitters.size); // 1
+// Usage
+const github = apiClientPool("https://api.github.com");
+const gitlab = apiClientPool("https://gitlab.com/api/v4");
+const github2 = apiClientPool("https://api.github.com"); // Same instance
 ```
 
-### Dynamic Store Creation
+### WebSocket Connections
 
 ```ts
-import { store, pool } from "storion/react";
-
-// Pool of chat room stores
-const chatRoomPool = pool((roomId: string) =>
-  store({
-    name: `chat:${roomId}`,
-    state: { messages: [] as Message[] },
-    setup({ state }) {
-      return {
-        addMessage: (msg: Message) => {
-          state.messages = [...state.messages, msg];
-        },
-      };
-    },
-  })
+const wsPool = pool(
+  (channel: string) => {
+    const socket = new WebSocket(`wss://api.example.com/${channel}`);
+    return {
+      socket,
+      send: (data: unknown) => socket.send(JSON.stringify(data)),
+      dispose() {
+        socket.close();
+      },
+    };
+  },
+  { autoDispose: true }
 );
 
-// Use in component
-function ChatRoom({ roomId }: { roomId: string }) {
-  const { messages } = useStore(({ get }) => {
-    const roomStore = chatRoomPool.get(roomId);
-    const [state] = get(roomStore);
-    return { messages: state.messages };
-  });
+// Connect to channels
+wsPool("notifications").socket.onmessage = handleNotification;
+wsPool("chat").send({ type: "join" });
 
-  return <MessageList messages={messages} />;
-}
+// Cleanup
+wsPool.delete("chat"); // Closes WebSocket
+```
+
+### Loggers by Module
+
+```ts
+const loggerPool = pool((module: string) => ({
+  module,
+  log: (msg: string) => console.log(`[${module}] ${msg}`),
+  error: (msg: string) => console.error(`[${module}] ${msg}`),
+}));
+
+// Different modules, separate loggers
+const authLogger = loggerPool("auth");
+const dbLogger = loggerPool("database");
+
+authLogger.log("User logged in"); // [auth] User logged in
+dbLogger.log("Query executed"); // [database] Query executed
 ```
 
 ### With Complex Keys
@@ -218,6 +254,6 @@ formPool
 
 ## Related
 
-- [Sharing Logic Guide](/guide/sharing-logic) - Patterns for reusing store logic
-- [`store()`](/api/store) - Create store specs for use with pools
+- [`container()`](/api/container) - Global store container
+- [`store()`](/api/store) - Create reactive stores
 

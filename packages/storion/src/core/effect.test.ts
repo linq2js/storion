@@ -1483,8 +1483,8 @@ describe("effect", () => {
 
       expect(runCount).toBe(1);
 
-      // Wait for first setTimeout to trigger run 2
-      await new Promise((r) => setTimeout(r, 20));
+      // Wait for first setTimeout to trigger run 2 (but not long enough for second setTimeout)
+      await new Promise((r) => setTimeout(r, 15));
       expect(runCount).toBe(2);
 
       // First context's refresh should be stale now

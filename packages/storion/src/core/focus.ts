@@ -247,10 +247,19 @@ export function createFocus<TValue>(
 
   // Create tuple with methods
   const focus = [getterWithPick, setter] as Focus<TValue>;
+
+  /**
+   * Transform this focus using a helper function.
+   */
+  const as = <TResult>(helper: (f: Focus<TValue>) => TResult): TResult => {
+    return helper(focus);
+  };
+
   Object.assign(focus, {
     [STORION_TYPE]: "focus",
     on,
     to,
+    as,
     dirty,
     reset,
     pick: focusPick,

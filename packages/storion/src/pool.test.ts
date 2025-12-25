@@ -2,6 +2,37 @@ import { describe, it, expect, vi } from "vitest";
 import { pool } from "./pool";
 
 describe("pool", () => {
+  describe("callable", () => {
+    it("should be callable directly as p(key)", () => {
+      const factory = vi.fn((key: string) => `value-${key}`);
+      const p = pool(factory);
+
+      const result = p("a"); // Direct call
+
+      expect(result).toBe("value-a");
+      expect(factory).toHaveBeenCalledWith("a");
+    });
+
+    it("should return same item on subsequent calls", () => {
+      const p = pool((key: string) => ({ id: key }));
+
+      const first = p("a");
+      const second = p("a");
+
+      expect(first).toBe(second);
+    });
+
+    it("should work with complex keys when using keyOf", () => {
+      type Key = { id: string };
+      const p = pool((key: Key) => ({ data: key }), { keyOf: (k) => k.id });
+
+      const a1 = p({ id: "1" });
+      const a2 = p({ id: "1" });
+
+      expect(a1).toBe(a2);
+    });
+  });
+
   describe("get", () => {
     it("should create item on first access", () => {
       const factory = vi.fn((key: string) => `value-${key}`);
