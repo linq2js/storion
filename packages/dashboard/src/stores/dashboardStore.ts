@@ -14,6 +14,8 @@ import {
 // DASHBOARD STORE
 // =============================================================================
 
+export { type WidgetInstance };
+
 export const dashboardStore = store({
   name: "dashboard",
   state: {
