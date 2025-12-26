@@ -11,12 +11,14 @@ import {
   MutationDemo,
   NetworkDemo,
   AbortableDemo,
+  ListDemo,
 } from "./components";
 import { WithStoreDemo } from "./components/WithStoreDemo";
 
 type Tab =
   | "counter"
   | "focus"
+  | "list"
   | "async"
   | "mutations"
   | "network"
@@ -36,6 +38,12 @@ const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
     label: "Focus API",
     icon: "🔍",
     description: "Lens-like state access with getters/setters",
+  },
+  {
+    id: "list",
+    label: "List Helper",
+    icon: "📋",
+    description: "Array manipulation with drag-and-drop Kanban board",
   },
   {
     id: "async",
@@ -99,32 +107,28 @@ export function App() {
         </div>
       </header>
 
-      {/* Navigation */}
-      <nav className="border-b border-zinc-800 bg-zinc-900/30">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="flex gap-1 -mb-px overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "border-purple-500 text-purple-400"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </nav>
-
       {/* Main Content */}
       <main className="max-w-5xl mx-auto px-6 py-8">
+        {/* Navigation Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-8">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-2 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                activeTab === tab.id
+                  ? "bg-purple-500/20 border-purple-500/50 text-purple-300"
+                  : "bg-zinc-800/30 border-zinc-700/50 text-zinc-400 hover:bg-zinc-800/50 hover:border-zinc-600"
+              }`}
+            >
+              <span className="text-lg">{tab.icon}</span>
+              <span className="text-sm font-medium truncate">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
         {/* Tab Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <h2 className="text-2xl font-bold flex items-center gap-3">
             <span>{currentTab.icon}</span>
             {currentTab.label}
@@ -136,6 +140,7 @@ export function App() {
         <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 animate-fade-in">
           {activeTab === "counter" && <CounterDemo />}
           {activeTab === "focus" && <FocusDemo />}
+          {activeTab === "list" && <ListDemo />}
           {activeTab === "async" && <AsyncDemo />}
           {activeTab === "mutations" && <MutationDemo />}
           {activeTab === "network" && <NetworkDemo />}

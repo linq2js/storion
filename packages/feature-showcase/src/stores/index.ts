@@ -8,3 +8,4 @@ export {
   type Todo,
   type TodoStats,
 } from "./selectorStore";
+export { listStore, type Task } from "./listStore";
