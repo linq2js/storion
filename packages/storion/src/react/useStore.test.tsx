@@ -1339,4 +1339,210 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(effectCalls).toContain(1);
     });
   });
+
+  describe("useStore.from()", () => {
+    it("should create a pre-bound hook for a specific store", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const useCounter = useStore.from(counter);
+
+      const { result } = renderHook(
+        () =>
+          useCounter((state, actions) => ({
+            count: state.count,
+            increment: actions.increment,
+          })),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+
+      act(() => {
+        result.current.increment();
+      });
+
+      expect(result.current.count).toBe(1);
+    });
+
+    it("should provide access to context in third parameter", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const user = store({
+        name: "user",
+        state: { name: "John" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const useCounter = useStore.from(counter);
+
+      const { result } = renderHook(
+        () =>
+          useCounter((state, _actions, ctx) => {
+            const [userState] = ctx.get(user);
+            return {
+              count: state.count,
+              userName: userState.name,
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+      expect(result.current.userName).toBe("John");
+    });
+
+    it("should re-render when state changes", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          setCount: (n: number) => {
+            state.count = n;
+          },
+        }),
+      });
+
+      const stores = container();
+      const useCounter = useStore.from(counter);
+
+      let renderCount = 0;
+
+      const { result } = renderHook(
+        () => {
+          renderCount++;
+          return useCounter((state, actions) => ({
+            count: state.count,
+            setCount: actions.setCount,
+          }));
+        },
+        { wrapper: createWrapper(stores) }
+      );
+
+      const initialRenderCount = renderCount;
+
+      act(() => {
+        result.current.setCount(5);
+      });
+
+      expect(result.current.count).toBe(5);
+      // Re-render should have occurred (at least once, strict mode may render more)
+      expect(renderCount).toBeGreaterThan(initialRenderCount);
+    });
+
+    it("should support scoped stores via context", () => {
+      const formStore = store({
+        name: "form",
+        lifetime: "autoDispose",
+        state: { value: "" },
+        setup: ({ state }) => ({
+          setValue: (v: string) => {
+            state.value = v;
+          },
+        }),
+      });
+
+      const appStore = store({
+        name: "app",
+        state: { title: "My App" },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const useApp = useStore.from(appStore);
+
+      const { result } = renderHook(
+        () =>
+          useApp((state, _actions, ctx) => {
+            const [formState, formActions] = ctx.scoped(formStore);
+            return {
+              title: state.title,
+              formValue: formState.value,
+              setFormValue: formActions.setValue,
+            };
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.title).toBe("My App");
+      expect(result.current.formValue).toBe("");
+
+      act(() => {
+        result.current.setFormValue("test input");
+      });
+
+      expect(result.current.formValue).toBe("test input");
+    });
+
+    it("should provide stable function references", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const useCounter = useStore.from(counter);
+
+      const { result, rerender } = renderHook(
+        () =>
+          useCounter((state, actions) => ({
+            count: state.count,
+            increment: actions.increment,
+          })),
+        { wrapper: createWrapper(stores) }
+      );
+
+      const firstIncrement = result.current.increment;
+
+      rerender();
+
+      expect(result.current.increment).toBe(firstIncrement);
+    });
+
+    it("should support mixin via context", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const useCounter = useStore.from(counter);
+
+      const mockMixin = (ctx: SelectorContext, multiplier: number) => {
+        const [state] = ctx.get(counter);
+        return state.count * multiplier;
+      };
+
+      const { result } = renderHook(
+        () =>
+          useCounter((state, _actions, ctx) => ({
+            count: state.count,
+            doubled: ctx.mixin(mockMixin, 2),
+          })),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+      expect(result.current.doubled).toBe(0);
+    });
+  });
 });

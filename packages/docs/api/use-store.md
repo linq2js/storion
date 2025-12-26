@@ -361,7 +361,182 @@ const { dirty, reset } = useStore(({ scoped }) => {
 });
 ```
 
+## useStore.from()
+
+Create a pre-bound hook for a specific store. Simplifies the common pattern of accessing a single store by providing state and actions directly to the selector.
+
+### Signature
+
+```ts
+function useStore.from<TState, TActions>(
+  spec: StoreSpec<TState, TActions>
+): UseFromStore<TState, TActions>;
+
+type UseFromStore<TState, TActions> = <T extends object>(
+  selector: (state: TState, actions: TActions, ctx: SelectorContext) => T
+) => StableResult<T>;
+```
+
+### Basic Example
+
+```tsx
+import { useStore } from "storion/react";
+import { counterStore } from "./stores";
+
+// Create a pre-bound hook for counterStore
+const useCounter = useStore.from(counterStore);
+
+function Counter() {
+  // Simpler selector - state and actions provided directly
+  const { count, increment } = useCounter((state, actions) => ({
+    count: state.count,
+    increment: actions.increment,
+  }));
+
+  return <button onClick={increment}>Count: {count}</button>;
+}
+```
+
+### Comparison
+
+```tsx
+// Without useStore.from() - verbose
+const { count } = useStore(({ get }) => {
+  const [state, actions] = get(counterStore);
+  return { count: state.count, increment: actions.increment };
+});
+
+// With useStore.from() - cleaner
+const useCounter = useStore.from(counterStore);
+const { count } = useCounter((state, actions) => ({
+  count: state.count,
+  increment: actions.increment,
+}));
+```
+
+### Accessing Other Stores
+
+The third parameter provides full `SelectorContext` for advanced features:
+
+```tsx
+const useCounter = useStore.from(counterStore);
+
+function UserCounter() {
+  const { count, userName } = useCounter((state, actions, ctx) => {
+    // Access other stores via ctx.get()
+    const [userState] = ctx.get(userStore);
+
+    return {
+      count: state.count,
+      userName: userState.name,
+    };
+  });
+
+  return (
+    <div>
+      {userName}'s count: {count}
+    </div>
+  );
+}
+```
+
+### With Scoped Stores
+
+```tsx
+const useApp = useStore.from(appStore);
+
+function FormPage() {
+  const { title, formValue, setFormValue } = useApp((state, actions, ctx) => {
+    // Create component-local form store via ctx.scoped()
+    const [formState, formActions] = ctx.scoped(formStore);
+
+    return {
+      title: state.title,
+      formValue: formState.value,
+      setFormValue: formActions.setValue,
+    };
+  });
+
+  return (
+    <div>
+      <h1>{title}</h1>
+      <input value={formValue} onChange={(e) => setFormValue(e.target.value)} />
+    </div>
+  );
+}
+```
+
+### With Mixins
+
+```tsx
+const useCounter = useStore.from(counterStore);
+
+// Reusable mixin
+const doubledMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(counterStore);
+  return state.count * 2;
+};
+
+function DoubledCounter() {
+  const { count, doubled } = useCounter((state, actions, ctx) => ({
+    count: state.count,
+    doubled: ctx.mixin(doubledMixin),
+  }));
+
+  return (
+    <div>
+      Count: {count}, Doubled: {doubled}
+    </div>
+  );
+}
+```
+
+### When to Use
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Single store access | ✅ Use `useStore.from()` |
+| Multiple stores | Use regular `useStore()` |
+| Reusable store hook | ✅ Export `useStore.from(spec)` |
+| Module-level hook | ✅ Define once, use everywhere |
+
+### Module Pattern
+
+```ts
+// stores/counter.ts
+import { store, useStore } from "storion/react";
+
+export const counterStore = store({
+  name: "counter",
+  state: { count: 0 },
+  setup({ state }) {
+    return {
+      increment: () => { state.count++; },
+      decrement: () => { state.count--; },
+    };
+  },
+});
+
+// Export pre-bound hook alongside the store
+export const useCounter = useStore.from(counterStore);
+```
+
+```tsx
+// components/Counter.tsx
+import { useCounter } from "../stores/counter";
+
+function Counter() {
+  const { count, increment } = useCounter((state, actions) => ({
+    count: state.count,
+    increment: actions.increment,
+  }));
+
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
 ## See Also
 
 - [withStore()](/api/with-store) - HOC alternative
 - [trigger()](/api/trigger) - Data fetching helper
+- [create()](/api/create) - Single-store shorthand with container

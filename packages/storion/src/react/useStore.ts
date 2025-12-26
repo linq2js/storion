@@ -24,6 +24,30 @@ import {
   type StableResult,
   type StoreInstance,
 } from "../types";
+
+// =============================================================================
+// Types for useStore.from()
+// =============================================================================
+
+/**
+ * Selector for useStore.from() hook.
+ * Receives state and actions directly (no get needed), plus SelectorContext for advanced features.
+ */
+export type FromSelector<
+  TState extends StateBase,
+  TActions extends ActionsBase,
+  T
+> = (state: Readonly<TState>, actions: TActions, ctx: SelectorContext) => T;
+
+/**
+ * Custom hook returned by useStore.from().
+ */
+export type UseFromStore<
+  TState extends StateBase,
+  TActions extends ActionsBase
+> = <T extends object>(
+  selector: FromSelector<TState, TActions, T>
+) => StableResult<T>;
 import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
 import { AsyncFunctionError, ScopedOutsideSelectorError } from "../errors";
@@ -327,14 +351,100 @@ export function useStoreWithContainer<T extends object>(
  * }
  * ```
  */
-export function useStore<T extends object>(
-  selector: Selector<T>
-): StableResult<T> {
+function useStoreImpl<T extends object>(selector: Selector<T>): StableResult<T> {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const container = useContainer();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   return useStoreWithContainer(selector, container);
 }
+
+/**
+ * Create a pre-bound hook for a specific store.
+ *
+ * Returns a hook that takes a selector receiving state and actions directly,
+ * simplifying the common pattern of accessing a single store.
+ *
+ * @example
+ * ```tsx
+ * // Create a pre-bound hook
+ * const useCounter = useStore.from(counterStore);
+ *
+ * // Use in components - simpler than full useStore
+ * function Counter() {
+ *   const { count, increment } = useCounter((state, actions) => ({
+ *     count: state.count,
+ *     increment: actions.increment,
+ *   }));
+ *
+ *   return <button onClick={increment}>{count}</button>;
+ * }
+ *
+ * // Access other stores or context features via third parameter
+ * function UserCounter() {
+ *   const { count, userName } = useCounter((state, actions, ctx) => {
+ *     const [userState] = ctx.get(userStore);
+ *     return {
+ *       count: state.count,
+ *       userName: userState.name,
+ *     };
+ *   });
+ *
+ *   return <div>{userName}: {count}</div>;
+ * }
+ * ```
+ */
+function useStoreFrom<TState extends StateBase, TActions extends ActionsBase>(
+  spec: StoreSpec<TState, TActions>
+): UseFromStore<TState, TActions> {
+  return <T extends object>(
+    selector: FromSelector<TState, TActions, T>
+  ): StableResult<T> => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useStoreImpl((ctx) => {
+      const [state, actions] = ctx.get(spec);
+      return selector(state, actions, ctx);
+    });
+  };
+}
+
+/**
+ * useStore hook interface with from() method.
+ */
+export interface UseStoreFn {
+  /**
+   * Main useStore hook - consumes stores with automatic optimization.
+   */
+  <T extends object>(selector: Selector<T>): StableResult<T>;
+
+  /**
+   * Create a pre-bound hook for a specific store.
+   *
+   * @example
+   * ```tsx
+   * const useCounter = useStore.from(counterStore);
+   *
+   * function Counter() {
+   *   const { count, increment } = useCounter((state, actions) => ({
+   *     count: state.count,
+   *     increment: actions.increment,
+   *   }));
+   *   return <button onClick={increment}>{count}</button>;
+   * }
+   * ```
+   */
+  from<TState extends StateBase, TActions extends ActionsBase>(
+    spec: StoreSpec<TState, TActions>
+  ): UseFromStore<TState, TActions>;
+}
+
+/**
+ * React hook to consume stores with automatic optimization.
+ *
+ * @see {@link UseStoreFn} for full documentation
+ */
+export const useStore: UseStoreFn = Object.assign(useStoreImpl, {
+  from: useStoreFrom,
+});
 
 const isServer = typeof window === "undefined";
 const useIsomorphicLayoutEffect =

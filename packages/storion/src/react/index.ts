@@ -8,7 +8,12 @@
 export { StoreProvider, useContainer } from "./context";
 
 // Hooks
-export { useStore } from "./useStore";
+export {
+  useStore,
+  type UseStoreFn,
+  type FromSelector,
+  type UseFromStore,
+} from "./useStore";
 export {
   withStore,
   type WithStoreHook,

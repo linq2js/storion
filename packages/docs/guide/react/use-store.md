@@ -415,6 +415,86 @@ function DataView() {
 }
 ```
 
+## Pre-bound Hooks with useStore.from()
+
+For components that primarily work with a single store, `useStore.from()` creates a simpler hook:
+
+```tsx
+import { useStore } from "storion/react";
+import { counterStore } from "../stores/counterStore";
+
+// Create a pre-bound hook
+const useCounter = useStore.from(counterStore);
+
+function Counter() {
+  // State and actions are provided directly - no get() needed
+  const { count, increment } = useCounter((state, actions) => ({
+    count: state.count,
+    increment: actions.increment,
+  }));
+
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
+### When to Use
+
+| Pattern | Use Case |
+|---------|----------|
+| `useStore()` | Multiple stores, complex selectors |
+| `useStore.from(spec)` | Single store focus, simpler syntax |
+
+### Module Pattern
+
+Export the pre-bound hook alongside your store for cleaner imports:
+
+```ts
+// stores/counter.ts
+export const counterStore = store({
+  name: "counter",
+  state: { count: 0 },
+  setup: ({ state }) => ({
+    increment: () => { state.count++; },
+  }),
+});
+
+export const useCounter = useStore.from(counterStore);
+```
+
+```tsx
+// components/Counter.tsx
+import { useCounter } from "../stores/counter";
+
+function Counter() {
+  const { count, increment } = useCounter((state, actions) => ({
+    count: state.count,
+    increment: actions.increment,
+  }));
+  
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
+### Accessing Other Stores
+
+The third parameter provides full context access:
+
+```tsx
+const useCounter = useStore.from(counterStore);
+
+function UserCounter() {
+  const { count, userName } = useCounter((state, actions, ctx) => {
+    const [userState] = ctx.get(userStore);
+    return {
+      count: state.count,
+      userName: userState.name,
+    };
+  });
+}
+```
+
+See [`useStore.from()` API reference](/api/use-store#usestorefrom) for more details.
+
 ## Selector Context Reference
 
 | Property   | Type                                     | Description                           |
