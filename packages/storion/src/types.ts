@@ -1124,6 +1124,20 @@ export interface StoreMiddlewareContext extends BaseMiddlewareContext {
   readonly next: () => StoreInstance;
 }
 
+/** Extract the state type from a StoreInstance or StoreSpec. */
+export type StateOf<T> = T extends StoreInstance<infer S, any>
+  ? S
+  : T extends StoreSpec<infer S, any>
+  ? S
+  : never;
+
+/** Extract the actions type from a StoreInstance or StoreSpec. */
+export type ActionsOf<T> = T extends StoreInstance<any, infer A>
+  ? A
+  : T extends StoreSpec<any, infer A>
+  ? A
+  : never;
+
 /**
  * Middleware context - discriminated union.
  * Use `ctx.type` to narrow to specific context type.
