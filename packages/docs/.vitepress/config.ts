@@ -40,7 +40,7 @@ export default withMermaid({
       { text: "Examples", link: "/examples/" },
       { text: "Demos", link: "/demos" },
       {
-        text: "v0.13.0",
+        text: "v0.14.0",
         items: [
           { text: "Changelog", link: "/changelog" },
           { text: "npm", link: "https://www.npmjs.com/package/storion" },

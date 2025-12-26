@@ -689,6 +689,154 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
 
       expect(result.current.count).toBe(1);
     });
+
+    it("should support MergeMixin array syntax", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John", email: "john@example.com" },
+        setup: () => ({}),
+      });
+
+      const counterStore = store({
+        name: "counter",
+        state: { count: 5 },
+        setup: () => ({}),
+      });
+
+      const selectUser = (ctx: SelectorContext) => {
+        const [state] = ctx.get(userStore);
+        return { name: state.name, email: state.email };
+      };
+
+      const selectCount = (ctx: SelectorContext) => {
+        const [state] = ctx.get(counterStore);
+        return state.count;
+      };
+
+      const stores = container();
+      stores.get(userStore);
+      stores.get(counterStore);
+
+      const { result } = renderHook(
+        () =>
+          useStore((ctx) => {
+            // Use ctx.mixin with MergeMixin array
+            return ctx.mixin([selectUser, { count: selectCount }]);
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.name).toBe("John");
+      expect(result.current.email).toBe("john@example.com");
+      expect(result.current.count).toBe(5);
+    });
+
+    it("should support MixinMap object syntax", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "Alice", age: 30 },
+        setup: () => ({}),
+      });
+
+      const selectName = (ctx: SelectorContext) => {
+        const [state] = ctx.get(userStore);
+        return state.name;
+      };
+
+      const selectAge = (ctx: SelectorContext) => {
+        const [state] = ctx.get(userStore);
+        return state.age;
+      };
+
+      const stores = container();
+      stores.get(userStore);
+
+      const { result } = renderHook(
+        () =>
+          useStore((ctx) => {
+            // Use ctx.mixin with MixinMap object
+            return ctx.mixin({ userName: selectName, userAge: selectAge });
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.userName).toBe("Alice");
+      expect(result.current.userAge).toBe(30);
+    });
+
+    it("should track dependencies through MergeMixin", () => {
+      const counterStore = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const selectCount = (ctx: SelectorContext) => {
+        const [state] = ctx.get(counterStore);
+        return { count: state.count };
+      };
+
+      const stores = container();
+      const counterInstance = stores.get(counterStore);
+
+      const { result, rerender } = renderHook(
+        () =>
+          useStore((ctx) => {
+            return ctx.mixin([selectCount]);
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+
+      act(() => {
+        counterInstance.actions.increment();
+      });
+      rerender();
+
+      expect(result.current.count).toBe(1);
+    });
+
+    it("should track dependencies through MixinMap", () => {
+      const counterStore = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const selectCount = (ctx: SelectorContext) => {
+        const [state] = ctx.get(counterStore);
+        return state.count;
+      };
+
+      const stores = container();
+      const counterInstance = stores.get(counterStore);
+
+      const { result, rerender } = renderHook(
+        () =>
+          useStore((ctx) => {
+            return ctx.mixin({ count: selectCount });
+          }),
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(result.current.count).toBe(0);
+
+      act(() => {
+        counterInstance.actions.increment();
+      });
+      rerender();
+
+      expect(result.current.count).toBe(1);
+    });
   });
 
   describe("SelectorContext.id", () => {
@@ -1749,9 +1897,12 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
         return { bio: state.bio };
       };
 
-      const { result } = renderHook(() => useStore([selectUser, selectProfile]), {
-        wrapper: createWrapper(stores),
-      });
+      const { result } = renderHook(
+        () => useStore([selectUser, selectProfile]),
+        {
+          wrapper: createWrapper(stores),
+        }
+      );
 
       expect(result.current.name).toBe("John");
       expect(result.current.age).toBe(30);
@@ -1782,7 +1933,8 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       };
 
       const { result } = renderHook(
-        () => useStore([{ count: selectCount }, { increment: selectIncrement }]),
+        () =>
+          useStore([{ count: selectCount }, { increment: selectIncrement }]),
         { wrapper: createWrapper(stores) }
       );
 

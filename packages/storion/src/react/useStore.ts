@@ -23,8 +23,10 @@ import {
   type Selector,
   type StableResult,
   type StoreInstance,
-  SelectorMixin,
-  Prettify,
+  type MixinMap,
+  type MergeMixin,
+  type MergeMixinResult,
+  type MixinMapResult,
 } from "../types";
 
 import { withHooks, type ReadEvent } from "../core/tracking";
@@ -36,62 +38,8 @@ import { storeTuple } from "../utils/storeTuple";
 import { emitter } from "../emitter";
 import { dev } from "../dev";
 
-// =============================================================================
-// Types for useStore.merge()
-// =============================================================================
-
-export type MixinMap = Record<string, SelectorMixin<unknown, []>>;
-
-/**
- * A mixin item for merge: either a direct mixin function or a record of named mixins.
- * - Direct mixin: `(ctx) => ({ name, age })` → spreads result into final object
- * - Named mixin: `{ userName: (ctx) => state.name }` → maps key to mixin result
- */
-export type MergeMixinItem = SelectorMixin<object, []> | MixinMap;
-
-/**
- * Array of mixin items for useStore.merge().
- */
-export type MergeMixin = readonly MergeMixinItem[];
-
-/**
- * Infer result type from a record of named mixins.
- * `{ value: (ctx) => 123, fn: (ctx) => () => {} }` → `{ value: number, fn: () => void }`
- */
-type InferMixinRecord<T extends MixinMap> = T extends MixinMap
-  ? { [K in keyof T]: T[K] extends SelectorMixin<infer R, []> ? R : never }
-  : never;
-
-/**
- * Infer result from a single mixin item.
- */
-type InferMixinItem<T> = T extends SelectorMixin<infer R extends object, []>
-  ? R
-  : T extends MixinMap
-  ? InferMixinRecord<T>
-  : never;
-
-/**
- * Recursively infer and merge types from MergeMixin array.
- */
-export type InferMergeMixin<T extends MergeMixin> = T extends readonly [
-  infer First,
-  ...infer Rest extends MergeMixin
-]
-  ? InferMixinItem<First> & InferMergeMixin<Rest>
-  : unknown;
-
-/**
- * Final merged result type with prettified output.
- */
-export type MergeMixinResult<T extends MergeMixin> = Prettify<
-  InferMergeMixin<T>
->;
-
-/**
- * Result type for useStore(MixinMap) - maps keys to their mixin results.
- */
-export type MixinMapResult<T extends MixinMap> = Prettify<InferMixinRecord<T>>;
+// Re-export types from types.ts for convenience
+export type { MixinMap, MergeMixin, MergeMixinResult, MixinMapResult };
 
 /**
  * Selector for useStore.from(spec) hook.
@@ -211,11 +159,48 @@ export function useStoreWithContainer<T extends object>(
         });
       },
 
-      mixin<TResult, TArgs extends unknown[]>(
-        mixin: (context: SelectorContext, ...args: TArgs) => TResult,
-        ...args: TArgs
-      ): TResult {
-        return mixin(ctx, ...args);
+      mixin(mixinOrMixins: any, ...args: any[]): any {
+        // Overload 1: MergeMixin (array of mixins)
+        if (Array.isArray(mixinOrMixins)) {
+          const mixins = mixinOrMixins as MergeMixin;
+          const result: Record<string, unknown> = {};
+          for (const item of mixins) {
+            if (typeof item === "function") {
+              // Direct mixin - spread its result
+              Object.assign(result, item(ctx));
+            } else {
+              // Named mixin map - map keys to results
+              for (const key in item) {
+                result[key] = item[key](ctx);
+              }
+            }
+          }
+          return result;
+        }
+
+        // Overload 2: MixinMap (object of mixins)
+        if (
+          typeof mixinOrMixins === "object" &&
+          mixinOrMixins !== null &&
+          !Array.isArray(mixinOrMixins)
+        ) {
+          // Check if it looks like a MixinMap (has function values)
+          const keys = Object.keys(mixinOrMixins);
+          if (
+            keys.length > 0 &&
+            keys.every((k) => typeof mixinOrMixins[k] === "function")
+          ) {
+            const mixinMap = mixinOrMixins as MixinMap;
+            const result: Record<string, unknown> = {};
+            for (const key in mixinMap) {
+              result[key] = mixinMap[key](ctx);
+            }
+            return result;
+          }
+        }
+
+        // Overload 3: Single mixin function with args
+        return mixinOrMixins(ctx, ...args);
       },
 
       once(callback: () => void): void {
@@ -433,24 +418,11 @@ function useStoreImpl<T extends object>(
 
   // Overload 1: MergeMixin (array of mixins)
   if (Array.isArray(selectorOrMixins)) {
-    const mixins = selectorOrMixins as MergeMixin;
-    const selector: Selector<T> = (ctx) => {
-      const result: Record<string, unknown> = {};
-      for (const item of mixins) {
-        if (typeof item === "function") {
-          // Direct mixin - spread its result
-          Object.assign(result, item(ctx));
-        } else {
-          // Named mixin map - map keys to results
-          for (const key in item) {
-            result[key] = item[key](ctx);
-          }
-        }
-      }
-      return result as T;
-    };
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    return useStoreWithContainer(selector, container);
+    return useStoreWithContainer(
+      (ctx) => ctx.mixin(selectorOrMixins) as T,
+      container
+    );
   }
 
   // Overload 2: MixinMap (object of mixins)
@@ -465,16 +437,11 @@ function useStoreImpl<T extends object>(
       keys.length > 0 &&
       keys.every((k) => typeof (selectorOrMixins as MixinMap)[k] === "function")
     ) {
-      const mixinMap = selectorOrMixins as MixinMap;
-      const selector: Selector<T> = (ctx) => {
-        const result: Record<string, unknown> = {};
-        for (const key in mixinMap) {
-          result[key] = mixinMap[key](ctx);
-        }
-        return result as T;
-      };
       // eslint-disable-next-line react-hooks/rules-of-hooks
-      return useStoreWithContainer(selector, container);
+      return useStoreWithContainer(
+        (ctx) => ctx.mixin(selectorOrMixins as MixinMap) as T,
+        container
+      );
     }
   }
 

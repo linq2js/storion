@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.14.0] - 2024-12-27
+
+### Added
+
+- `SelectorContext.mixin()` now accepts `MergeMixin` (array) and `MixinMap` (object) syntax, matching `useStore()` patterns
+
+  ```tsx
+  const { name, count } = useStore((ctx) => {
+    // MergeMixin array - spreads direct mixins, maps named mixins
+    return ctx.mixin([
+      selectUser,              // { name, email } → spread
+      { count: selectCount },  // → { count: number }
+    ]);
+  });
+
+  const { userName, userAge } = useStore((ctx) => {
+    // MixinMap object - maps keys to mixin results
+    return ctx.mixin({
+      userName: selectName,
+      userAge: selectAge,
+    });
+  });
+  ```
+
+### Changed
+
+- `useStore(MixinMap | MergeMixin)` now internally uses `ctx.mixin()` for code reuse
+
+---
+
 ## [0.13.0] - 2024-12-27
 
 ### Added

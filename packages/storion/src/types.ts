@@ -489,6 +489,85 @@ export type SelectorMixin<TResult, TArgs extends unknown[] = []> = (
 ) => TResult;
 
 // =============================================================================
+// Mixin Composition Types
+// =============================================================================
+
+/**
+ * Map of named mixins where each key maps to a mixin function.
+ *
+ * @example
+ * ```ts
+ * const mixins: MixinMap = {
+ *   name: (ctx) => ctx.get(userStore)[0].name,
+ *   count: (ctx) => ctx.get(counterStore)[0].count,
+ * };
+ * ```
+ */
+export type MixinMap = Record<string, SelectorMixin<unknown, []>>;
+
+/**
+ * A mixin item for merge: either a direct mixin function or a record of named mixins.
+ * - Direct mixin: `(ctx) => ({ name, age })` → spreads result into final object
+ * - Named mixin: `{ userName: (ctx) => state.name }` → maps key to mixin result
+ */
+export type MergeMixinItem = SelectorMixin<object, []> | MixinMap;
+
+/**
+ * Array of mixin items for composing multiple mixins.
+ *
+ * @example
+ * ```ts
+ * const mixins: MergeMixin = [
+ *   selectUser,              // Direct mixin - spreads result
+ *   { count: selectCount },  // Named mixin - maps key
+ * ];
+ * ```
+ */
+export type MergeMixin = readonly MergeMixinItem[];
+
+/**
+ * Infer result type from a record of named mixins.
+ * `{ value: (ctx) => 123, fn: (ctx) => () => {} }` → `{ value: number, fn: () => void }`
+ */
+export type InferMixinRecord<T extends MixinMap> = T extends MixinMap
+  ? { [K in keyof T]: T[K] extends SelectorMixin<infer R, []> ? R : never }
+  : never;
+
+/**
+ * Infer result from a single mixin item.
+ */
+export type InferMixinItem<T> = T extends SelectorMixin<
+  infer R extends object,
+  []
+>
+  ? R
+  : T extends MixinMap
+  ? InferMixinRecord<T>
+  : never;
+
+/**
+ * Recursively infer and merge types from MergeMixin array.
+ */
+export type InferMergeMixin<T extends MergeMixin> = T extends readonly [
+  infer First,
+  ...infer Rest extends MergeMixin
+]
+  ? InferMixinItem<First> & InferMergeMixin<Rest>
+  : unknown;
+
+/**
+ * Final merged result type with prettified output.
+ */
+export type MergeMixinResult<T extends MergeMixin> = Prettify<
+  InferMergeMixin<T>
+>;
+
+/**
+ * Result type for MixinMap - maps keys to their mixin results.
+ */
+export type MixinMapResult<T extends MixinMap> = Prettify<InferMixinRecord<T>>;
+
+// =============================================================================
 // Store Tuple
 // =============================================================================
 
@@ -1511,13 +1590,43 @@ export interface SelectorContext extends StorionObject<"selector.context"> {
    * Apply a mixin to compose reusable selector logic.
    * Mixins receive the same context and can return computed values.
    *
-   * @example
+   * @example Single mixin with arguments
+   * ```ts
    * const total = ctx.mixin(sumMixin, [store1, store2]);
+   * ```
+   *
+   * @example MergeMixin array - merge multiple mixins
+   * ```ts
+   * const result = ctx.mixin([
+   *   selectUser,              // Direct mixin - spreads result
+   *   { count: selectCount },  // Named mixin - maps key
+   * ]);
+   * // result: { name: string, email: string, count: number }
+   * ```
+   *
+   * @example MixinMap object - map keys to mixin results
+   * ```ts
+   * const result = ctx.mixin({
+   *   name: selectName,
+   *   age: selectAge,
+   * });
+   * // result: { name: string, age: number }
+   * ```
    */
   mixin<TResult, TArgs extends unknown[]>(
     mixin: SelectorMixin<TResult, TArgs>,
     ...args: TArgs
   ): TResult;
+
+  /**
+   * Merge multiple mixins into a single result object.
+   */
+  mixin<const T extends MergeMixin>(mixins: T): MergeMixinResult<T>;
+
+  /**
+   * Map mixin keys to their results.
+   */
+  mixin<const T extends MixinMap>(mixinMap: T): MixinMapResult<T>;
 
   /**
    * Unique identifier for this selector context (per component instance).
