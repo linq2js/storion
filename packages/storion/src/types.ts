@@ -1759,3 +1759,8 @@ export type MetaQuery = {
     predicate?: (value: TValue) => boolean
   ): string[];
 };
+
+/**
+ * Prettify intersection types for better IDE display.
+ */
+export type Prettify<T> = { [K in keyof T]: T[K] } & {};
