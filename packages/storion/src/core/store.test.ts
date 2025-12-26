@@ -2218,4 +2218,197 @@ describe("focus()", () => {
     setAge(25);
     expect(instance.state.age).toBe(25);
   });
+
+  describe("toJSON option", () => {
+    it("should default to 'state' mode", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John", age: 30 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.toJSON()).toEqual({ name: "John", age: 30 });
+      expect(JSON.stringify(instance)).toBe('{"name":"John","age":30}');
+    });
+
+    it("should serialize state when toJSON is 'state'", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John", age: 30 },
+        toJSON: "state",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      instance.actions; // Trigger setup
+      expect(instance.toJSON()).toEqual({ name: "John", age: 30 });
+    });
+
+    it("should use normalize function when toJSON is 'normalize'", () => {
+      const sessionStore = store({
+        name: "session",
+        state: {
+          lastLogin: new Date("2024-01-01"),
+          items: new Set(["a", "b"]),
+        },
+        normalize: (state) => ({
+          lastLogin: state.lastLogin.toISOString(),
+          items: Array.from(state.items),
+        }),
+        toJSON: "normalize",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(sessionStore);
+
+      const result = instance.toJSON() as any;
+      expect(result.lastLogin).toBe("2024-01-01T00:00:00.000Z");
+      expect(result.items).toEqual(["a", "b"]);
+    });
+
+    it("should fallback to state when toJSON is 'normalize' but no normalize function", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John" },
+        toJSON: "normalize",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.toJSON()).toEqual({ name: "John" });
+    });
+
+    it("should return info object when toJSON is 'info'", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John" },
+        toJSON: "info",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      const result = instance.toJSON() as any;
+      expect(result).toEqual({
+        id: instance.id,
+        name: "user",
+      });
+      expect(JSON.stringify(instance)).toBe(
+        JSON.stringify({ id: instance.id, name: "user" })
+      );
+    });
+
+    it("should return ID string when toJSON is 'id'", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John" },
+        toJSON: "id",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.toJSON()).toBe(instance.id);
+      expect(JSON.stringify(instance)).toBe(`"${instance.id}"`);
+    });
+
+    it("should return null when toJSON is 'null'", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John" },
+        toJSON: "null",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.toJSON()).toBeNull();
+      expect(JSON.stringify(instance)).toBe("null");
+    });
+
+    it("should return undefined when toJSON is 'undefined'", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John" },
+        toJSON: "undefined",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.toJSON()).toBeUndefined();
+      // undefined is omitted from JSON
+      const obj = { store: instance };
+      expect(JSON.stringify(obj)).toBe("{}");
+    });
+
+    it("should return empty object when toJSON is 'empty'", () => {
+      const userStore = store({
+        name: "user",
+        state: { name: "John", age: 30 },
+        toJSON: "empty",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const instance = stores.get(userStore);
+
+      expect(instance.toJSON()).toEqual({});
+      expect(JSON.stringify(instance)).toBe("{}");
+    });
+
+    it("should work with nested stores", () => {
+      const childStore = store({
+        name: "child",
+        state: { value: "secret" },
+        toJSON: "null",
+        setup: () => ({}),
+      });
+
+      const stores = container();
+      const childInstance = stores.get(childStore);
+
+      // Simulate nested store scenario (store instance in an object)
+      const nestedObj = {
+        parent: { data: "parent data" },
+        child: childInstance,
+      };
+
+      const serialized = JSON.parse(JSON.stringify(nestedObj));
+      expect(serialized.child).toBeNull();
+      expect(serialized.parent).toEqual({ data: "parent data" });
+    });
+
+    it("should update toJSON result when state changes", () => {
+      const counterStore = store({
+        name: "counter",
+        state: { count: 0 },
+        toJSON: "state",
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(counterStore);
+
+      expect(instance.toJSON()).toEqual({ count: 0 });
+      instance.actions.increment();
+      expect(instance.toJSON()).toEqual({ count: 1 });
+    });
+  });
 });

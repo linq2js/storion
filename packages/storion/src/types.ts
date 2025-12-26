@@ -326,6 +326,31 @@ export type Focus<TValue> = [
  */
 export type Lifetime = "keepAlive" | "autoDispose";
 
+/**
+ * Controls what `toJSON()` returns when a store instance is serialized.
+ *
+ * @example
+ * ```ts
+ * store({
+ *   toJSON: "state",      // Raw state (default)
+ *   toJSON: "normalize",   // Use normalize() if available
+ *   toJSON: "info",        // { id, name }
+ *   toJSON: "id",          // Just ID string
+ *   toJSON: "null",        // null (explicit non-serializable marker)
+ *   toJSON: "undefined",   // undefined (completely omitted from JSON)
+ *   toJSON: "empty",       // {} (structure marker)
+ * })
+ * ```
+ */
+export type ToJSONMode =
+  | "state"
+  | "normalize"
+  | "info"
+  | "id"
+  | "null"
+  | "undefined"
+  | "empty";
+
 // =============================================================================
 // Dispatch Events
 // =============================================================================
@@ -858,6 +883,38 @@ export interface StoreOptions<
    * })
    */
   meta?: MetaEntry<keyof TState, any> | MetaEntry<keyof TState, any>[];
+
+  /**
+   * Controls what `toJSON()` returns when the store instance is serialized.
+   *
+   * @example
+   * ```ts
+   * // Default: serialize raw state
+   * store({ toJSON: "state", ... })
+   *
+   * // Use normalize function (consistent with dehydrate)
+   * store({
+   *   normalize: (state) => ({ ...state, date: state.date.toISOString() }),
+   *   toJSON: "normalize",
+   * })
+   *
+   * // Return store metadata only
+   * store({ toJSON: "info", ... }) // { id: "user:1", name: "user" }
+   *
+   * // Return just the ID
+   * store({ toJSON: "id", ... }) // "user:1"
+   *
+   * // Explicit null (useful for nested stores)
+   * store({ toJSON: "null", ... }) // null
+   *
+   * // Completely omit from JSON
+   * store({ toJSON: "undefined", ... }) // undefined (omitted)
+   *
+   * // Empty object marker
+   * store({ toJSON: "empty", ... }) // {}
+   * ```
+   */
+  toJSON?: ToJSONMode;
 }
 
 // =============================================================================

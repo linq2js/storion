@@ -168,6 +168,107 @@ Used by `hydrate()` when restoring persisted state.
 | `BigInt` | `.toString()` | `BigInt(str)` |
 | Class | `{ ...instance }` | `Object.assign(new Class(), data)` |
 
+### toJSON
+
+Controls what `toJSON()` returns when the store instance is serialized (e.g., via `JSON.stringify()`).
+
+- **Type:** `"state" | "normalize" | "info" | "id" | "null" | "undefined" | "empty"`
+- **Default:** `"state"`
+
+```ts
+// Default: serialize raw state
+const userStore = store({
+  name: "user",
+  state: { name: "John", age: 30 },
+  // toJSON defaults to "state"
+});
+
+// Use normalize function (consistent with dehydrate)
+const sessionStore = store({
+  name: "session",
+  state: {
+    lastLogin: new Date("2024-01-01"),
+    items: new Set(["a", "b"]),
+  },
+  normalize: (state) => ({
+    lastLogin: state.lastLogin.toISOString(),
+    items: Array.from(state.items),
+  }),
+  toJSON: "normalize", // Uses normalize() for JSON.stringify
+});
+
+// Return store metadata only
+const debugStore = store({
+  name: "debug",
+  state: { sensitive: "data" },
+  toJSON: "info", // { id: "debug:1", name: "debug" }
+});
+
+// Return just the ID string
+const idStore = store({
+  name: "id",
+  state: { data: "..." },
+  toJSON: "id", // "id:1"
+});
+
+// Explicit null (useful for nested stores)
+const nestedStore = store({
+  name: "nested",
+  state: { value: "secret" },
+  toJSON: "null", // null
+});
+
+// Completely omit from JSON
+const hiddenStore = store({
+  name: "hidden",
+  state: { sensitive: "data" },
+  toJSON: "undefined", // undefined (omitted from JSON.stringify)
+});
+
+// Empty object marker
+const emptyStore = store({
+  name: "empty",
+  state: { data: "..." },
+  toJSON: "empty", // {}
+});
+```
+
+**Use cases:**
+
+| Mode | Returns | JSON Output | Use Case |
+|------|---------|------------|----------|
+| `"state"` | Raw state | Full state object | Default behavior |
+| `"normalize"` | Normalized state | Normalized data | Consistent serialization format |
+| `"info"` | `{ id, name }` | `{"id":"user:1","name":"user"}` | Debugging with metadata |
+| `"id"` | ID string | `"user:1"` | Simple identifier reference |
+| `"null"` | `null` | `null` | Explicit non-serializable marker (nested stores) |
+| `"undefined"` | `undefined` | Omitted | Complete hiding from serialization |
+| `"empty"` | `{}` | `{}` | Structure marker without data |
+
+**Example: Nested stores**
+
+```ts
+const childStore = store({
+  name: "child",
+  state: { value: "secret" },
+  toJSON: "null", // Prevents serializing nested store data
+});
+
+const parentStore = store({
+  name: "parent",
+  state: { data: "public", child: null as any },
+  setup({ get }) {
+    const [childState, childActions, childInstance] = get(childStore);
+    // Store instance in state (for reference)
+    return {};
+  },
+});
+
+// When serializing parentStore, child serializes as null
+const serialized = JSON.stringify(parentStore);
+// Result: {"data":"public","child":null}
+```
+
 ## Setup Context (StoreContext)
 
 The `setup` function receives a `StoreContext` object with the following properties and methods:

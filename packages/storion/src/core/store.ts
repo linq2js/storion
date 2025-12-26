@@ -17,6 +17,7 @@ import {
   type ReactiveActions,
   type Equality,
   type AutoDisposeOptions,
+  type ToJSONMode,
 } from "../types";
 
 import { produce } from "immer";
@@ -714,9 +715,36 @@ export function createStoreInstance<
   // After this, any write creates a new currentState object
   initialState = currentState;
 
+  // ==========================================================================
+  // toJSON Implementation
+  // ==========================================================================
+
+  const toJSONMode: ToJSONMode = options.toJSON ?? "state";
+
+  const toJSONImpl = (): unknown => {
+    switch (toJSONMode) {
+      case "state":
+        return currentState;
+      case "normalize": {
+        const normalizer = options.normalize;
+        return normalizer ? normalizer(currentState) : currentState;
+      }
+      case "info":
+        return { id: storeId, name: spec.displayName };
+      case "id":
+        return storeId;
+      case "null":
+        return null;
+      case "undefined":
+        return undefined;
+      case "empty":
+        return {};
+    }
+  };
+
   Object.assign(instance, {
     deps: Array.from(deps),
-    toJSON: () => currentState,
+    toJSON: toJSONImpl,
   });
 
   deps.clear();

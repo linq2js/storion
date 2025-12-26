@@ -11,6 +11,82 @@ import { resolveEquality } from "./equality";
 import { getHooks, withHooks, type ReadEvent } from "./tracking";
 import { HooksContextError } from "../errors";
 
+// =============================================================================
+// TYPES
+// =============================================================================
+
+/** Method map for pick.wrap - maps names to selector functions */
+type MethodMap = Record<string, (...args: any[]) => any>;
+
+/** Capitalize first letter of a string */
+type Capitalize<S extends string> = S extends `${infer F}${infer R}`
+  ? `${Uppercase<F>}${R}`
+  : S;
+
+/** Add prefix to method names and capitalize */
+type PrefixedMethods<TPrefix extends string, TMethods extends MethodMap> = {
+  [K in keyof TMethods as `${TPrefix}${Capitalize<K & string>}`]: TMethods[K];
+};
+
+/** Pick function interface with wrap method */
+export interface PickFn {
+  /** Pick a computed value with fine-grained change detection */
+  <T>(selector: () => T, equality?: PickEquality<T>): T;
+
+  /**
+   * Wrap a single function so it returns pick-wrapped results.
+   *
+   * @example
+   * ```ts
+   * const getFullName = pick.wrap(
+   *   () => `${state.firstName} ${state.lastName}`,
+   *   "strict"
+   * );
+   * // In selector:
+   * return { fullName: getFullName() };
+   * ```
+   */
+  wrap<TArgs extends any[], TResult>(
+    fn: (...args: TArgs) => TResult,
+    equality?: PickEquality<TResult>
+  ): (...args: TArgs) => TResult;
+
+  /**
+   * Wrap multiple methods with a prefix.
+   *
+   * @example
+   * ```ts
+   * const methods = pick.wrap("pick", {
+   *   count: () => state.count,
+   *   name: () => state.name,
+   * });
+   * // Returns: { pickCount: () => state.count, pickName: () => state.name }
+   * ```
+   */
+  wrap<TPrefix extends string, TMethods extends MethodMap>(
+    prefix: TPrefix,
+    methods: TMethods,
+    equality?: PickEquality<any>
+  ): PrefixedMethods<TPrefix, TMethods>;
+
+  /**
+   * Wrap multiple methods without a prefix.
+   *
+   * @example
+   * ```ts
+   * const methods = pick.wrap({
+   *   count: () => state.count,
+   *   name: () => state.name,
+   * });
+   * // Returns: { count: () => pick(() => state.count), name: () => pick(() => state.name) }
+   * ```
+   */
+  wrap<TMethods extends MethodMap>(
+    methods: TMethods,
+    equality?: PickEquality<any>
+  ): TMethods;
+}
+
 /** Auto-increment counter for unique pick keys */
 let pickIdCounter = 0;
 
@@ -52,7 +128,7 @@ let pickIdCounter = 0;
  * @returns The computed value
  * @throws Error if called outside of effect/useStore context
  */
-export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
+function pickImpl<T>(selector: () => T, equality?: PickEquality<T>): T {
   const parentHooks = getHooks();
 
   // Must be inside an onRead context (effect or useStore)
@@ -155,3 +231,84 @@ export function pick<T>(selector: () => T, equality?: PickEquality<T>): T {
 
   return currentValue;
 }
+
+// =============================================================================
+// pick.wrap IMPLEMENTATION
+// =============================================================================
+
+/**
+ * Capitalize first letter of a string at runtime.
+ */
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
+ * Wrap a function so its result is automatically wrapped with pick().
+ */
+function wrapSingleFn<TArgs extends any[], TResult>(
+  fn: (...args: TArgs) => TResult,
+  equality?: PickEquality<TResult>
+): (...args: TArgs) => TResult {
+  return (...args: TArgs): TResult => {
+    return pick(() => fn(...args), equality);
+  };
+}
+
+/**
+ * Wrap multiple methods, optionally with a prefix.
+ */
+function wrapMethods<TMethods extends MethodMap>(
+  methods: TMethods,
+  prefix: string,
+  equality?: PickEquality<any>
+): MethodMap {
+  const result: MethodMap = {};
+
+  for (const key of Object.keys(methods)) {
+    const fn = methods[key];
+    const newKey = prefix ? `${prefix}${capitalize(key)}` : key;
+    result[newKey] = wrapSingleFn(fn, equality);
+  }
+
+  return result;
+}
+
+/**
+ * pick.wrap - Wrap functions to automatically use pick().
+ *
+ * Overloads:
+ * 1. wrap(fn, equality?) - Wrap a single function
+ * 2. wrap(prefix, methods, equality?) - Wrap multiple methods with prefix
+ * 3. wrap(methods, equality?) - Wrap multiple methods without prefix
+ */
+function pickWrap(
+  fnOrPrefixOrMethods: ((...args: any[]) => any) | string | MethodMap,
+  equalityOrMethods?: PickEquality<any> | MethodMap,
+  equalityForPrefixed?: PickEquality<any>
+): any {
+  // Overload 1: wrap(fn, equality?)
+  if (typeof fnOrPrefixOrMethods === "function") {
+    return wrapSingleFn(
+      fnOrPrefixOrMethods,
+      equalityOrMethods as PickEquality<any>
+    );
+  }
+
+  // Overload 2: wrap(prefix, methods, equality?)
+  if (typeof fnOrPrefixOrMethods === "string") {
+    const prefix = fnOrPrefixOrMethods;
+    const methods = equalityOrMethods as MethodMap;
+    return wrapMethods(methods, prefix, equalityForPrefixed);
+  }
+
+  // Overload 3: wrap(methods, equality?)
+  const methods = fnOrPrefixOrMethods;
+  return wrapMethods(methods, "", equalityOrMethods as PickEquality<any>);
+}
+
+// Attach wrap to pick
+(pickImpl as PickFn).wrap = pickWrap;
+
+/** pick function with wrap method attached */
+export const pick: PickFn = pickImpl as PickFn;

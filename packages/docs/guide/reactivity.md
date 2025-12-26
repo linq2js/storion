@@ -66,7 +66,7 @@ const { profile } = useStore(({ get }) => {
 
 ### Fine-grained with pick()
 
-Use `pick()` for more precise tracking:
+Use [`pick()`](/api/pick) for more precise tracking:
 
 ```tsx
 import { pick } from "storion";
@@ -133,7 +133,7 @@ const todoStore = store({
 
 ### Selector-Level Equality
 
-Override equality in individual selectors using `pick()`:
+Override equality in individual selectors using [`pick()`](/api/pick):
 
 ```tsx
 import { pick, shallowEqual, deepEqual } from "storion";
@@ -157,6 +157,24 @@ const result = useStore(({ get }) => {
     ),
   };
 });
+```
+
+### Reusable Selectors with pick.wrap()
+
+Use [`pick.wrap()`](/api/pick#pickwrap) to create reusable selector functions:
+
+```tsx
+import { pick } from "storion/react";
+
+// Create reusable selectors
+const selectors = {
+  fullName: pick.wrap(() => `${state.firstName} ${state.lastName}`),
+  itemCount: pick.wrap(() => state.items.length),
+  activeItems: pick.wrap(() => state.items.filter(i => !i.done), "shallow"),
+};
+
+// Use across multiple components
+const { fullName } = useStore(() => ({ fullName: selectors.fullName() }));
 ```
 
 ### Store vs Selector Equality
@@ -350,7 +368,7 @@ const myStore = store({
 | ----------------- | ------------------------------------------------- |
 | **Auto-tracking** | Reading state creates subscriptions automatically |
 | **First-level**   | By default, tracks immediate properties           |
-| **pick()**        | Fine-grained tracking for nested values           |
+| **[pick()](/api/pick)** | Fine-grained tracking for nested values           |
 | **Equality**      | Customize how changes are detected                |
 | **Batching**      | Multiple changes = one notification               |
 | **untrack()**     | Read without subscribing                          |
