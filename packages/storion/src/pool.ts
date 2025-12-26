@@ -29,6 +29,10 @@ export interface Pool<TKey, TValue> {
   values(): IterableIterator<TValue>;
   /** Iterate over [key, value] pairs. */
   entries(): IterableIterator<[TKey, TValue]>;
+  /** Subscribe to changes in the pool. */
+  on(
+    listener: (event: PoolChangeEvent<TKey, TValue, "add" | "remove">) => void
+  ): VoidFunction;
 }
 
 export interface PoolChangeEvent<TKey, TValue, TType extends "add" | "remove"> {
@@ -134,6 +138,18 @@ export function pool<TValue, TKey = unknown>(
       onRemoved.emit(event);
     }
   };
+
+  function on(
+    listener: (event: PoolChangeEvent<TKey, TValue, "add" | "remove">) => void
+  ) {
+    const unsubscribeAdded = onAdded.on(listener);
+    const unsubscribeRemoved = onRemoved.on(listener);
+
+    return () => {
+      unsubscribeAdded();
+      unsubscribeRemoved();
+    };
+  }
 
   if (options?.onAdded) {
     onAdded.on(options.onAdded);
@@ -252,6 +268,7 @@ export function pool<TValue, TKey = unknown>(
         for (const entry of map.values())
           yield [entry.key, entry.value] as [TKey, TValue];
       },
+      on,
     }) as Pool<TKey, TValue>;
   }
 
@@ -391,5 +408,6 @@ export function pool<TValue, TKey = unknown>(
     entries() {
       return map.entries();
     },
+    on,
   }) as Pool<TKey, TValue>;
 }
