@@ -6,3 +6,4 @@ export { MutationDemo } from "./MutationDemo";
 export { NetworkDemo } from "./NetworkDemo";
 export { AbortableDemo } from "./AbortableDemo";
 export { ListDemo } from "./ListDemo";
+export { MixinDemo } from "./MixinDemo";

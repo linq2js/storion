@@ -502,6 +502,81 @@ export const headerMixin = (ctx: SelectorContext) => ({
 | Isolated hook with own state | Custom hook with `useStore` |
 | Third-party hook integration | Custom hook with `useStore` |
 
+### Shorthand: Array and Object Syntax
+
+For cleaner mixin composition, `useStore` accepts arrays and objects directly:
+
+**Array syntax (MergeMixin)** — Merge multiple mixins:
+
+```tsx
+// Direct mixin returns object that gets spread
+const selectUser = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return { name: state.name, email: state.email };
+};
+
+// Named mixin maps key to result
+const selectCount = (ctx: SelectorContext) => {
+  const [state] = ctx.get(counterStore);
+  return state.count;
+};
+
+function Component() {
+  // Array merges all results
+  const { name, email, count } = useStore([
+    selectUser,            // → { name, email } spread into result
+    { count: selectCount } // → { count: number }
+  ]);
+  
+  return <div>{name}: {count}</div>;
+}
+```
+
+**Object syntax (MixinMap)** — Map keys to mixin results:
+
+```tsx
+const selectName = (ctx: SelectorContext) => ctx.get(userStore)[0].name;
+const selectAge = (ctx: SelectorContext) => ctx.get(userStore)[0].age;
+const selectIncrement = (ctx: SelectorContext) => ctx.get(counterStore)[1].increment;
+
+function Component() {
+  // Each key maps to its mixin's return value
+  const { userName, userAge, inc } = useStore({
+    userName: selectName,   // string
+    userAge: selectAge,     // number  
+    inc: selectIncrement,   // () => void
+  });
+  
+  return (
+    <div>
+      <p>{userName}, age {userAge}</p>
+      <button onClick={inc}>+</button>
+    </div>
+  );
+}
+```
+
+**Comparison:**
+
+```tsx
+// Standard selector - most flexible
+const data = useStore((ctx) => ({
+  ...ctx.mixin(userMixin),
+  ...ctx.mixin(cartMixin),
+}));
+
+// Array shorthand - cleaner composition
+const data = useStore([userMixin, cartMixin]);
+
+// Object shorthand - explicit key mapping
+const data = useStore({
+  user: userMixin,
+  cart: cartMixin,
+});
+```
+
+See [`useStore()` API reference](/api/use-store#mixin-shorthand-overloads) for more details.
+
 ### Real-World Example
 
 ```tsx

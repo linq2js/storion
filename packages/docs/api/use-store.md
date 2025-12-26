@@ -2,10 +2,17 @@
 
 React hook for accessing stores with automatic reactivity.
 
-## Signature
+## Signatures
 
 ```ts
+// Standard selector
 function useStore<T>(selector: (ctx: SelectorContext) => T): T;
+
+// Merge mixins (array)
+function useStore<const T extends MergeMixin>(mixins: T): MergeMixinResult<T>;
+
+// Mixin map (object)
+function useStore<const T extends MixinMap>(mixinMap: T): MixinMapResult<T>;
 ```
 
 ## Parameters
@@ -320,6 +327,131 @@ function AnalyticsTracker() {
 | Store-only effects | Store's `setup()` |
 | Needs refs/props/hooks | Selector's `effect()` |
 | Component lifecycle | Selector's `effect()` |
+
+## Mixin Shorthand Overloads
+
+For cleaner code when composing mixins, `useStore` accepts arrays and objects of mixins directly.
+
+### MergeMixin (Array)
+
+Pass an array to merge multiple mixins into one result:
+
+```tsx
+import { useStore } from "storion/react";
+import type { SelectorContext } from "storion";
+
+// Direct mixin - returns object that gets spread
+const selectUser = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return { name: state.name, email: state.email };
+};
+
+// Named mixin - wrapped in object to map key to result
+const selectCount = (ctx: SelectorContext) => {
+  const [state] = ctx.get(counterStore);
+  return state.count;
+};
+
+const selectIncrement = (ctx: SelectorContext) => {
+  const [, actions] = ctx.get(counterStore);
+  return actions.increment;
+};
+
+function Component() {
+  // Mix direct and named mixins
+  const result = useStore([
+    selectUser,                    // → { name, email } (spread)
+    { count: selectCount },        // → { count: number }
+    { increment: selectIncrement } // → { increment: () => void }
+  ]);
+  
+  // result: { name: string, email: string, count: number, increment: () => void }
+  return (
+    <div>
+      <p>{result.name}: {result.count}</p>
+      <button onClick={result.increment}>+</button>
+    </div>
+  );
+}
+```
+
+**Type inference** with `const` ensures exact types:
+
+```ts
+// TypeScript infers: { name: string, email: string, count: number }
+const result = useStore([
+  selectUser,
+  { count: selectCount }
+] as const);
+```
+
+### MixinMap (Object)
+
+Pass an object to map keys to mixin results:
+
+```tsx
+const selectName = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return state.name;
+};
+
+const selectAge = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return state.age;
+};
+
+const selectIncrement = (ctx: SelectorContext) => {
+  const [, actions] = ctx.get(counterStore);
+  return actions.increment;
+};
+
+function Component() {
+  // Each key maps to its mixin's result
+  const { userName, userAge, inc } = useStore({
+    userName: selectName,   // string
+    userAge: selectAge,     // number
+    inc: selectIncrement,   // () => void
+  });
+  
+  return (
+    <div>
+      <p>{userName}, age {userAge}</p>
+      <button onClick={inc}>+</button>
+    </div>
+  );
+}
+```
+
+### When to Use
+
+| Pattern | Use Case |
+|---------|----------|
+| `useStore(selector)` | Full control, custom logic |
+| `useStore([...mixins])` | Merging multiple reusable mixins |
+| `useStore({...})` | Mapping keys to mixin results |
+
+### Comparison
+
+```tsx
+// Standard selector - most flexible
+const { name, count } = useStore((ctx) => {
+  const [user] = ctx.get(userStore);
+  const [counter] = ctx.get(counterStore);
+  return { name: user.name, count: counter.count };
+});
+
+// MergeMixin array - cleaner composition
+const { name, count } = useStore([
+  (ctx) => ({ name: ctx.get(userStore)[0].name }),
+  { count: (ctx) => ctx.get(counterStore)[0].count }
+]);
+
+// MixinMap object - cleanest for simple cases
+const { name, count } = useStore({
+  name: (ctx) => ctx.get(userStore)[0].name,
+  count: (ctx) => ctx.get(counterStore)[0].count,
+});
+```
 
 ## Component-Local Stores with scoped()
 

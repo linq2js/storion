@@ -12,6 +12,7 @@ import {
   NetworkDemo,
   AbortableDemo,
   ListDemo,
+  MixinDemo,
 } from "./components";
 import { WithStoreDemo } from "./components/WithStoreDemo";
 
@@ -23,6 +24,7 @@ type Tab =
   | "mutations"
   | "network"
   | "selectors"
+  | "mixins"
   | "withStore"
   | "abortable";
 
@@ -68,6 +70,12 @@ const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
     label: "Selectors",
     icon: "🎯",
     description: "Computed values and cross-store composition",
+  },
+  {
+    id: "mixins",
+    label: "Mixins",
+    icon: "🔀",
+    description: "useStore with array and object mixin syntax",
   },
   {
     id: "withStore",
@@ -145,6 +153,7 @@ export function App() {
           {activeTab === "mutations" && <MutationDemo />}
           {activeTab === "network" && <NetworkDemo />}
           {activeTab === "selectors" && <TodoDemo />}
+          {activeTab === "mixins" && <MixinDemo />}
           {activeTab === "withStore" && <WithStoreDemo />}
           {activeTab === "abortable" && <AbortableDemo />}
         </div>
