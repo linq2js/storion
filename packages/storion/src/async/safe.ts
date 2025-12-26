@@ -6,6 +6,7 @@
  */
 
 import { isAbortable, type Abortable } from "./abortable";
+import { toPromise } from "./async";
 
 // =============================================================================
 // UTILITY: isPromiseLike & toPromise
@@ -26,37 +27,6 @@ export function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     "then" in value &&
     typeof (value as any).then === "function"
   );
-}
-
-/**
- * Convert a value or parameterless function to a Promise.
- * Handles: PromiseLike, sync values, functions returning either.
- *
- * @example
- * toPromise(42)                    // Promise.resolve(42)
- * toPromise(Promise.resolve(42))   // Promise.resolve(42)
- * toPromise(() => 42)              // Promise.resolve(42)
- * toPromise(() => fetchData())     // fetchData() promise
- * toPromise(thenable)              // Promise wrapping thenable
- */
-export function toPromise<T>(value: T | (() => T)): Promise<Awaited<T>> {
-  // Function - invoke it first
-  if (typeof value === "function") {
-    try {
-      const result = (value as () => T)();
-      return toPromise(result as T);
-    } catch (e) {
-      return Promise.reject(e);
-    }
-  }
-
-  // PromiseLike - wrap with Promise.resolve for normalization
-  if (isPromiseLike(value)) {
-    return Promise.resolve(value) as Promise<Awaited<T>>;
-  }
-
-  // Sync value
-  return Promise.resolve(value) as Promise<Awaited<T>>;
 }
 
 /**
@@ -591,7 +561,10 @@ export function createSafe(
   // safe.delay
   // ---------------------------------------------------------------------------
 
-  const delay: SafeDelay = (<T = void>(ms: number, resolved?: T): Promise<T> => {
+  const delay: SafeDelay = (<T = void>(
+    ms: number,
+    resolved?: T
+  ): Promise<T> => {
     if (isCancelled()) {
       return new Promise(() => {});
     }

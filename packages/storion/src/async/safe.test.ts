@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  createSafe,
-  isPromiseLike,
-  toPromise,
-  type SafeFnWithUtils,
-} from "./safe";
+import { createSafe, isPromiseLike, type SafeFnWithUtils } from "./safe";
+import { toPromise } from "./async";
 
 describe("isPromiseLike", () => {
   it("should return true for native Promise", () => {
@@ -550,4 +546,3 @@ describe("createSafe", () => {
     });
   });
 });
-

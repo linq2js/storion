@@ -29,10 +29,18 @@ import { AsyncFunctionError, SetupPhaseError } from "../errors";
 import { store } from "../core/store";
 import { createAsyncContext } from "./context";
 import { isAbortable, type Abortable } from "./abortable";
+import { isPromiseLike } from "../utils/isPromiseLike";
 
 // ===== Global Promise Cache for Suspense =====
 
+interface PromiseState<T = any> {
+  status: "pending" | "fulfilled" | "rejected";
+  resolved: T | undefined;
+  rejected: any;
+}
+
 const pendingPromises = new WeakMap<AsyncKey<any>, Promise<any>>();
+const promiseStates = new WeakMap<PromiseLike<any>, PromiseState>();
 
 /**
  * Get the pending promise for an async state (for Suspense).
@@ -45,6 +53,37 @@ export function getPendingPromise<T>(
     return pendingPromises.get(state.__key) as Promise<T> | undefined;
   }
   return undefined;
+}
+
+/**
+ * Convert a value or parameterless function to a Promise.
+ * Handles: PromiseLike, sync values, functions returning either.
+ *
+ * @example
+ * toPromise(42)                    // Promise.resolve(42)
+ * toPromise(Promise.resolve(42))   // Promise.resolve(42)
+ * toPromise(() => 42)              // Promise.resolve(42)
+ * toPromise(() => fetchData())     // fetchData() promise
+ * toPromise(thenable)              // Promise wrapping thenable
+ */
+export function toPromise<T>(value: T | (() => T)): Promise<Awaited<T>> {
+  // PromiseLike - wrap with Promise.resolve for normalization
+  if (isPromiseLike(value)) {
+    return Promise.resolve(value) as Promise<Awaited<T>>;
+  }
+
+  // Function - invoke it first
+  if (typeof value === "function") {
+    try {
+      const result = (value as () => T)();
+      return toPromise(result as T);
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  }
+
+  // Sync value
+  return Promise.resolve(value) as Promise<Awaited<T>>;
 }
 
 // ===== Helper: Ensure async execution (like Promise.try) =====
@@ -973,6 +1012,47 @@ export namespace async {
       "No async state has resolved successfully",
       "pending"
     );
+  }
+
+  /**
+   * Wraps a promise with the state of the promise.
+   * @param promise - The promise to get the state of.
+   * @returns The promise with the state attached.
+   */
+  export function withState<T>(
+    promise: PromiseLike<T>
+  ): PromiseLike<T> & { state: PromiseState<T> } {
+    const s = state(promise);
+    return Object.assign(promise, { state: s });
+  }
+
+  /**
+   * Get the state of a promise.
+   * @param promise - The promise to get the state of.
+   * @returns The state of the promise.
+   */
+  export function state<T>(promise: PromiseLike<T>): PromiseState<T> {
+    const state = promiseStates.get(promise);
+    if (state) {
+      return state;
+    }
+    const newState: PromiseState = {
+      status: "pending",
+      resolved: undefined,
+      rejected: undefined,
+    };
+    promise.then(
+      (value) => {
+        newState.status = "fulfilled";
+        newState.resolved = value;
+      },
+      (error) => {
+        newState.status = "rejected";
+        newState.rejected = error;
+      }
+    );
+    promiseStates.set(promise, newState);
+    return newState;
   }
 
   /**
