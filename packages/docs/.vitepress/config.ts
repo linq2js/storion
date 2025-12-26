@@ -40,7 +40,7 @@ export default withMermaid({
       { text: "Examples", link: "/examples/" },
       { text: "Demos", link: "/demos" },
       {
-        text: "v0.8.0",
+        text: "v0.13.0",
         items: [
           { text: "Changelog", link: "/changelog" },
           { text: "npm", link: "https://www.npmjs.com/package/storion" },
@@ -136,6 +136,7 @@ export default withMermaid({
           text: "Persist",
           items: [
             { text: "persist()", link: "/api/persist-middleware" },
+            { text: "persisted", link: "/api/persisted" },
             { text: "notPersisted", link: "/api/not-persisted" },
           ],
         },

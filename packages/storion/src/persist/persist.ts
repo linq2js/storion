@@ -48,6 +48,11 @@ import { isPromiseLike } from "../utils/isPromiseLike";
 export const notPersisted = meta();
 
 /**
+ * Mark stores or fields as persisted.
+ */
+export const persisted = meta();
+
+/**
  * Result from load function - can be sync or async
  */
 export type PersistLoadResult =
@@ -91,8 +96,45 @@ export interface PersistHandler {
  */
 export interface PersistOptions {
   /**
+   * Only persist stores and fields explicitly marked with `persisted` meta.
+   *
+   * When `false` (default), all stores and fields are persisted unless marked with `notPersisted`.
+   * When `true`, only stores/fields with `persisted()` or `persisted.for(field)` are persisted.
+   *
+   * Note: `notPersisted` always takes priority over `persisted`.
+   *
+   * @example
+   * ```ts
+   * // With persistedOnly: true, only explicitly marked stores/fields are persisted
+   * const userStore = store({
+   *   name: 'user',
+   *   state: { name: '', email: '', temp: '' },
+   *   meta: [
+   *     persisted(),  // marks entire store for persistence
+   *   ],
+   * });
+   *
+   * const settingsStore = store({
+   *   name: 'settings',
+   *   state: { theme: '', fontSize: 14, cache: {} },
+   *   meta: [
+   *     persisted.for(['theme', 'fontSize']),  // only these fields persisted
+   *   ],
+   * });
+   *
+   * persist({
+   *   persistedOnly: true,
+   *   handler: (ctx) => ({ ... }),
+   * });
+   * ```
+   *
+   * @default false
+   */
+  persistedOnly?: boolean;
+
+  /**
    * Filter which stores should be persisted.
-   * If not provided, all stores are persisted.
+   * Called after `persistedOnly` filtering.
    *
    * @param context - The persist context with store instance
    * @returns true to persist, false to skip
@@ -101,7 +143,7 @@ export interface PersistOptions {
 
   /**
    * Filter which fields should be persisted.
-   * If not provided, all fields are persisted.
+   * Called after `persistedOnly` and `notPersisted` filtering.
    *
    * @param context - The persist context with store instance
    * @returns the fields to persist
@@ -239,7 +281,14 @@ export interface PersistOptions {
  * ```
  */
 export function persist(options: PersistOptions): StoreMiddleware {
-  const { filter, fields, handler, onError, force = false } = options;
+  const {
+    persistedOnly = false,
+    filter,
+    fields,
+    handler,
+    onError,
+    force = false,
+  } = options;
 
   return (context) => {
     const { next, meta } = context;
@@ -252,59 +301,98 @@ export function persist(options: PersistOptions): StoreMiddleware {
       store: instance,
     };
 
-    // Skip if filter returns false
-    if (filter && !filter(persistContext)) {
-      return instance;
-    }
+    // =============================================================================
+    // FILTERING PRIORITY:
+    // 1. applyXXX options (handled externally by forStores/forFields wrapper)
+    // 2. notPersisted meta (top priority - always skip)
+    // 3. persistedOnly option (opt-in mode)
+    // 4. filter option (user-defined filter)
+    // =============================================================================
 
-    // Check meta for notPersisted
-    // Note: spec.meta is raw MetaEntry[] from store options
+    // Check meta for notPersisted and persisted
     const notPersistedInfo = meta(notPersisted);
+    const persistedInfo = meta(persisted);
 
-    // Skip entire store if marked as notPersisted at store level
+    // Priority 2: Skip entire store if marked as notPersisted at store level
     if (notPersistedInfo.store === true) {
       return instance;
     }
 
-    // Get fields to exclude from persistence
+    // Priority 3: Check persistedOnly mode
+    if (persistedOnly) {
+      // In persistedOnly mode, store must have persisted meta (store-level or field-level)
+      const hasStoreLevelPersisted = persistedInfo.store === true;
+      const hasFieldLevelPersisted =
+        Object.keys(persistedInfo.fields).length > 0;
+
+      if (!hasStoreLevelPersisted && !hasFieldLevelPersisted) {
+        // No persisted meta at all - skip entire store
+        return instance;
+      }
+    }
+
+    // Priority 4: Skip if filter returns false
+    if (filter && !filter(persistContext)) {
+      return instance;
+    }
+
+    // =============================================================================
+    // FIELD FILTERING
+    // =============================================================================
+
+    // Get base fields from options or spec
+    const baseFields =
+      fields?.(persistContext) ?? (context.spec.fields as string[]);
+
+    // Skip if no fields to persist
+    if (baseFields.length === 0) {
+      return instance;
+    }
+
+    // Get fields to exclude from persistence (notPersisted.for(field))
     const excludedFields = new Set(
       Object.keys(notPersistedInfo.fields).filter(
         (field) => notPersistedInfo.fields[field] === true
       )
     );
 
-    const stateFields =
-      fields?.(persistContext) ?? (context.spec.fields as string[]);
+    // Determine included fields based on persistedOnly mode
+    let stateFields: string[];
 
-    // Skip if no fields to persist
-    if (stateFields.length === 0) {
-      return instance;
+    if (persistedOnly) {
+      const hasStoreLevelPersisted = persistedInfo.store === true;
+
+      if (hasStoreLevelPersisted) {
+        // Store-level persisted: include all base fields (minus excluded)
+        stateFields = baseFields.filter((field) => !excludedFields.has(field));
+      } else {
+        // Field-level persisted only: include only persisted.for(field) fields (minus excluded)
+        const persistedFields = new Set(Object.keys(persistedInfo.fields));
+        stateFields = baseFields.filter(
+          (field) => persistedFields.has(field) && !excludedFields.has(field)
+        );
+      }
+    } else {
+      // Default mode: include all base fields (minus excluded)
+      stateFields = baseFields.filter((field) => !excludedFields.has(field));
     }
 
-    // Check if all state fields are excluded - if so, skip persistence entirely
-    // This is effectively the same as store-level notPersisted()
-    if (excludedFields.size > 0) {
-      const allExcluded =
-        stateFields.length > 0 &&
-        stateFields.every((field) => excludedFields.has(field));
-      if (allExcluded) {
-        // All fields are excluded, nothing to persist
-        return instance;
-      }
+    // Skip if no fields to persist after filtering
+    if (stateFields.length === 0) {
+      return instance;
     }
 
     // Convert stateFields to a Set for efficient lookup
     const includedFields = new Set(stateFields);
 
-    // Filter state to only include specified fields, excluding notPersisted fields
+    // Filter state to only include the computed includedFields
     const filterState = (
       state: Record<string, unknown>
     ): Record<string, unknown> => {
       const filtered: Record<string, unknown> = {};
 
       for (const key in state) {
-        // Only include if field is in includedFields AND not in excludedFields
-        if (includedFields.has(key) && !excludedFields.has(key)) {
+        if (includedFields.has(key)) {
           filtered[key] = state[key];
         }
       }

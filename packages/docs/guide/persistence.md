@@ -42,7 +42,7 @@ Storion's persistence middleware handles all of this declaratively.
 ## Installation
 
 ```ts
-import { persist, notPersisted } from 'storion/persist';
+import { persist, persisted, notPersisted } from 'storion/persist';
 ```
 
 ---
@@ -260,6 +260,94 @@ const userStore = store({
 1. Persistence middleware reads the `notPersisted` meta
 2. When saving, excluded fields are stripped from the state
 3. When loading, excluded fields keep their initial values
+
+---
+
+## Opt-In Persistence
+
+**What's this for?** Only persist stores that explicitly request it.
+
+By default, all stores are persisted. In large apps, you may want the opposite: only persist stores that explicitly opt in using `persisted` meta.
+
+### Enable Opt-In Mode
+
+```ts
+import { persist, persisted } from 'storion/persist';
+
+const app = container({
+  middleware: forStores([
+    persist({
+      persistedOnly: true,  // Only persist stores with `persisted` meta
+      handler: (ctx) => ({
+        load: () => JSON.parse(localStorage.getItem(ctx.displayName) || 'null'),
+        save: (state) => localStorage.setItem(ctx.displayName, JSON.stringify(state)),
+      }),
+    }),
+  ]),
+});
+```
+
+### Mark Stores for Persistence
+
+```ts
+import { persisted, notPersisted } from 'storion/persist';
+
+// ✅ This store WILL be persisted (store-level opt-in)
+const userStore = store({
+  name: 'user',
+  state: { name: '', email: '', avatar: '' },
+  meta: [persisted()],  // All fields persisted
+  setup: () => ({}),
+});
+
+// ✅ This store WILL be persisted (field-level opt-in)
+const settingsStore = store({
+  name: 'settings',
+  state: { theme: 'light', fontSize: 14, cache: {} },
+  meta: [
+    persisted.for(['theme', 'fontSize']),  // Only these fields
+  ],
+  setup: () => ({}),
+});
+
+// ❌ This store will NOT be persisted (no persisted meta)
+const uiStore = store({
+  name: 'ui',
+  state: { sidebarOpen: true, modal: null },
+  setup: () => ({}),
+});
+```
+
+### Filtering Priority
+
+When both `persisted` and `notPersisted` are present, `notPersisted` always wins:
+
+```ts
+const mixedStore = store({
+  name: 'mixed',
+  state: { name: '', password: '', token: '' },
+  meta: [
+    persisted(),                          // All fields should persist
+    notPersisted.for(['password', 'token']), // Except these!
+  ],
+});
+// Result: Only 'name' is persisted
+```
+
+**Full priority order:**
+
+1. `notPersisted` — Always excludes (highest priority)
+2. `persistedOnly` — Skips stores without `persisted` meta
+3. `filter` option — Your custom filter function
+
+### When to Use Opt-In Mode
+
+| Scenario | Approach |
+|----------|----------|
+| Large app, few stores need persistence | Use `persistedOnly: true` |
+| Most stores need persistence | Use default + `notPersisted` for exceptions |
+| Security/compliance requires explicit marking | Use `persistedOnly: true` |
+| Simple app with few stores | Use default (simpler) |
 
 ---
 
@@ -711,6 +799,7 @@ const userStore = store({
 
 - **[store() API](/api/store)** — Store options including `normalize`/`denormalize`
 - **[persist() API](/api/persist-middleware)** — Middleware options reference
+- **[persisted](/api/persisted)** — Opt-in persistence meta
 - **[notPersisted](/api/not-persisted)** — Excluding stores and fields
 - **[Meta](/guide/meta)** — How meta entries work
 - **[Middleware](/guide/middleware)** — How middleware works

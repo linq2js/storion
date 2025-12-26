@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.0] - 2024-12-27
+
+### Added
+
+- `persist()` middleware now supports `persistedOnly` option for opt-in persistence mode
+
+  ```ts
+  import { persist, persisted, notPersisted } from "storion/persist";
+
+  // Only persist stores/fields explicitly marked with persisted meta
+  persist({
+    persistedOnly: true,
+    handler: (ctx) => ({
+      load: () => JSON.parse(localStorage.getItem(ctx.displayName) || "null"),
+      save: (state) => localStorage.setItem(ctx.displayName, JSON.stringify(state)),
+    }),
+  });
+
+  // Store-level: entire store persisted
+  const userStore = store({
+    name: "user",
+    state: { name: "", email: "" },
+    meta: [persisted()],
+  });
+
+  // Field-level: only specific fields persisted
+  const settingsStore = store({
+    name: "settings",
+    state: { theme: "", fontSize: 14, cache: {} },
+    meta: [persisted.for(["theme", "fontSize"])],
+  });
+  ```
+
+  Filtering priority: `notPersisted` (top) → `persistedOnly` → `filter` option
+
+---
+
 ## [0.12.0] - 2024-12-27
 
 ### Added

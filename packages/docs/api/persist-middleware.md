@@ -21,7 +21,10 @@ interface PersistHandler {
 }
 
 interface PersistOptions {
-  // Filter which stores to persist
+  // Only persist stores/fields with `persisted` meta (default: false)
+  persistedOnly?: boolean;
+
+  // Filter which stores to persist (called after persistedOnly)
   filter?: (context: PersistContext) => boolean;
 
   // Filter which fields to persist (for multi-storage patterns)
@@ -59,6 +62,7 @@ Storion's `persist` takes a **minimal, composable approach** compared to other s
 | **Save on change**   | Calls your `save()` whenever store state changes           |
 | **Field filtering**  | Filter which fields to persist via `fields` option         |
 | **Store filtering**  | Skip stores via `filter` option or `notPersisted` meta     |
+| **Opt-in mode**      | Only persist `persisted`-marked stores via `persistedOnly` |
 | **Meta integration** | Query store metadata for conditional persistence           |
 | **Async init**       | Handler can be async (for IndexedDB, remote storage, etc.) |
 | **Error handling**   | Unified `onError` callback for all operations              |
@@ -348,6 +352,95 @@ const userStore = store({
 });
 ```
 
+## Opt-In Persistence with persistedOnly
+
+By default, all stores are persisted. Use `persistedOnly: true` to only persist stores/fields explicitly marked with `persisted` meta:
+
+```ts
+import { store, container, forStores } from 'storion';
+import { persist, persisted, notPersisted } from 'storion/persist';
+
+// Store-level: entire store persisted
+const userStore = store({
+  name: 'user',
+  state: { name: '', email: '', avatar: '' },
+  meta: [persisted()],  // All fields persisted
+  setup: () => ({}),
+});
+
+// Field-level: only specific fields persisted
+const settingsStore = store({
+  name: 'settings',
+  state: { theme: 'light', fontSize: 14, cache: {} },
+  meta: [
+    persisted.for(['theme', 'fontSize']),  // Only these fields
+  ],
+  setup: () => ({}),
+});
+
+// No meta: store NOT persisted when persistedOnly: true
+const tempStore = store({
+  name: 'temp',
+  state: { data: null },
+  setup: () => ({}),
+});
+
+const app = container({
+  middleware: forStores([
+    persist({
+      persistedOnly: true,  // Only persist marked stores/fields
+      handler: (ctx) => {
+        const key = `app:${ctx.displayName}`;
+        return {
+          load: () => JSON.parse(localStorage.getItem(key) || 'null'),
+          save: (state) => localStorage.setItem(key, JSON.stringify(state)),
+        };
+      },
+    }),
+  ]),
+});
+```
+
+### Filtering Priority
+
+When `persistedOnly: true`, filtering happens in this order:
+
+1. **notPersisted** (top priority) - Always excludes, even if `persisted` is present
+2. **persistedOnly** - Skips stores without any `persisted` meta
+3. **filter option** - Your custom filter function
+
+```ts
+// notPersisted always wins
+const conflictingStore = store({
+  name: 'conflict',
+  state: { data: '' },
+  meta: [
+    persisted(),       // Wants to persist
+    notPersisted(),    // But this wins - store is skipped
+  ],
+});
+
+// Field-level priority
+const mixedStore = store({
+  name: 'mixed',
+  state: { name: '', password: '', token: '' },
+  meta: [
+    persisted(),                           // All fields persisted
+    notPersisted.for(['password', 'token']), // Except these
+  ],
+});
+// Only 'name' is persisted
+```
+
+### When to Use persistedOnly
+
+| Scenario | Use `persistedOnly: true` |
+|----------|---------------------------|
+| Large app with many stores, few need persistence | ✅ Yes |
+| Most stores need persistence, few exceptions | ❌ No, use `notPersisted` |
+| Explicit opt-in for security/compliance | ✅ Yes |
+| Simple app with few stores | ❌ No, default is simpler |
+
 ## Error Handling
 
 ```ts
@@ -508,6 +601,7 @@ const mixedStore = store({
 
 ## See Also
 
+- [persisted](/api/persisted) - Meta for opt-in persistence with `persistedOnly`
 - [notPersisted](/api/not-persisted) - Meta for excluding from persistence
 - [container()](/api/container) - Container with middleware
 - [Persistence Guide](/guide/persistence) - Deep dive into persistence
