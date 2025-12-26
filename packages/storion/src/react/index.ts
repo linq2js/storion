@@ -13,6 +13,8 @@ export {
   type UseStoreFn,
   type FromSelector,
   type UseFromStore,
+  type FromSelectorWithArgs,
+  type UseFromSelectorHook,
 } from "./useStore";
 export {
   withStore,

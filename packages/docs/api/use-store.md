@@ -148,6 +148,45 @@ function UserProfile({ userId }: { userId: string }) {
 
 ## Performance Tips
 
+### Use Mixins Instead of Multiple useStore()
+
+When accessing multiple stores, prefer selector mixins over multiple hooks:
+
+```tsx
+// ❌ INEFFICIENT: Each useStore creates its own subscription system
+function Header() {
+  const { name } = useUserHook();   // 1st useStore internals
+  const { count } = useCartHook();  // 2nd useStore internals
+  return <div>{name}: {count}</div>;
+}
+
+// ✅ EFFICIENT: Single useStore with mixins
+const userMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return { name: state.name };
+};
+
+const cartMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(cartStore);
+  return { count: state.items.length };
+};
+
+function Header() {
+  const { name, count } = useStore((ctx) => ({
+    ...ctx.mixin(userMixin),
+    ...ctx.mixin(cartMixin),
+  }));
+  return <div>{name}: {count}</div>;
+}
+```
+
+**Why mixins are more efficient:**
+- Single subscription system vs N separate systems
+- Shared dependency tracking (same field isn't tracked twice)
+- One set of React hooks instead of N sets
+
+See [Selector Mixins Guide](/guide/react/use-store#selector-mixins-vs-multiple-hooks) for detailed patterns.
+
 ### Select Only What You Need
 
 ```tsx
@@ -363,11 +402,15 @@ const { dirty, reset } = useStore(({ scoped }) => {
 
 ## useStore.from()
 
-Create a pre-bound hook for a specific store. Simplifies the common pattern of accessing a single store by providing state and actions directly to the selector.
+Create a pre-bound hook for easier store access. Has two overloads:
+
+1. **From store spec** — Provides state and actions directly to the selector
+2. **From selector function** — Creates a parameterized hook from a selector
 
 ### Signature
 
 ```ts
+// Overload 1: From store spec
 function useStore.from<TState, TActions>(
   spec: StoreSpec<TState, TActions>
 ): UseFromStore<TState, TActions>;
@@ -375,9 +418,14 @@ function useStore.from<TState, TActions>(
 type UseFromStore<TState, TActions> = <T extends object>(
   selector: (state: TState, actions: TActions, ctx: SelectorContext) => T
 ) => StableResult<T>;
+
+// Overload 2: From selector function
+function useStore.from<TResult, TArgs extends unknown[]>(
+  selector: (ctx: SelectorContext, ...args: TArgs) => TResult
+): (...args: TArgs) => StableResult<TResult>;
 ```
 
-### Basic Example
+### Basic Example (From Store Spec)
 
 ```tsx
 import { useStore } from "storion/react";
@@ -491,14 +539,77 @@ function DoubledCounter() {
 }
 ```
 
+### From Selector Function
+
+Create parameterized hooks from selector functions. Useful for reusable hooks with arguments:
+
+```tsx
+import { useStore } from "storion/react";
+import { userStore } from "./stores";
+
+// Create a parameterized hook
+const useUserById = useStore.from((ctx, userId: string) => {
+  const [state] = ctx.get(userStore);
+  return { user: state.users[userId] };
+});
+
+// Use in components
+function UserCard({ userId }: { userId: string }) {
+  const { user } = useUserById(userId);
+  return <div>{user?.name}</div>;
+}
+```
+
+### Multiple Arguments
+
+```tsx
+const usePaginatedItems = useStore.from(
+  (ctx, page: number, pageSize: number) => {
+    const [state] = ctx.get(itemStore);
+    const start = page * pageSize;
+    return {
+      items: state.items.slice(start, start + pageSize),
+      total: state.items.length,
+    };
+  }
+);
+
+function ItemList({ page }: { page: number }) {
+  const { items, total } = usePaginatedItems(page, 10);
+
+  return (
+    <div>
+      <p>Showing {items.length} of {total}</p>
+      {items.map(item => <Item key={item.id} {...item} />)}
+    </div>
+  );
+}
+```
+
+### Zero Arguments
+
+```tsx
+// Create a simple hook without arguments
+const useCurrentUser = useStore.from((ctx) => {
+  const [state] = ctx.get(userStore);
+  return { user: state.currentUser };
+});
+
+function Header() {
+  const { user } = useCurrentUser();
+  return <h1>Welcome, {user?.name}</h1>;
+}
+```
+
 ### When to Use
 
 | Scenario | Recommendation |
 |----------|----------------|
-| Single store access | ✅ Use `useStore.from()` |
+| Single store, simple selector | ✅ `useStore.from(spec)` |
+| Parameterized selector | ✅ `useStore.from(selector)` |
 | Multiple stores | Use regular `useStore()` |
 | Reusable store hook | ✅ Export `useStore.from(spec)` |
-| Module-level hook | ✅ Define once, use everywhere |
+| Reusable parameterized hook | ✅ Export `useStore.from(selector)` |
 
 ### Module Pattern
 
@@ -519,11 +630,22 @@ export const counterStore = store({
 
 // Export pre-bound hook alongside the store
 export const useCounter = useStore.from(counterStore);
+
+// Export parameterized hooks
+export const useCounterWithMultiplier = useStore.from(
+  (ctx, multiplier: number) => {
+    const [state, actions] = ctx.get(counterStore);
+    return {
+      count: state.count * multiplier,
+      increment: actions.increment,
+    };
+  }
+);
 ```
 
 ```tsx
 // components/Counter.tsx
-import { useCounter } from "../stores/counter";
+import { useCounter, useCounterWithMultiplier } from "../stores/counter";
 
 function Counter() {
   const { count, increment } = useCounter((state, actions) => ({
@@ -531,6 +653,11 @@ function Counter() {
     increment: actions.increment,
   }));
 
+  return <button onClick={increment}>{count}</button>;
+}
+
+function DoubledCounter() {
+  const { count, increment } = useCounterWithMultiplier(2);
   return <button onClick={increment}>{count}</button>;
 }
 ```

@@ -1545,4 +1545,183 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(result.current.doubled).toBe(0);
     });
   });
+
+  describe("useStore.from() with selector function", () => {
+    it("should create a parameterized hook from selector function", () => {
+      const userStore = store({
+        name: "users",
+        state: {
+          users: { "1": { name: "Alice" }, "2": { name: "Bob" } } as Record<
+            string,
+            { name: string }
+          >,
+        },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+
+      const useUserById = useStore.from((ctx, userId: string) => {
+        const [state] = ctx.get(userStore);
+        return { user: state.users[userId] };
+      });
+
+      const { result } = renderHook(() => useUserById("1"), {
+        wrapper: createWrapper(stores),
+      });
+
+      expect(result.current.user).toEqual({ name: "Alice" });
+    });
+
+    it("should support multiple arguments", () => {
+      const dataStore = store({
+        name: "data",
+        state: {
+          items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+
+      const usePaginatedItems = useStore.from(
+        (ctx, page: number, pageSize: number) => {
+          const [state] = ctx.get(dataStore);
+          const start = page * pageSize;
+          return { items: state.items.slice(start, start + pageSize) };
+        }
+      );
+
+      const { result } = renderHook(() => usePaginatedItems(0, 3), {
+        wrapper: createWrapper(stores),
+      });
+
+      expect(result.current.items).toEqual([1, 2, 3]);
+    });
+
+    it("should re-render when arguments change", () => {
+      const userStore = store({
+        name: "users",
+        state: {
+          users: { "1": { name: "Alice" }, "2": { name: "Bob" } } as Record<
+            string,
+            { name: string }
+          >,
+        },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+
+      const useUserById = useStore.from((ctx, userId: string) => {
+        const [state] = ctx.get(userStore);
+        return { user: state.users[userId] };
+      });
+
+      const { result, rerender } = renderHook(
+        ({ userId }) => useUserById(userId),
+        {
+          wrapper: createWrapper(stores),
+          initialProps: { userId: "1" },
+        }
+      );
+
+      expect(result.current.user).toEqual({ name: "Alice" });
+
+      rerender({ userId: "2" });
+
+      expect(result.current.user).toEqual({ name: "Bob" });
+    });
+
+    it("should re-render when state changes", () => {
+      const counterStore = store({
+        name: "counter",
+        state: { counts: { a: 0, b: 0 } as Record<string, number> },
+        setup: ({ state }) => ({
+          increment: (key: string) => {
+            state.counts = { ...state.counts, [key]: state.counts[key] + 1 };
+          },
+        }),
+      });
+
+      const stores = container();
+      const instance = stores.get(counterStore);
+
+      const useCountByKey = useStore.from((ctx, key: string) => {
+        const [state] = ctx.get(counterStore);
+        return { count: state.counts[key] };
+      });
+
+      const { result } = renderHook(() => useCountByKey("a"), {
+        wrapper: createWrapper(stores),
+      });
+
+      expect(result.current.count).toBe(0);
+
+      act(() => {
+        instance.actions.increment("a");
+      });
+
+      expect(result.current.count).toBe(1);
+    });
+
+    it("should support zero arguments", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: () => ({}),
+      });
+
+      const stores = container();
+
+      const useCounterState = useStore.from((ctx) => {
+        const [state] = ctx.get(counter);
+        return { count: state.count };
+      });
+
+      const { result } = renderHook(() => useCounterState(), {
+        wrapper: createWrapper(stores),
+      });
+
+      expect(result.current.count).toBe(0);
+    });
+
+    it("should provide stable function references", () => {
+      const counter = store({
+        name: "counter",
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+
+      const useCounterByMultiplier = useStore.from(
+        (ctx, multiplier: number) => {
+          const [state, actions] = ctx.get(counter);
+          return {
+            count: state.count * multiplier,
+            increment: actions.increment,
+          };
+        }
+      );
+
+      const { result, rerender } = renderHook(
+        ({ mult }) => useCounterByMultiplier(mult),
+        {
+          wrapper: createWrapper(stores),
+          initialProps: { mult: 2 },
+        }
+      );
+
+      const firstIncrement = result.current.increment;
+
+      rerender({ mult: 2 });
+
+      expect(result.current.increment).toBe(firstIncrement);
+    });
+  });
 });

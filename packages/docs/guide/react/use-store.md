@@ -303,15 +303,253 @@ function FormComponent() {
 - Temporary UI state
 - Any state that should reset when component unmounts
 
-## Using Mixins
+## Selector Mixins vs Multiple Hooks
 
-Mixins provide reusable selector logic:
+When selecting data from multiple stores, you have two options: multiple `useStore()` hooks or selector mixins. **Selector mixins are more efficient.**
+
+### The Problem with Multiple useStore() Calls
+
+```tsx
+// ❌ INEFFICIENT: Multiple hooks = multiple subscriptions, lifecycle overhead
+const useUserData = () => {
+  return useStore(({ get }) => {
+    const [state] = get(userStore);
+    return { name: state.name };
+  });
+};
+
+const useCartData = () => {
+  return useStore(({ get }) => {
+    const [state] = get(cartStore);
+    return { itemCount: state.items.length };
+  });
+};
+
+// Component uses both hooks
+function Header() {
+  const { name } = useUserData();     // 1st useStore (subscriptions, refs, effects)
+  const { itemCount } = useCartData(); // 2nd useStore (more subscriptions, refs, effects)
+  
+  return <div>{name} - Cart: {itemCount}</div>;
+}
+```
+
+**What's wrong:**
+- Each `useStore()` creates its own subscription system
+- Duplicate React hooks (`useState`, `useEffect`, etc.) for each call
+- If both selectors read the same field, tracking is duplicated
+- More memory, more cleanup, slower renders
+
+### The Solution: Selector Mixins
+
+```tsx
+// ✅ EFFICIENT: Single useStore with composable mixins
+const userDataMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return { name: state.name };
+};
+
+const cartDataMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(cartStore);
+  return { itemCount: state.items.length };
+};
+
+// Combine mixins into one
+const headerDataMixin = (ctx: SelectorContext) => {
+  const userData = ctx.mixin(userDataMixin);
+  const cartData = ctx.mixin(cartDataMixin);
+  return { ...userData, ...cartData };
+};
+
+// Component uses single hook
+function Header() {
+  const { name, itemCount } = useStore((ctx) => ctx.mixin(headerDataMixin));
+  
+  return <div>{name} - Cart: {itemCount}</div>;
+}
+```
+
+**Benefits:**
+- Single subscription system for all data
+- One set of React hooks
+- Shared tracking — same fields aren't tracked twice
+- Composable and reusable
+
+### Comparison
+
+| Aspect | Multiple `useStore()` | Selector Mixins |
+|--------|----------------------|-----------------|
+| React hooks | N sets (useState, useEffect, etc.) | 1 set |
+| Subscriptions | N separate systems | 1 unified system |
+| Tracking | Duplicate for same fields | Shared tracking |
+| Memory | Higher | Lower |
+| Composability | Via custom hooks | Via mixin composition |
+
+### Creating Selector Mixins
+
+```ts
+import { SelectorContext } from "storion/react";
+
+// Basic mixin - selects specific data
+const userNameMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return state.name;
+};
+
+// Mixin with parameters
+const userByIdMixin = (ctx: SelectorContext, userId: string) => {
+  const [state] = ctx.get(userStore);
+  return state.users[userId];
+};
+
+// Mixin returning multiple values
+const userStatsMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return {
+    totalUsers: state.users.length,
+    activeUsers: state.users.filter(u => u.active).length,
+  };
+};
+
+// Mixin with actions
+const cartMixin = (ctx: SelectorContext) => {
+  const [state, actions] = ctx.get(cartStore);
+  return {
+    items: state.items,
+    total: state.total,
+    addItem: actions.addItem,
+    removeItem: actions.removeItem,
+  };
+};
+```
+
+### Composing Mixins
+
+```ts
+// Combine multiple mixins
+const dashboardMixin = (ctx: SelectorContext) => {
+  const user = ctx.mixin(userStatsMixin);
+  const cart = ctx.mixin(cartMixin);
+  const orders = ctx.mixin(ordersMixin);
+  
+  return {
+    ...user,
+    ...cart,
+    ...orders,
+    // Add computed values
+    isVIP: user.totalUsers > 100 && cart.total > 1000,
+  };
+};
+
+function Dashboard() {
+  const data = useStore((ctx) => ctx.mixin(dashboardMixin));
+  
+  return (
+    <div>
+      <UserStats {...data} />
+      <CartSummary {...data} />
+      <OrderHistory {...data} />
+    </div>
+  );
+}
+```
+
+### Module Organization
+
+```ts
+// selectors/user.ts
+export const userNameMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return state.name;
+};
+
+export const userProfileMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return {
+    name: state.name,
+    email: state.email,
+    avatar: state.avatar,
+  };
+};
+
+// selectors/cart.ts
+export const cartSummaryMixin = (ctx: SelectorContext) => {
+  const [state, actions] = ctx.get(cartStore);
+  return {
+    itemCount: state.items.length,
+    total: state.total,
+    checkout: actions.checkout,
+  };
+};
+
+// selectors/combined.ts
+import { userProfileMixin } from "./user";
+import { cartSummaryMixin } from "./cart";
+
+export const headerMixin = (ctx: SelectorContext) => ({
+  ...ctx.mixin(userProfileMixin),
+  ...ctx.mixin(cartSummaryMixin),
+});
+```
+
+### When to Use Each Approach
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Single store access | Either approach works |
+| Multiple stores, same component | ✅ Selector mixins |
+| Reusable selection logic | ✅ Selector mixins |
+| Isolated hook with own state | Custom hook with `useStore` |
+| Third-party hook integration | Custom hook with `useStore` |
+
+### Real-World Example
+
+```tsx
+// ❌ BEFORE: Three separate hooks
+function ProductPage({ productId }: { productId: string }) {
+  const { product } = useProduct(productId);
+  const { user } = useCurrentUser();
+  const { cart, addToCart } = useCart();
+  
+  // Each hook runs its own useStore internally...
+}
+
+// ✅ AFTER: Single useStore with mixins
+const productMixin = (ctx: SelectorContext, productId: string) => {
+  const [state] = ctx.get(productStore);
+  return { product: state.products[productId] };
+};
+
+const currentUserMixin = (ctx: SelectorContext) => {
+  const [state] = ctx.get(userStore);
+  return { user: state.currentUser };
+};
+
+const cartMixin = (ctx: SelectorContext) => {
+  const [state, actions] = ctx.get(cartStore);
+  return { cart: state, addToCart: actions.add };
+};
+
+function ProductPage({ productId }: { productId: string }) {
+  const { product, user, cart, addToCart } = useStore((ctx) => ({
+    ...ctx.mixin(productMixin, productId),
+    ...ctx.mixin(currentUserMixin),
+    ...ctx.mixin(cartMixin),
+  }));
+  
+  // Single subscription system, shared tracking, lower overhead
+}
+```
+
+## Using Async Mixins
+
+For async operations, use `async.mixin()` which provides component-local async state:
 
 ```tsx
 import { async } from "storion/async";
 
 // Define a mixin for async operations
-const submitMixin = async.mixin(async (ctx, data: FormData) => {
+const submitMixin = async(async (ctx, data: FormData) => {
   const res = await fetch("/api/submit", {
     method: "POST",
     body: JSON.stringify(data),
@@ -490,6 +728,24 @@ function UserCounter() {
       userName: userState.name,
     };
   });
+}
+```
+
+### Parameterized Hooks
+
+Create hooks with arguments using the selector overload:
+
+```tsx
+// Create a parameterized hook
+const useUserById = useStore.from((ctx, userId: string) => {
+  const [state] = ctx.get(userStore);
+  return { user: state.users[userId] };
+});
+
+// Use with different arguments
+function UserCard({ userId }: { userId: string }) {
+  const { user } = useUserById(userId);
+  return <div>{user?.name}</div>;
 }
 ```
 

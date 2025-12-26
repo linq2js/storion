@@ -30,7 +30,7 @@ import {
 // =============================================================================
 
 /**
- * Selector for useStore.from() hook.
+ * Selector for useStore.from(spec) hook.
  * Receives state and actions directly (no get needed), plus SelectorContext for advanced features.
  */
 export type FromSelector<
@@ -40,7 +40,7 @@ export type FromSelector<
 > = (state: Readonly<TState>, actions: TActions, ctx: SelectorContext) => T;
 
 /**
- * Custom hook returned by useStore.from().
+ * Custom hook returned by useStore.from(spec).
  */
 export type UseFromStore<
   TState extends StateBase,
@@ -48,6 +48,24 @@ export type UseFromStore<
 > = <T extends object>(
   selector: FromSelector<TState, TActions, T>
 ) => StableResult<T>;
+
+/**
+ * Selector with arguments for useStore.from(selector) overload.
+ * Receives SelectorContext and additional arguments.
+ */
+export type FromSelectorWithArgs<
+  TResult extends object,
+  TArgs extends unknown[]
+> = (ctx: SelectorContext, ...args: TArgs) => TResult;
+
+/**
+ * Custom hook returned by useStore.from(selector).
+ * Accepts the same arguments as the original selector (minus ctx).
+ */
+export type UseFromSelectorHook<
+  TResult extends object,
+  TArgs extends unknown[]
+> = (...args: TArgs) => StableResult<TResult>;
 import { withHooks, type ReadEvent } from "../core/tracking";
 import { useContainer } from "./context";
 import { AsyncFunctionError, ScopedOutsideSelectorError } from "../errors";
@@ -351,7 +369,9 @@ export function useStoreWithContainer<T extends object>(
  * }
  * ```
  */
-function useStoreImpl<T extends object>(selector: Selector<T>): StableResult<T> {
+function useStoreImpl<T extends object>(
+  selector: Selector<T>
+): StableResult<T> {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const container = useContainer();
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -393,9 +413,10 @@ function useStoreImpl<T extends object>(selector: Selector<T>): StableResult<T> 
  * }
  * ```
  */
-function useStoreFrom<TState extends StateBase, TActions extends ActionsBase>(
-  spec: StoreSpec<TState, TActions>
-): UseFromStore<TState, TActions> {
+function useStoreFromSpec<
+  TState extends StateBase,
+  TActions extends ActionsBase
+>(spec: StoreSpec<TState, TActions>): UseFromStore<TState, TActions> {
   return <T extends object>(
     selector: FromSelector<TState, TActions, T>
   ): StableResult<T> => {
@@ -405,6 +426,52 @@ function useStoreFrom<TState extends StateBase, TActions extends ActionsBase>(
       return selector(state, actions, ctx);
     });
   };
+}
+
+/**
+ * Create a reusable hook from a selector function with arguments.
+ *
+ * @example
+ * ```tsx
+ * // Create a parameterized hook
+ * const useUserById = useStore.from((ctx, userId: string) => {
+ *   const [state] = ctx.get(userStore);
+ *   return { user: state.users[userId] };
+ * });
+ *
+ * // Use in components
+ * function UserCard({ userId }: { userId: string }) {
+ *   const { user } = useUserById(userId);
+ *   return <div>{user?.name}</div>;
+ * }
+ * ```
+ */
+function useStoreFromSelector<TResult extends object, TArgs extends unknown[]>(
+  selector: FromSelectorWithArgs<TResult, TArgs>
+): UseFromSelectorHook<TResult, TArgs> {
+  return (...args: TArgs): StableResult<TResult> => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useStoreImpl((ctx) => selector(ctx, ...args));
+  };
+}
+
+/**
+ * Combined useStore.from() implementation.
+ * Detects whether argument is a store spec or a selector function.
+ */
+function useStoreFrom<TState extends StateBase, TActions extends ActionsBase>(
+  specOrSelector: StoreSpec<TState, TActions>
+): UseFromStore<TState, TActions>;
+function useStoreFrom<TResult extends object, TArgs extends unknown[]>(
+  specOrSelector: FromSelectorWithArgs<TResult, TArgs>
+): UseFromSelectorHook<TResult, TArgs>;
+function useStoreFrom(specOrSelector: any): any {
+  // If it's a store spec, use the spec-based overload
+  if (isSpec(specOrSelector)) {
+    return useStoreFromSpec(specOrSelector);
+  }
+  // Otherwise, it's a selector function
+  return useStoreFromSelector(specOrSelector);
 }
 
 /**
@@ -435,6 +502,26 @@ export interface UseStoreFn {
   from<TState extends StateBase, TActions extends ActionsBase>(
     spec: StoreSpec<TState, TActions>
   ): UseFromStore<TState, TActions>;
+
+  /**
+   * Create a reusable hook from a selector function with arguments.
+   *
+   * @example
+   * ```tsx
+   * const useUserById = useStore.from((ctx, userId: string) => {
+   *   const [state] = ctx.get(userStore);
+   *   return { user: state.users[userId] };
+   * });
+   *
+   * function UserCard({ userId }: { userId: string }) {
+   *   const { user } = useUserById(userId);
+   *   return <div>{user?.name}</div>;
+   * }
+   * ```
+   */
+  from<TResult extends object, TArgs extends unknown[]>(
+    selector: FromSelectorWithArgs<TResult, TArgs>
+  ): UseFromSelectorHook<TResult, TArgs>;
 }
 
 /**
