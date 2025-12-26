@@ -12,7 +12,7 @@ The classic counter example — your first Storion store.
 - Defining a store with [`store()`](/api/store)
 - Direct state mutation (`state.count++`)
 - Using [`useStore()`](/api/use-store) hook in React
-- The [`create()`](/api/store) shorthand for single-store apps
+- The [`create()`](/api/create) shorthand for single-store apps
 
 ```ts
 // Preview: A simple counter store

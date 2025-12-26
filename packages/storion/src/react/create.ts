@@ -11,6 +11,7 @@ import type {
   StoreInstance,
   StableResult,
   ContainerOptions,
+  SelectorContext,
 } from "../types";
 import { store as createSpec } from "../core/store";
 import { container } from "../core/container";
@@ -23,13 +24,13 @@ import {
 
 /**
  * Selector for create() hook.
- * Receives state and actions directly (no get needed).
+ * Receives state and actions directly (no get needed), plus SelectorContext for advanced features.
  */
 export type CreateSelector<
   TState extends StateBase,
   TActions extends ActionsBase,
   T
-> = (state: Readonly<TState>, actions: TActions) => T;
+> = (state: Readonly<TState>, actions: TActions, ctx: SelectorContext) => T;
 
 /**
  * Custom hook returned by create().
@@ -92,9 +93,10 @@ export type CreateResult<
  *
  * // Use the hook in React components
  * function Counter() {
- *   const { count, increment } = useCounter((state, actions) => ({
+ *   const { count, increment } = useCounter((state, actions, ctx) => ({
  *     count: state.count,
  *     increment: actions.increment,
+ *     // ctx provides: mixin, scoped, once, id, container, etc.
  *   }));
  *
  *   return <button onClick={increment}>{count}</button>;
@@ -137,9 +139,9 @@ export function create<TState extends StateBase, TActions extends ActionsBase>(
   const useCreatedStore: UseCreatedStore<TState, TActions> = <T extends object>(
     selector: CreateSelector<TState, TActions, T>
   ): StableResult<T> => {
-    return useStoreWithContainer(({ get }) => {
-      const [state, actions] = get(spec);
-      return selector(state, actions);
+    return useStoreWithContainer((ctx) => {
+      const [state, actions] = ctx.get(spec);
+      return selector(state, actions, ctx);
     }, dedicatedContainer);
   };
 

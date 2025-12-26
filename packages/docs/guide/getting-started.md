@@ -244,9 +244,10 @@ const [counter, useCounter] = create({
 });
 
 function Counter() {
-  // Simpler selector: receives (state, actions) directly
+  // Simpler selector: receives (state, actions, ctx) directly
   // No need to call get() - it's done for you
-  const { count, increment } = useCounter((state, actions) => ({
+  // ctx provides: mixin, scoped, once, id, container (same as useStore)
+  const { count, increment } = useCounter((state, actions, ctx) => ({
     count: state.count,
     increment: actions.increment,
   }));

@@ -6,10 +6,10 @@ The classic counter example to understand the basics.
 
 ```ts
 // stores/counterStore.ts
-import { store } from 'storion/react';
+import { store } from "storion/react";
 
 export const counterStore = store({
-  name: 'counter',
+  name: "counter",
   state: {
     count: 0,
     step: 1,
@@ -37,8 +37,8 @@ export const counterStore = store({
 
 ```tsx
 // components/Counter.tsx
-import { useStore } from 'storion/react';
-import { counterStore } from '../stores/counterStore';
+import { useStore } from "storion/react";
+import { counterStore } from "../stores/counterStore";
 
 export function Counter() {
   const { count, step, increment, decrement, setStep, reset } = useStore(
@@ -55,12 +55,12 @@ export function Counter() {
   return (
     <div className="counter">
       <h1>{count}</h1>
-      
+
       <div className="controls">
         <button onClick={decrement}>-{step}</button>
         <button onClick={increment}>+{step}</button>
       </div>
-      
+
       <div className="step-control">
         <label>Step:</label>
         <input
@@ -70,7 +70,7 @@ export function Counter() {
           min={1}
         />
       </div>
-      
+
       <button onClick={reset}>Reset</button>
     </div>
   );
@@ -81,8 +81,8 @@ export function Counter() {
 
 ```tsx
 // App.tsx
-import { container, StoreProvider } from 'storion/react';
-import { Counter } from './components/Counter';
+import { container, StoreProvider } from "storion/react";
+import { Counter } from "./components/Counter";
 
 const app = container();
 
@@ -100,19 +100,25 @@ export function App() {
 For a standalone counter, use `create()`:
 
 ```tsx
-import { create } from 'storion/react';
+import { create } from "storion/react";
 
 const [counter, useCounter] = create({
   state: { count: 0 },
   setup({ state }) {
     return {
-      increment: () => { state.count++; },
-      decrement: () => { state.count--; },
+      increment: () => {
+        state.count++;
+      },
+      decrement: () => {
+        state.count--;
+      },
     };
   },
 });
 
 function Counter() {
+  // Selector receives (state, actions, ctx)
+  // ctx has mixin, scoped, once, etc. - same as useStore
   const { count, increment, decrement } = useCounter((state, actions) => ({
     count: state.count,
     ...actions,
@@ -136,4 +142,3 @@ function Counter() {
 2. **useStore** selector determines what triggers re-renders
 3. **create()** is a shorthand for single-store apps
 4. Actions are stable references (safe for deps arrays)
-

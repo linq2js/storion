@@ -113,6 +113,7 @@ export default withMermaid({
         {
           text: "React",
           items: [
+            { text: "create()", link: "/api/create" },
             { text: "useStore()", link: "/api/use-store" },
             { text: "StoreProvider", link: "/api/store-provider" },
             { text: "withStore()", link: "/api/with-store" },
