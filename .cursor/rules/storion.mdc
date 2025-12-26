@@ -578,6 +578,42 @@ function UserProfile({ userId }: { userId: string }) {
 - Use `jest` with `it()` (not `test()`)
 - Write tests first, then code, then run and fix
 
+## Changelog
+
+**When modifying feature code (non-documentation), you MUST update `packages/storion/CHANGELOG.md`:**
+
+1. Add entry under `## [Unreleased]` section
+2. Use appropriate subsection: `### Added`, `### Changed`, `### Fixed`, `### Removed`
+3. Include brief description with code example if applicable
+4. Follow [Keep a Changelog](https://keepachangelog.com/) format
+
+**What counts as feature code:**
+- `packages/storion/src/**/*.ts` (core library source)
+- New exports, types, or APIs
+- Bug fixes, behavior changes
+- Breaking changes (mark with `**BREAKING**:`)
+
+**What does NOT require changelog:**
+- Documentation changes (`packages/docs/**`)
+- Test files (`*.test.ts`, `*.test.tsx`)
+- Example/demo apps (`packages/feature-showcase/**`, etc.)
+- Build/config files
+
+**Example entry:**
+
+```md
+### Added
+
+- `useStore()` now accepts array and object mixin syntax for cleaner composition
+  ```tsx
+  // Array syntax - merges mixins
+  const result = useStore([userMixin, { count: countMixin }]);
+  
+  // Object syntax - maps keys to results
+  const { name, age } = useStore({ name: nameMixin, age: ageMixin });
+  ```
+```
+
 ## README Sync: Root to packages/storion
 
 When syncing content from root `README.md` to `packages/storion/README.md`:

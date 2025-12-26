@@ -7,7 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.12.0] - 2024-12-27
+
 ### Added
+
+- `useStore()` now accepts array and object mixin syntax for cleaner composition
+
+  ```tsx
+  // Array syntax (MergeMixin) - merges direct and named mixins
+  const result = useStore([
+    selectUser, // { name, email } → spread into result
+    { count: selectCount }, // → { count: number }
+  ]);
+  // result: { name: string, email: string, count: number }
+
+  // Object syntax (MixinMap) - maps keys to mixin results
+  const { userName, userAge } = useStore({
+    userName: (ctx) => ctx.get(userStore)[0].name,
+    userAge: (ctx) => ctx.get(userStore)[0].age,
+  });
+  ```
+
+- `store()` now accepts `toJSON` option to control serialization behavior
+
+  ```ts
+  const userStore = store({
+    name: "user",
+    state: { name: "", password: "" },
+    toJSON: "normalize", // Uses normalize function for JSON.stringify
+  });
+  ```
+
+  Available modes: `"state"` (default), `"normalize"`, `"info"`, `"id"`, `"null"`, `"undefined"`, `"empty"`
+
+- `useStore.from()` for creating pre-bound hooks
+
+  ```tsx
+  // From store spec
+  const useCounter = useStore.from(counterStore);
+  const { count } = useCounter((state, actions) => ({ count: state.count }));
+
+  // From selector with arguments
+  const useUserById = useStore.from((ctx, userId: string) => {
+    const [state] = ctx.get(userStore);
+    return { user: state.users[userId] };
+  });
+  const { user } = useUserById("123");
+  ```
 
 - `SelectorContext.scoped()` for component-local stores that auto-dispose on unmount
   ```tsx
@@ -337,7 +385,8 @@ effect((ctx) => {
 
 ---
 
-[Unreleased]: https://github.com/linq2js/storion/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/linq2js/storion/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/linq2js/storion/compare/v0.8.0...v0.12.0
 [0.8.0]: https://github.com/linq2js/storion/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/linq2js/storion/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/linq2js/storion/compare/v0.5.0...v0.6.0
