@@ -1,5 +1,6 @@
 import { tryDispose } from "./core/disposable";
 import { resolveEquality } from "./core/equality";
+import { emitter } from "./emitter";
 import { AutoDisposeOptions, Equality } from "./types";
 
 /**
@@ -30,6 +31,12 @@ export interface Pool<TKey, TValue> {
   entries(): IterableIterator<[TKey, TValue]>;
 }
 
+export interface PoolChangeEvent<TKey, TValue, TType extends "add" | "remove"> {
+  key: TKey;
+  value: TValue;
+  type: TType;
+}
+
 export interface PoolOptions<TKey, TValue> {
   initial?: readonly [TKey, TValue][];
   /**
@@ -56,6 +63,21 @@ export interface PoolOptions<TKey, TValue> {
    * Automatically call dispose method of the item when it is removed from the pool.
    */
   autoDispose?: AutoDisposeOptions | boolean;
+
+  /**
+   * Called when an item is added to the pool.
+   */
+  onAdded?: (event: PoolChangeEvent<TKey, TValue, "add">) => void;
+
+  /**
+   * Called when an item is removed from the pool.
+   */
+  onRemoved?: (event: PoolChangeEvent<TKey, TValue, "remove">) => void;
+
+  /**
+   * Called when an item is added or removed from the pool.
+   */
+  onChanged?: (event: PoolChangeEvent<TKey, TValue, "add" | "remove">) => void;
 }
 
 /**
@@ -98,6 +120,33 @@ export function pool<TValue, TKey = unknown>(
   const keyEquality =
     options?.equality && !keyOf ? resolveEquality(options.equality) : null;
   const shouldAutoDispose = !!options?.autoDispose;
+  const onAdded = emitter<PoolChangeEvent<TKey, TValue, "add">>();
+  const onRemoved = emitter<PoolChangeEvent<TKey, TValue, "remove">>();
+
+  const dispatchEvent = (
+    event:
+      | PoolChangeEvent<TKey, TValue, "add">
+      | PoolChangeEvent<TKey, TValue, "remove">
+  ) => {
+    if (event.type === "add") {
+      onAdded.emit(event);
+    } else {
+      onRemoved.emit(event);
+    }
+  };
+
+  if (options?.onAdded) {
+    onAdded.on(options.onAdded);
+  }
+
+  if (options?.onRemoved) {
+    onRemoved.on(options.onRemoved);
+  }
+
+  if (options?.onChanged) {
+    onAdded.on(options.onChanged);
+    onRemoved.on(options.onChanged);
+  }
 
   // Fast path: keyOf provides O(1) lookups via hash
   if (keyOf) {
@@ -115,6 +164,11 @@ export function pool<TValue, TKey = unknown>(
       if (entry) return entry.value;
       const value = createItem(key);
       map.set(hash, { key, value });
+      dispatchEvent({
+        key,
+        value,
+        type: "add",
+      });
       return value;
     };
 
@@ -128,32 +182,62 @@ export function pool<TValue, TKey = unknown>(
       get,
       set(key: TKey, value: TValue) {
         const hash = keyOf(key);
-        if (shouldAutoDispose) {
-          const existing = map.get(hash);
-          if (existing && existing.value !== value) {
-            tryDispose(existing.value);
-          }
+        const existing = map.get(hash);
+        const isNew = !existing;
+
+        if (shouldAutoDispose && existing && existing.value !== value) {
+          tryDispose(existing.value);
         }
+
+        if (existing && existing.value !== value) {
+          dispatchEvent({
+            key: existing.key,
+            value: existing.value,
+            type: "remove",
+          });
+        }
+
         map.set(hash, { key, value });
+
+        if (isNew || existing?.value !== value) {
+          dispatchEvent({ key, value, type: "add" });
+        }
+
         return this;
       },
       size() {
         return map.size;
       },
       clear() {
-        if (shouldAutoDispose) {
+        if (shouldAutoDispose || onAdded.size > 0 || onRemoved.size > 0) {
           for (const entry of map.values()) {
-            tryDispose(entry.value);
+            if (shouldAutoDispose) {
+              tryDispose(entry.value);
+            }
+
+            dispatchEvent({
+              key: entry.key,
+              value: entry.value,
+              type: "remove",
+            });
           }
         }
+
         map.clear();
         return this;
       },
       delete(key: TKey) {
         const hash = keyOf(key);
-        if (shouldAutoDispose) {
-          const entry = map.get(hash);
-          if (entry) tryDispose(entry.value);
+        const entry = map.get(hash);
+        if (entry) {
+          if (shouldAutoDispose) {
+            tryDispose(entry.value);
+          }
+          dispatchEvent({
+            key: entry.key,
+            value: entry.value,
+            type: "remove",
+          });
         }
         map.delete(hash);
         return this;
@@ -191,6 +275,11 @@ export function pool<TValue, TKey = unknown>(
     }
     const value = createItem(key);
     map.set(key, value);
+    dispatchEvent({
+      key,
+      value,
+      type: "add",
+    });
     return value;
   };
 
@@ -214,15 +303,32 @@ export function pool<TValue, TKey = unknown>(
     set(key: TKey, value: TValue) {
       const existingKey = findKey(key);
       if (existingKey !== undefined) {
-        if (shouldAutoDispose) {
-          const existing = map.get(existingKey);
-          if (existing !== value) {
-            tryDispose(existing);
-          }
+        const existing = map.get(existingKey);
+        if (shouldAutoDispose && existing !== undefined && existing !== value) {
+          tryDispose(existing);
+        }
+        if (existing !== undefined && existing !== value) {
+          dispatchEvent({
+            key: existingKey,
+            value: existing,
+            type: "remove",
+          });
         }
         map.set(existingKey, value);
+        if (existing === undefined || existing !== value) {
+          dispatchEvent({
+            key: existingKey,
+            value,
+            type: "add",
+          });
+        }
       } else {
         map.set(key, value);
+        dispatchEvent({
+          key,
+          value,
+          type: "add",
+        });
       }
       return this;
     },
@@ -234,11 +340,19 @@ export function pool<TValue, TKey = unknown>(
 
     /** Remove all items */
     clear() {
-      if (shouldAutoDispose) {
-        for (const value of map.values()) {
-          tryDispose(value);
+      if (shouldAutoDispose || onAdded.size > 0 || onRemoved.size > 0) {
+        for (const [key, value] of map.entries()) {
+          if (shouldAutoDispose) {
+            tryDispose(value);
+          }
+          dispatchEvent({
+            key,
+            value,
+            type: "remove",
+          });
         }
       }
+
       map.clear();
       return this;
     },
@@ -247,8 +361,16 @@ export function pool<TValue, TKey = unknown>(
     delete(key: TKey) {
       const existingKey = findKey(key);
       if (existingKey !== undefined) {
-        if (shouldAutoDispose) {
-          tryDispose(map.get(existingKey));
+        const value = map.get(existingKey);
+        if (value !== undefined) {
+          if (shouldAutoDispose) {
+            tryDispose(value);
+          }
+          dispatchEvent({
+            key: existingKey,
+            value,
+            type: "remove",
+          });
         }
         map.delete(existingKey);
       }

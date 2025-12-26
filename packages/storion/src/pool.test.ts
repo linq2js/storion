@@ -486,4 +486,209 @@ describe("pool", () => {
       expect(dispose).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("events (onAdded, onRemoved, onChanged)", () => {
+    it("should call onAdded when item is created via get()", () => {
+      const onAdded = vi.fn();
+      const p = pool((key: string) => `value-${key}`, { onAdded });
+
+      p.get("a");
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onAdded).toHaveBeenCalledWith({
+        key: "a",
+        value: "value-a",
+        type: "add",
+      });
+    });
+
+    it("should call onAdded when item is set via set()", () => {
+      const onAdded = vi.fn();
+      const p = pool(() => "default", { onAdded });
+
+      p.set("a", "custom");
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onAdded).toHaveBeenCalledWith({
+        key: "a",
+        value: "custom",
+        type: "add",
+      });
+    });
+
+    it("should call onRemoved when item is deleted", () => {
+      const onRemoved = vi.fn();
+      const p = pool((key: string) => `value-${key}`, { onRemoved });
+
+      p.get("a");
+      p.delete("a");
+
+      expect(onRemoved).toHaveBeenCalledTimes(1);
+      expect(onRemoved).toHaveBeenCalledWith({
+        key: "a",
+        value: "value-a",
+        type: "remove",
+      });
+    });
+
+    it("should call onRemoved for each item when cleared", () => {
+      const onRemoved = vi.fn();
+      const p = pool((key: string) => `value-${key}`, { onRemoved });
+
+      p.get("a");
+      p.get("b");
+      p.clear();
+
+      expect(onRemoved).toHaveBeenCalledTimes(2);
+      expect(onRemoved).toHaveBeenCalledWith({
+        key: "a",
+        value: "value-a",
+        type: "remove",
+      });
+      expect(onRemoved).toHaveBeenCalledWith({
+        key: "b",
+        value: "value-b",
+        type: "remove",
+      });
+    });
+
+    it("should call onChanged when item is added", () => {
+      const onChanged = vi.fn();
+      const p = pool((key: string) => `value-${key}`, { onChanged });
+
+      p.get("a");
+
+      expect(onChanged).toHaveBeenCalledTimes(1);
+      expect(onChanged).toHaveBeenCalledWith({
+        key: "a",
+        value: "value-a",
+        type: "add",
+      });
+    });
+
+    it("should call onChanged when item is removed", () => {
+      const onChanged = vi.fn();
+      const p = pool((key: string) => `value-${key}`, { onChanged });
+
+      p.get("a");
+      p.delete("a");
+
+      expect(onChanged).toHaveBeenCalledTimes(2);
+      expect(onChanged).toHaveBeenNthCalledWith(1, {
+        key: "a",
+        value: "value-a",
+        type: "add",
+      });
+      expect(onChanged).toHaveBeenNthCalledWith(2, {
+        key: "a",
+        value: "value-a",
+        type: "remove",
+      });
+    });
+
+    it("should call onRemoved then onAdded when replacing via set()", () => {
+      const onAdded = vi.fn();
+      const onRemoved = vi.fn();
+      const p = pool(() => "old", { onAdded, onRemoved });
+
+      p.get("a");
+      p.set("a", "new");
+
+      expect(onRemoved).toHaveBeenCalledTimes(1);
+      expect(onRemoved).toHaveBeenCalledWith({
+        key: "a",
+        value: "old",
+        type: "remove",
+      });
+      expect(onAdded).toHaveBeenCalledTimes(2); // Once for get(), once for set()
+      expect(onAdded).toHaveBeenLastCalledWith({
+        key: "a",
+        value: "new",
+        type: "add",
+      });
+    });
+
+    it("should call all three callbacks when configured", () => {
+      const onAdded = vi.fn();
+      const onRemoved = vi.fn();
+      const onChanged = vi.fn();
+      const p = pool((key: string) => `value-${key}`, {
+        onAdded,
+        onRemoved,
+        onChanged,
+      });
+
+      p.get("a");
+      p.delete("a");
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onRemoved).toHaveBeenCalledTimes(1);
+      expect(onChanged).toHaveBeenCalledTimes(2); // Once for add, once for remove
+    });
+
+    it("should NOT call onAdded when getting existing item", () => {
+      const onAdded = vi.fn();
+      const p = pool((key: string) => `value-${key}`, { onAdded });
+
+      p.get("a");
+      p.get("a"); // Second call should not trigger onAdded
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+    });
+
+    it("should NOT call onRemoved when deleting non-existent item", () => {
+      const onRemoved = vi.fn();
+      const p = pool(() => "value", { onRemoved });
+
+      p.delete("missing");
+
+      expect(onRemoved).not.toHaveBeenCalled();
+    });
+
+    it("should work with keyOf option", () => {
+      const onAdded = vi.fn();
+      const onRemoved = vi.fn();
+      type Key = { id: string };
+      const p = pool((key: Key) => ({ data: key }), {
+        keyOf: (k) => k.id,
+        onAdded,
+        onRemoved,
+      });
+
+      const key1 = { id: "1" };
+      p.get(key1);
+      p.delete({ id: "1" }); // Different object, same id
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onAdded).toHaveBeenCalledWith({
+        key: key1,
+        value: { data: key1 },
+        type: "add",
+      });
+      expect(onRemoved).toHaveBeenCalledTimes(1);
+      expect(onRemoved).toHaveBeenCalledWith({
+        key: key1,
+        value: { data: key1 },
+        type: "remove",
+      });
+    });
+
+    it("should work with equality option", () => {
+      const onAdded = vi.fn();
+      const onRemoved = vi.fn();
+      type Key = { id: string };
+      const p = pool((key: Key) => ({ data: key }), {
+        equality: (a, b) => a.id === b.id,
+        onAdded,
+        onRemoved,
+      });
+
+      const key1 = { id: "1" };
+      p.get(key1);
+      p.delete({ id: "1" }); // Different object, same id
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onRemoved).toHaveBeenCalledTimes(1);
+    });
+  });
 });

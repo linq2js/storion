@@ -5,7 +5,7 @@
 <h1 align="center">Storion</h1>
 
 <p align="center">
-  <strong>State management that gets out of your way</strong>
+  <strong>State management that just works</strong>
 </p>
 
 <p align="center">
@@ -16,15 +16,13 @@
 </p>
 
 <p align="center">
-  <a href="https://linq2js.github.io/storion/"><strong>📚 Documentation</strong></a> · 
+  <a href="https://linq2js.github.io/storion/"><strong>📚 Docs</strong></a> · 
   <a href="https://linq2js.github.io/storion/demos.html">Demos</a> · 
   <a href="https://linq2js.github.io/storion/api/store.html">API</a> · 
-  <a href="https://linq2js.github.io/storion/guide/getting-started.html">Getting Started</a>
+  <a href="https://linq2js.github.io/storion/guide/getting-started.html">Get Started</a>
 </p>
 
 ---
-
-## The Simplest Counter You'll Ever Write
 
 ```tsx
 import { create } from "storion/react";
@@ -38,45 +36,45 @@ const [_, useCounter] = create({
 });
 
 function Counter() {
-  const { count, inc, dec } = useCounter((s, a) => ({ count: s.count, ...a }));
+  const { count, inc } = useCounter((s, a) => ({ count: s.count, ...a }));
   return <button onClick={inc}>{count}</button>;
 }
 ```
 
-**That's it.** No Provider. No boilerplate. No ceremony.
+**No Provider. No boilerplate. It just works.**
 
 ---
 
-## Why Storion?
+## Features
 
-| Pain Point                | Storion's Answer                                |
-| ------------------------- | ----------------------------------------------- |
-| 🤯 Too much boilerplate   | One `create()` call. Done.                      |
-| 🐌 Unnecessary re-renders | Auto-tracks what you read, updates only that    |
-| 😵 Complex async handling | Built-in loading states, cancellation, Suspense |
-| 🔧 Provider hell          | Optional. Use it when you need it               |
-| 📦 Bundle anxiety         | ~4KB gzipped. Seriously.                        |
+| Feature              | Description                                  |
+| -------------------- | -------------------------------------------- |
+| 🎯 **Auto-tracking** | Read state → subscribed automatically        |
+| ⚡ **Fine-grained**  | Only changed state triggers re-renders       |
+| 🔒 **Type-safe**     | Full TypeScript inference, zero manual types |
+| 🌊 **Async-first**   | Loading states, error handling, Suspense     |
+| 🛠️ **DevTools**      | Time-travel debugging built-in               |
+| 📦 **~4KB**          | Tiny bundle, no compromises                  |
 
 ---
 
-## Features at a Glance
+## Install
 
-```
-✦ Auto-tracking     Read state → automatically subscribed
-✦ Fine-grained      Change count? Only Counter re-renders
-✦ Type-safe         Full inference, zero manual types
-✦ Async-first       Loading, error, stale states built-in
-✦ DevTools          Time-travel debugging included
-✦ Scalable          From counter to enterprise, same API
+```bash
+npm install storion
 ```
 
 ---
 
-## Growing With You
+## Usage
 
-**Start simple:**
+### Single Store
+
+For isolated features, widgets, or prototypes:
 
 ```tsx
+import { create } from "storion/react";
+
 const [_, useAuth] = create({
   state: { user: null },
   setup: ({ state }) => ({
@@ -90,49 +88,99 @@ const [_, useAuth] = create({
 });
 ```
 
-**Add async when ready:**
+### Multiple Stores
+
+For apps with shared state (auth, cart, users):
 
 ```tsx
-const [_, useUsers] = create({
-  state: { users: async.stale([]) },
+import { store, container, StoreProvider, useStore } from "storion/react";
+
+const authStore = store({
+  name: "auth",
+  state: { user: null },
+  setup: ({ state }) => ({
+    login: (user) => {
+      state.user = user;
+    },
+    logout: () => {
+      state.user = null;
+    },
+  }),
+});
+
+const cartStore = store({
+  name: "cart",
+  state: { items: [] },
+  setup: ({ state, get }) => {
+    const [auth] = get(authStore); // Cross-store access
+    return {
+      add: (item) => {
+        state.items.push(item);
+      },
+      clear: () => {
+        state.items = [];
+      },
+    };
+  },
+});
+
+const app = container();
+
+function App() {
+  return (
+    <StoreProvider container={app}>
+      <Shop />
+    </StoreProvider>
+  );
+}
+
+function Shop() {
+  const { items, add } = useStore(({ get }) => {
+    const [state, actions] = get(cartStore);
+    return { items: state.items, add: actions.add };
+  });
+  // ...
+}
+```
+
+### Async Data
+
+```tsx
+import { store } from "storion/react";
+import { async } from "storion/async";
+
+const usersStore = store({
+  name: "users",
+  state: { users: async.fresh([]) },
   setup: ({ focus }) => {
-    const query = async(focus("users"), (ctx) =>
-      fetch("/api/users", { signal: ctx.signal }).then((r) => r.json())
-    );
+    const query = async(focus("users"), async (ctx) => {
+      const res = await fetch("/api/users", { signal: ctx.signal });
+      return res.json();
+    });
     return { fetch: query.dispatch, refresh: query.refresh };
   },
 });
 ```
 
-**Scale to multi-store apps:**
+---
 
-```tsx
-// When you need shared containers, dependency injection, middleware...
-<StoreProvider>
-  <App />
-</StoreProvider>
-```
+## When to Use What
+
+| Scenario              | Use                         |
+| --------------------- | --------------------------- |
+| Single feature/widget | `create()`                  |
+| Multiple stores       | `store()` + `container()`   |
+| Testing with mocks    | `container()` + `app.set()` |
+| Persistence           | `app.use(persist())`        |
 
 ---
 
 ## Documentation
 
-📚 **[Full Documentation](https://linq2js.github.io/storion/)** — Everything you need
-
-- [Getting Started](https://linq2js.github.io/storion/guide/getting-started.html) — 5 min setup
-- [Core Concepts](https://linq2js.github.io/storion/guide/core-concepts.html) — How it works
-- [Async State](https://linq2js.github.io/storion/guide/async.html) — Loading states made easy
-- [API Reference](https://linq2js.github.io/storion/api/store.html) — Every function documented
-- [Live Demos](https://linq2js.github.io/storion/demos.html) — See it in action
+📚 **[Full Docs](https://linq2js.github.io/storion/)** — [Get Started](https://linq2js.github.io/storion/guide/getting-started.html) · [Core Concepts](https://linq2js.github.io/storion/guide/core-concepts.html) · [Async](https://linq2js.github.io/storion/guide/async.html) · [API](https://linq2js.github.io/storion/api/store.html) · [Demos](https://linq2js.github.io/storion/demos.html)
 
 ---
 
 ## License
 
 MIT © [linq2js](https://github.com/linq2js)
-
----
-
-<p align="center">
-  <sub>Built with ❤️ for developers who value simplicity</sub>
-</p>
