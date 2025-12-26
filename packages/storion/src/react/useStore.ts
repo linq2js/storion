@@ -31,6 +31,7 @@ import { tryStabilize, strictEqual } from "../core/equality";
 import { isSpec } from "../is";
 import { storeTuple } from "../utils/storeTuple";
 import { emitter } from "../emitter";
+import { dev } from "../dev";
 
 /**
  * React hook to consume stores with automatic optimization.
@@ -336,11 +337,12 @@ export function useStore<T extends object>(
 }
 
 const isServer = typeof window === "undefined";
-const useIsomorphicLayoutEffect = isServer ? useEffect : useLayoutEffect;
+const useIsomorphicLayoutEffect =
+  isServer || !dev() ? useEffect : useLayoutEffect;
 // Always use microtask for disposal in browser to handle StrictMode correctly
 // The microtask allows StrictMode's effect re-run to commit before disposal check
 const shouldScheduleDispose =
-  !isServer && typeof useLayoutEffect === "function";
+  !isServer && dev() && typeof useLayoutEffect === "function";
 
 class ScopeController {
   /** Whether the effect has committed (is active) */

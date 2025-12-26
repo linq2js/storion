@@ -191,7 +191,91 @@ const userStore = store({
 meta: [persist("password")]; // This passes "password" as VALUE, not field!
 ```
 
-### 8. Store Type Inference and Documentation
+### 8. StoreProvider and Container Rules
+
+**One app, one StoreProvider** - ideally use a single `StoreProvider` at the root:
+
+```tsx
+// ✅ CORRECT - single provider at root
+const app = container();
+
+function App() {
+  return (
+    <StoreProvider container={app}>
+      <MyApp />
+    </StoreProvider>
+  );
+}
+
+// ❌ WRONG - unnecessary nested providers
+function App() {
+  return (
+    <StoreProvider container={app}>
+      <Header />
+      <StoreProvider container={app}> {/* Unnecessary! */}
+        <Main />
+      </StoreProvider>
+    </StoreProvider>
+  );
+}
+```
+
+**Multiple providers only for specific use cases:**
+
+- Super/universal apps where each sub-app has its own business logic
+- Different middleware configurations per container
+
+**useStore requires StoreProvider** - it does NOT create its own container:
+
+```tsx
+// ❌ WRONG - useStore will throw "No StoreProvider found"
+function App() {
+  return <Counter />; // useStore inside will throw!
+}
+
+// ✅ CORRECT - wrap with StoreProvider
+function App() {
+  return (
+    <StoreProvider container={app}>
+      <Counter />
+    </StoreProvider>
+  );
+}
+```
+
+### 9. get() Returns Different Types by Context
+
+**Critical distinction:**
+
+| Context | Usage | Returns |
+| ------- | ----- | ------- |
+| `container.get(store)` | Outside React | `StoreInstance` (object with `.state`, `.actions`) |
+| Selector's `get(store)` | Inside `useStore()` | `[state, actions]` tuple |
+| Setup's `get(store)` | Inside store `setup()` | `[state, actions]` tuple |
+
+```tsx
+// ❌ WRONG - container.get() returns StoreInstance, not tuple
+const [state, actions] = app.get(userStore);
+
+// ✅ CORRECT - container.get() returns StoreInstance
+const userInstance = app.get(userStore);
+userInstance.state.name;
+userInstance.actions.setName("John");
+
+// ✅ CORRECT - selector's get() returns tuple
+const { name } = useStore(({ get }) => {
+  const [state, actions] = get(userStore);
+  return { name: state.name };
+});
+
+// ✅ CORRECT - setup's get() returns tuple
+setup({ get }) {
+  const [otherState, otherActions] = get(otherStore);
+  return { /* ... */ };
+}
+```
+
+### 10. Store Type Inference and Documentation
 
 **Don't pass explicit generics to store()** - let TypeScript infer state and actions:
 

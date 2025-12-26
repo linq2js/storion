@@ -470,5 +470,84 @@ describe("createSafe", () => {
       expect(fn).toHaveBeenCalledWith(1, "two", { three: 3 }, [4]);
     });
   });
+
+  describe("safe.delay", () => {
+    it("should resolve after specified time", async () => {
+      vi.useFakeTimers();
+
+      let resolved = false;
+      safe.delay(100).then(() => {
+        resolved = true;
+      });
+
+      expect(resolved).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(resolved).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(resolved).toBe(true);
+
+      vi.useRealTimers();
+    });
+
+    it("should resolve with provided value", async () => {
+      vi.useFakeTimers();
+
+      const promise = safe.delay(100, "done");
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      const result = await promise;
+      expect(result).toBe("done");
+
+      vi.useRealTimers();
+    });
+
+    it("should never resolve if cancelled before delay", async () => {
+      vi.useFakeTimers();
+
+      cancelled = true;
+
+      let resolved = false;
+      safe.delay(100).then(() => {
+        resolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(resolved).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it("should never resolve if cancelled during delay", async () => {
+      vi.useFakeTimers();
+
+      let resolved = false;
+      safe.delay(100).then(() => {
+        resolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      cancelled = true;
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(resolved).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it("should resolve with undefined if no value provided", async () => {
+      vi.useFakeTimers();
+
+      const promise = safe.delay(50);
+      await vi.advanceTimersByTimeAsync(50);
+
+      const result = await promise;
+      expect(result).toBe(undefined);
+
+      vi.useRealTimers();
+    });
+  });
 });
 

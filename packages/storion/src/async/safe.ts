@@ -282,6 +282,25 @@ export interface SafeCallback {
 }
 
 // =============================================================================
+// SAFE.DELAY TYPES
+// =============================================================================
+
+export interface SafeDelay {
+  /**
+   * Delay execution for specified milliseconds.
+   * Never resolves if cancelled.
+   *
+   * @example
+   * // Wait 1 second
+   * await safe.delay(1000);
+   *
+   * // Wait and return a value
+   * const result = await safe.delay(500, "done");
+   */
+  <T = void>(ms: number, resolved?: T): Promise<T>;
+}
+
+// =============================================================================
 // SAFE FUNCTION TYPES
 // =============================================================================
 
@@ -343,6 +362,8 @@ export interface SafeFnWithUtils extends SafeFn {
   any: SafeAny;
   /** Wrap callback to only execute if not cancelled */
   callback: SafeCallback;
+  /** Delay execution, never resolves if cancelled */
+  delay: SafeDelay;
 }
 
 // =============================================================================
@@ -567,6 +588,22 @@ export function createSafe(
   }) as SafeCallback;
 
   // ---------------------------------------------------------------------------
+  // safe.delay
+  // ---------------------------------------------------------------------------
+
+  const delay: SafeDelay = (<T = void>(ms: number, resolved?: T): Promise<T> => {
+    if (isCancelled()) {
+      return new Promise(() => {});
+    }
+
+    return wrapPromise(
+      new Promise<T>((resolve) => {
+        setTimeout(() => resolve(resolved as T), ms);
+      })
+    );
+  }) as SafeDelay;
+
+  // ---------------------------------------------------------------------------
   // Return safe with utilities attached
   // ---------------------------------------------------------------------------
 
@@ -576,5 +613,6 @@ export function createSafe(
     settled,
     any,
     callback,
+    delay,
   }) as SafeFnWithUtils;
 }

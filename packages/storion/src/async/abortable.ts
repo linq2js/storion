@@ -549,6 +549,7 @@ function createAbortableContext<TYield extends void | object>(
     settled: baseSafe.settled,
     any: baseSafe.any,
     callback: baseSafe.callback,
+    delay: baseSafe.delay,
   });
 
   const take = ((key?: keyof TYield) => {

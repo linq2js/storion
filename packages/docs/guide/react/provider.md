@@ -21,20 +21,25 @@ function App() {
 
 ## Why Use StoreProvider?
 
-Without a provider, each component creates its own container:
+`StoreProvider` is **required** for [`useStore()`](/api/use-store) to work. Without a provider, `useStore()` will throw an error:
 
 ```tsx
-// ❌ Without provider - isolated stores
-function Counter() {
-  const { count } = useStore(({ get }) => {
-    const [state] = get(counterStore);
-    return { count: state.count };
-  });
-  // Each component has its own counter instance!
+// ❌ Error - "No StoreProvider found"
+function App() {
+  return <Counter />; // useStore inside Counter will throw!
+}
+
+// ✅ Works - components wrapped with StoreProvider
+function App() {
+  return (
+    <StoreProvider container={app}>
+      <Counter />
+    </StoreProvider>
+  );
 }
 ```
 
-With a provider, components share the same container:
+With a provider, all components share the same container:
 
 ```tsx
 // ✅ With provider - shared stores
@@ -43,6 +48,13 @@ With a provider, components share the same container:
   <Counter />  {/* Same counter */}
 </StoreProvider>
 ```
+
+::: info One App, One StoreProvider
+Ideally, your app should have **one `StoreProvider` at the root**. Only use multiple providers if you have specific use cases like:
+- Super/universal apps where each sub-app has its own business logic
+- Different middleware configurations per container
+- Complete isolation between app sections
+:::
 
 ## Basic Setup
 
@@ -107,41 +119,34 @@ function Header() {
 
 ## Multiple Providers
 
-### Feature Isolation
+::: warning Advanced Use Case
+Multiple providers are an advanced pattern. Most apps only need one `StoreProvider` at the root. Only use multiple providers when you have specific requirements like different middleware per container.
+:::
 
-Use separate containers for isolated features:
+### Feature Isolation with Different Middleware
+
+Use separate containers when features need different middleware configurations:
 
 ```tsx
-const globalContainer = container();
-const featureContainer = container();
+const globalContainer = container({
+  middleware: [devtoolsMiddleware()],
+});
+
+const analyticsContainer = container({
+  middleware: [analyticsMiddleware()], // Different middleware
+});
 
 function App() {
   return (
     <StoreProvider container={globalContainer}>
       <Header />
       
-      {/* Feature has its own isolated container */}
-      <StoreProvider container={featureContainer}>
-        <FeatureModule />
+      {/* Analytics feature has its own middleware */}
+      <StoreProvider container={analyticsContainer}>
+        <AnalyticsModule />
       </StoreProvider>
       
       <Footer />
-    </StoreProvider>
-  );
-}
-```
-
-### Modal/Dialog Isolation
-
-```tsx
-function Modal({ children }) {
-  const modalContainer = useMemo(() => container(), []);
-  
-  return (
-    <StoreProvider container={modalContainer}>
-      <div className="modal">
-        {children}
-      </div>
     </StoreProvider>
   );
 }
@@ -163,9 +168,9 @@ export async function handleRequest(req: Request) {
   // Fresh container per request
   const app = container();
   
-  // Pre-fetch data
-  const [, userActions] = app.get(userStore);
-  await userActions.fetchUser(req.userId);
+  // Pre-fetch data using store instance
+  const userInstance = app.get(userStore);
+  await userInstance.actions.fetchUser(req.userId);
   
   // Render
   const html = renderToString(
@@ -176,7 +181,7 @@ export async function handleRequest(req: Request) {
   
   // Serialize state for hydration
   const initialState = {
-    user: app.get(userStore)[0],
+    user: app.get(userStore).state,
   };
   
   return `
@@ -255,13 +260,13 @@ describe('Counter', () => {
     const { getByRole, container } = renderWithStore(<Counter />);
     
     // Get store instance for assertions
-    const [state, actions] = container.get(counterStore);
-    expect(state.count).toBe(0);
+    const counterInstance = container.get(counterStore);
+    expect(counterInstance.state.count).toBe(0);
     
     // Click increment
     fireEvent.click(getByRole('button', { name: /increment/i }));
     
-    expect(state.count).toBe(1);
+    expect(counterInstance.state.count).toBe(1);
   });
 });
 ```
@@ -298,11 +303,13 @@ function DebugPanel() {
   const container = useContainer();
   
   const handleExport = () => {
-    const stores = ['user', 'cart', 'settings'].map(name => {
-      const instance = container.get(/* store */);
-      return { name, state: instance.state };
+    const userInstance = container.get(userStore);
+    const cartInstance = container.get(cartStore);
+    
+    console.log({
+      user: userInstance.state,
+      cart: cartInstance.state,
     });
-    console.log(JSON.stringify(stores, null, 2));
   };
   
   return <button onClick={handleExport}>Export State</button>;
@@ -320,8 +327,8 @@ api.interceptors.response.use(
   response => response,
   error => {
     if (error.response?.status === 401) {
-      const [, authActions] = app.get(authStore);
-      authActions.logout();
+      const authInstance = app.get(authStore);
+      authInstance.actions.logout();
     }
     return Promise.reject(error);
   }
@@ -516,9 +523,36 @@ const app = container();
 </StoreProvider>
 ```
 
+## Understanding get() Return Values
+
+::: warning Important Distinction
+The `get()` function returns different types depending on where it's used:
+
+| Context | Usage | Returns |
+|---------|-------|---------|
+| `container.get(store)` | Outside React | `StoreInstance` (object with `.state`, `.actions`) |
+| Selector's `get(store)` | Inside `useStore()` | `[state, actions]` tuple |
+| Setup's `get(store)` | Inside store `setup()` | `[state, actions]` tuple |
+:::
+
+```tsx
+// ❌ WRONG - container.get() returns StoreInstance, not tuple
+const [state, actions] = app.get(userStore);
+
+// ✅ CORRECT - container.get() returns StoreInstance
+const userInstance = app.get(userStore);
+userInstance.state.name;
+userInstance.actions.setName('John');
+
+// ✅ CORRECT - selector's get() returns tuple
+const { name } = useStore(({ get }) => {
+  const [state, actions] = get(userStore);
+  return { name: state.name };
+});
+```
+
 ## Next Steps
 
 - **[useStore](/guide/react/use-store)** — Using stores in components
 - **[withStore](/guide/react/with-store)** — HOC pattern
 - **[StoreProvider API](/api/store-provider)** — Complete API reference
-

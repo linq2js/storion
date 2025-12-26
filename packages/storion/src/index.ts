@@ -25,6 +25,8 @@ export { pick } from "./core/pick";
 export {
   list,
   map,
+  disposalGroup,
+  getNamedGroup,
   // Reducer helpers
   toggle,
   increment,
@@ -41,6 +43,9 @@ export {
   type MapOptions,
   type FocusList,
   type FocusMap,
+  type DisposalGroup,
+  type FocusAutoDispose,
+  type FocusAutoDisposeOptions,
 } from "./core/focusHelpers";
 
 export {

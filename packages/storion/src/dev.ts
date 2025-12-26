@@ -1,80 +1,65 @@
 /**
  * Development-only utilities.
  *
- * These use the __DEV__ flag which should be defined by the consuming application's bundler.
- *
- * **For consuming applications:**
- * Add this to your Vite config:
- * ```ts
- * export default defineConfig({
- *   define: {
- *     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
- *   },
- * });
- * ```
- *
- * In production builds with __DEV__ = false, all code inside `if (__DEV__)` blocks
+ * Uses `process.env.NODE_ENV` which bundlers (Vite, Webpack, Rollup) replace at build time.
+ * In production builds, all code inside `if (process.env.NODE_ENV !== 'production')` blocks
  * is completely removed via dead code elimination.
  *
- * If __DEV__ is not defined, these utilities fall back to checking process.env.NODE_ENV.
+ * **How it works:**
+ * 1. Bundler replaces `process.env.NODE_ENV` with `"production"` or `"development"`
+ * 2. Condition becomes `if ("production" !== 'production')` → `if (false)`
+ * 3. Minifier removes the entire dead code block
+ *
+ * @example
+ * ```ts
+ * // Development build (after bundling):
+ * if ("development" !== 'production') {
+ *   console.warn('Warning'); // ✅ Included
+ * }
+ *
+ * // Production build (after bundling + minification):
+ * // The entire block is removed - zero runtime cost
+ * ```
  */
 
 /**
- * Global __DEV__ flag.
- * Should be defined by the consuming application's bundler.
- * If not defined, we fall back to runtime checks.
+ * Type declaration for process.env.NODE_ENV.
+ * Bundlers replace this at build time - we just need the type.
  */
-declare const __DEV__: boolean | undefined;
+declare const process: {
+  env: {
+    NODE_ENV: string;
+  };
+};
 
 /**
- * Internal check for development mode.
- * Used as a fallback when __DEV__ is not defined by the consumer.
+ * Check if running in development mode.
+ *
+ * **Note:** For tree-shaking to work, use the inline pattern directly:
+ * ```ts
+ * if (process.env.NODE_ENV !== 'production') {
+ *   // dev-only code
+ * }
+ * ```
+ *
+ * @returns `true` if in development mode, `false` in production
  */
-function checkIsDev(): boolean {
-  // If __DEV__ is defined by the consumer's bundler, use it
-  if (typeof __DEV__ !== "undefined") {
-    return __DEV__;
-  }
-
-  // Fallback: check process.env.NODE_ENV at runtime
-  // This won't be tree-shaken but ensures dev utilities work
-  try {
-    // Use globalThis to avoid TypeScript errors in environments without @types/node
-    const p = (globalThis as any).process;
-    if (p?.env?.NODE_ENV) {
-      return p.env.NODE_ENV !== "production";
-    }
-  } catch {
-    // Ignore errors
-  }
-
-    // If process is not available (browser without polyfill), assume production
-    return false;
+export function isDev(): boolean {
+  return process.env.NODE_ENV !== "production";
 }
 
 /**
  * Development utilities namespace.
  *
- * **Usage:**
+ * **Important:** For optimal tree-shaking, prefer using inline checks:
  * ```ts
- * // Check if in dev mode
- * if (dev()) {
- *   // dev code
+ * if (process.env.NODE_ENV !== 'production') {
+ *   console.warn('[storion] Warning message');
  * }
- *
- * // Run function only in dev
- * dev(() => {
- *   validateSignalGraph();
- * });
- *
- * // Logging
- * dev.log("Signal created:", signal);
- * dev.warn("Deprecated API used");
- * dev.error("Invalid config:", config);
- *
- * // Assertions
- * dev.assert(value !== undefined, "Value cannot be undefined");
  * ```
+ *
+ * The `dev.*` utilities are convenient but require the bundler to inline
+ * the `process.env.NODE_ENV` check within the function body.
  *
  * @example
  * ```ts
@@ -96,16 +81,15 @@ function checkIsDev(): boolean {
  * ```
  */
 export function dev(fn?: () => void): boolean {
-  const isDev = checkIsDev();
-
-  if (fn) {
-    if (isDev) {
-      fn();
-    }
-    return isDev;
+  if (process.env.NODE_ENV === "production") {
+    return false;
   }
 
-  return isDev;
+  if (fn) {
+    fn();
+  }
+
+  return true;
 }
 
 /**
@@ -114,7 +98,6 @@ export function dev(fn?: () => void): boolean {
 export namespace dev {
   /**
    * Log a message only in development.
-   * If __DEV__ is defined and is false, this is removed via dead code elimination.
    *
    * @param message - Message to log
    * @param args - Additional arguments
@@ -122,19 +105,18 @@ export namespace dev {
    * @example
    * ```ts
    * dev.log("Signal created:", signal);
-   * // Production (with __DEV__ defined): removed entirely
-   * // Development: console.log("[rextive] Signal created:", signal)
+   * // Production: removed entirely
+   * // Development: console.log("[storion] Signal created:", signal)
    * ```
    */
   export function log(message: string, ...args: any[]): void {
-    if (checkIsDev()) {
-      console.log(`[rextive] ${message}`, ...args);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[storion] ${message}`, ...args);
     }
   }
 
   /**
    * Log a warning only in development.
-   * If __DEV__ is defined and is false, this is removed via dead code elimination.
    *
    * @param message - Warning message
    * @param args - Additional arguments
@@ -142,19 +124,18 @@ export namespace dev {
    * @example
    * ```ts
    * dev.warn("Deprecated API used");
-   * // Production (with __DEV__ defined): removed entirely
-   * // Development: console.warn("[rextive] Deprecated API used")
+   * // Production: removed entirely
+   * // Development: console.warn("[storion] Deprecated API used")
    * ```
    */
   export function warn(message: string, ...args: any[]): void {
-    if (checkIsDev()) {
-      console.warn(`[rextive] ${message}`, ...args);
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[storion] ${message}`, ...args);
     }
   }
 
   /**
    * Log an error only in development.
-   * If __DEV__ is defined and is false, this is removed via dead code elimination.
    *
    * @param message - Error message
    * @param args - Additional arguments
@@ -162,19 +143,18 @@ export namespace dev {
    * @example
    * ```ts
    * dev.error("Invalid configuration:", config);
-   * // Production (with __DEV__ defined): removed entirely
-   * // Development: console.error("[rextive] Invalid configuration:", config)
+   * // Production: removed entirely
+   * // Development: console.error("[storion] Invalid configuration:", config)
    * ```
    */
   export function error(message: string, ...args: any[]): void {
-    if (checkIsDev()) {
-      console.error(`[rextive] ${message}`, ...args);
+    if (process.env.NODE_ENV !== "production") {
+      console.error(`[storion] ${message}`, ...args);
     }
   }
 
   /**
    * Assert a condition only in development.
-   * If __DEV__ is defined and is false, this is removed via dead code elimination.
    *
    * @param condition - Condition to assert
    * @param message - Error message if assertion fails
@@ -182,14 +162,14 @@ export namespace dev {
    * @example
    * ```ts
    * dev.assert(signal !== undefined, "Signal cannot be undefined");
-   * // Production (with __DEV__ defined): removed entirely
+   * // Production: removed entirely
    * // Development: throws if condition is false
    * ```
    */
   export function assert(condition: boolean, message: string): void {
-    if (checkIsDev()) {
+    if (process.env.NODE_ENV !== "production") {
       if (!condition) {
-        throw new Error(`[rextive] Assertion failed: ${message}`);
+        throw new Error(`[storion] Assertion failed: ${message}`);
       }
     }
   }

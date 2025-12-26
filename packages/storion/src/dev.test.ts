@@ -23,15 +23,15 @@ describe("dev utilities", () => {
       dev.log("test message", { data: 123 });
 
       // In test environment (__DEV__ is true), it should log
-      expect(consoleLogSpy).toHaveBeenCalledWith("[rextive] test message", {
+      expect(consoleLogSpy).toHaveBeenCalledWith("[storion] test message", {
         data: 123,
       });
     });
 
-    it("should prefix messages with [rextive]", () => {
+    it("should prefix messages with [storion]", () => {
       dev.log("hello");
 
-      expect(consoleLogSpy).toHaveBeenCalledWith("[rextive] hello");
+      expect(consoleLogSpy).toHaveBeenCalledWith("[storion] hello");
     });
   });
 
@@ -39,14 +39,14 @@ describe("dev utilities", () => {
     it("should warn in development", () => {
       dev.warn("warning message");
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith("[rextive] warning message");
+      expect(consoleWarnSpy).toHaveBeenCalledWith("[storion] warning message");
     });
 
     it("should support multiple arguments", () => {
       dev.warn("deprecated", "feature", 123);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        "[rextive] deprecated",
+        "[storion] deprecated",
         "feature",
         123
       );
@@ -57,7 +57,7 @@ describe("dev utilities", () => {
     it("should error in development", () => {
       dev.error("error message");
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith("[rextive] error message");
+      expect(consoleErrorSpy).toHaveBeenCalledWith("[storion] error message");
     });
   });
 
@@ -87,7 +87,7 @@ describe("dev utilities", () => {
 
     it("should throw when condition is false", () => {
       expect(() => dev.assert(false, "test failure")).toThrow(
-        "[rextive] Assertion failed: test failure"
+        "[storion] Assertion failed: test failure"
       );
     });
 
@@ -95,7 +95,7 @@ describe("dev utilities", () => {
       const a: any = 1;
       const b: any = 2;
       expect(() => dev.assert(a === b, "math is broken")).toThrow(
-        "[rextive] Assertion failed: math is broken"
+        "[storion] Assertion failed: math is broken"
       );
     });
   });
@@ -128,15 +128,15 @@ describe("dev utilities", () => {
       it("should log in development", () => {
         dev.log("test message", { data: 123 });
 
-        expect(consoleLogSpy).toHaveBeenCalledWith("[rextive] test message", {
+        expect(consoleLogSpy).toHaveBeenCalledWith("[storion] test message", {
           data: 123,
         });
       });
 
-      it("should prefix messages with [rextive]", () => {
+      it("should prefix messages with [storion]", () => {
         dev.log("hello");
 
-        expect(consoleLogSpy).toHaveBeenCalledWith("[rextive] hello");
+        expect(consoleLogSpy).toHaveBeenCalledWith("[storion] hello");
       });
     });
 
@@ -145,7 +145,7 @@ describe("dev utilities", () => {
         dev.warn("warning message");
 
         expect(consoleWarnSpy).toHaveBeenCalledWith(
-          "[rextive] warning message"
+          "[storion] warning message"
         );
       });
 
@@ -153,7 +153,7 @@ describe("dev utilities", () => {
         dev.warn("deprecated", "feature", 123);
 
         expect(consoleWarnSpy).toHaveBeenCalledWith(
-          "[rextive] deprecated",
+          "[storion] deprecated",
           "feature",
           123
         );
@@ -164,7 +164,7 @@ describe("dev utilities", () => {
       it("should error in development", () => {
         dev.error("error message");
 
-        expect(consoleErrorSpy).toHaveBeenCalledWith("[rextive] error message");
+        expect(consoleErrorSpy).toHaveBeenCalledWith("[storion] error message");
       });
     });
 
@@ -175,7 +175,7 @@ describe("dev utilities", () => {
 
       it("should throw when condition is false", () => {
         expect(() => dev.assert(false, "test failure")).toThrow(
-          "[rextive] Assertion failed: test failure"
+          "[storion] Assertion failed: test failure"
         );
       });
 
@@ -183,7 +183,7 @@ describe("dev utilities", () => {
         const a: any = 1;
         const b: any = 2;
         expect(() => dev.assert(a === b, "math is broken")).toThrow(
-          "[rextive] Assertion failed: math is broken"
+          "[storion] Assertion failed: math is broken"
         );
       });
     });
