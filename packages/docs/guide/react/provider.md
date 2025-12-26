@@ -5,8 +5,8 @@
 ## Overview
 
 ```tsx
-import { container } from 'storion';
-import { StoreProvider } from 'storion/react';
+import { container } from "storion";
+import { StoreProvider } from "storion/react";
 
 const app = container();
 
@@ -44,17 +44,18 @@ With a provider, all components share the same container:
 ```tsx
 // ✅ With provider - shared stores
 <StoreProvider container={app}>
-  <Counter />  {/* Same counter */}
-  <Counter />  {/* Same counter */}
+  <Counter /> {/* Same counter */}
+  <Counter /> {/* Same counter */}
 </StoreProvider>
 ```
 
 ::: info One App, One StoreProvider
 Ideally, your app should have **one `StoreProvider` at the root**. Only use multiple providers if you have specific use cases like:
+
 - Super/universal apps where each sub-app has its own business logic
 - Different middleware configurations per container
 - Complete isolation between app sections
-:::
+  :::
 
 ## Basic Setup
 
@@ -62,19 +63,17 @@ Ideally, your app should have **one `StoreProvider` at the root**. Only use mult
 
 ```tsx
 // app/container.ts
-import { container } from 'storion';
-import { devtoolsMiddleware } from 'storion/devtools';
-import { persist } from 'storion/persist';
+import { container } from "storion";
+import { devtoolsMiddleware } from "storion/devtools";
+import { persist } from "storion/persist";
 
 export const app = container({
   middleware: [
     devtoolsMiddleware(),
     persist({
       load: (spec) => localStorage.getItem(`app:${spec.displayName}`),
-      save: (spec, state) => localStorage.setItem(
-        `app:${spec.displayName}`,
-        JSON.stringify(state)
-      ),
+      save: (spec, state) =>
+        localStorage.setItem(`app:${spec.displayName}`, JSON.stringify(state)),
     }),
   ],
 });
@@ -84,8 +83,8 @@ export const app = container({
 
 ```tsx
 // app/index.tsx
-import { StoreProvider } from 'storion/react';
-import { app } from './container';
+import { StoreProvider } from "storion/react";
+import { app } from "./container";
 
 function App() {
   return (
@@ -104,15 +103,15 @@ function App() {
 
 ```tsx
 // components/Header.tsx
-import { useStore } from 'storion/react';
-import { userStore } from '../stores/user';
+import { useStore } from "storion/react";
+import { userStore } from "../stores/user";
 
 function Header() {
   const { name } = useStore(({ get }) => {
     const [state] = get(userStore);
     return { name: state.name };
   });
-  
+
   return <header>Welcome, {name}</header>;
 }
 ```
@@ -140,12 +139,12 @@ function App() {
   return (
     <StoreProvider container={globalContainer}>
       <Header />
-      
+
       {/* Analytics feature has its own middleware */}
       <StoreProvider container={analyticsContainer}>
         <AnalyticsModule />
       </StoreProvider>
-      
+
       <Footer />
     </StoreProvider>
   );
@@ -160,30 +159,30 @@ Create a fresh container for each request:
 
 ```tsx
 // server.tsx
-import { renderToString } from 'react-dom/server';
-import { container } from 'storion';
-import { StoreProvider } from 'storion/react';
+import { renderToString } from "react-dom/server";
+import { container } from "storion";
+import { StoreProvider } from "storion/react";
 
 export async function handleRequest(req: Request) {
   // Fresh container per request
   const app = container();
-  
+
   // Pre-fetch data using store instance
   const userInstance = app.get(userStore);
   await userInstance.actions.fetchUser(req.userId);
-  
+
   // Render
   const html = renderToString(
     <StoreProvider container={app}>
       <App />
     </StoreProvider>
   );
-  
+
   // Serialize state for hydration
   const initialState = {
     user: app.get(userStore).state,
   };
-  
+
   return `
     <!DOCTYPE html>
     <html>
@@ -202,9 +201,9 @@ export async function handleRequest(req: Request) {
 
 ```tsx
 // client.tsx
-import { hydrateRoot } from 'react-dom/client';
-import { container } from 'storion';
-import { StoreProvider } from 'storion/react';
+import { hydrateRoot } from "react-dom/client";
+import { container } from "storion";
+import { StoreProvider } from "storion/react";
 
 const app = container();
 
@@ -215,7 +214,7 @@ if (window.__INITIAL_STATE__) {
 }
 
 hydrateRoot(
-  document.getElementById('root'),
+  document.getElementById("root"),
   <StoreProvider container={app}>
     <App />
   </StoreProvider>
@@ -228,22 +227,18 @@ hydrateRoot(
 
 ```tsx
 // test/utils.tsx
-import { render } from '@testing-library/react';
-import { container } from 'storion';
-import { StoreProvider } from 'storion/react';
+import { render } from "@testing-library/react";
+import { container } from "storion";
+import { StoreProvider } from "storion/react";
 
 export function renderWithStore(
   ui: React.ReactElement,
   options?: { container?: Container }
 ) {
   const testContainer = options?.container ?? container();
-  
+
   return {
-    ...render(
-      <StoreProvider container={testContainer}>
-        {ui}
-      </StoreProvider>
-    ),
+    ...render(<StoreProvider container={testContainer}>{ui}</StoreProvider>),
     container: testContainer,
   };
 }
@@ -252,20 +247,20 @@ export function renderWithStore(
 ### Using in Tests
 
 ```tsx
-import { renderWithStore } from './utils';
-import { counterStore } from '../stores/counter';
+import { renderWithStore } from "./utils";
+import { counterStore } from "../stores/counter";
 
-describe('Counter', () => {
-  it('increments count', async () => {
+describe("Counter", () => {
+  it("increments count", async () => {
     const { getByRole, container } = renderWithStore(<Counter />);
-    
+
     // Get store instance for assertions
     const counterInstance = container.get(counterStore);
     expect(counterInstance.state.count).toBe(0);
-    
+
     // Click increment
-    fireEvent.click(getByRole('button', { name: /increment/i }));
-    
+    fireEvent.click(getByRole("button", { name: /increment/i }));
+
     expect(counterInstance.state.count).toBe(1);
   });
 });
@@ -274,58 +269,32 @@ describe('Counter', () => {
 ### Pre-populated State
 
 ```tsx
-it('shows user name', () => {
+it("shows user name", () => {
   const testContainer = container();
-  
+
   // Pre-populate store
   const userInstance = testContainer.get(userStore);
-  userInstance.hydrate({ name: 'Test User', email: 'test@example.com' });
-  
-  const { getByText } = renderWithStore(
-    <UserProfile />,
-    { container: testContainer }
-  );
-  
-  expect(getByText('Test User')).toBeInTheDocument();
+  userInstance.hydrate({ name: "Test User", email: "test@example.com" });
+
+  const { getByText } = renderWithStore(<UserProfile />, {
+    container: testContainer,
+  });
+
+  expect(getByText("Test User")).toBeInTheDocument();
 });
 ```
 
-## Accessing Container Directly
+## Accessing Container Outside React
 
-### useContainer Hook
-
-Access the current container:
+For code outside React components (e.g., API interceptors), import the container directly:
 
 ```tsx
-import { useContainer } from 'storion/react';
-
-function DebugPanel() {
-  const container = useContainer();
-  
-  const handleExport = () => {
-    const userInstance = container.get(userStore);
-    const cartInstance = container.get(cartStore);
-    
-    console.log({
-      user: userInstance.state,
-      cart: cartInstance.state,
-    });
-  };
-  
-  return <button onClick={handleExport}>Export State</button>;
-}
-```
-
-### Outside React
-
-```tsx
-// Direct container access (not in React tree)
-import { app } from './container';
+import { app } from "./container";
 
 // API interceptor
 api.interceptors.response.use(
-  response => response,
-  error => {
+  (response) => response,
+  (error) => {
     if (error.response?.status === 401) {
       const authInstance = app.get(authStore);
       authInstance.actions.logout();
@@ -341,21 +310,17 @@ api.interceptors.response.use(
 
 ```tsx
 // app/providers.tsx
-'use client';
+"use client";
 
-import { StoreProvider } from 'storion/react';
-import { app } from './container';
+import { StoreProvider } from "storion/react";
+import { app } from "./container";
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  return (
-    <StoreProvider container={app}>
-      {children}
-    </StoreProvider>
-  );
+  return <StoreProvider container={app}>{children}</StoreProvider>;
 }
 
 // app/layout.tsx
-import { Providers } from './providers';
+import { Providers } from "./providers";
 
 export default function RootLayout({ children }) {
   return (
@@ -372,8 +337,8 @@ export default function RootLayout({ children }) {
 
 ```tsx
 // app/root.tsx
-import { container } from 'storion';
-import { StoreProvider } from 'storion/react';
+import { container } from "storion";
+import { StoreProvider } from "storion/react";
 
 const app = container();
 
@@ -394,14 +359,14 @@ export default function App() {
 
 ```tsx
 // src/main.tsx
-import { createRoot } from 'react-dom/client';
-import { container } from 'storion';
-import { StoreProvider } from 'storion/react';
-import App from './App';
+import { createRoot } from "react-dom/client";
+import { container } from "storion";
+import { StoreProvider } from "storion/react";
+import App from "./App";
 
 const app = container();
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById("root")!).render(
   <StoreProvider container={app}>
     <App />
   </StoreProvider>
@@ -427,7 +392,9 @@ function App() {
   return (
     <StoreProvider container={app}>
       <Header />
-      <StoreProvider container={app}> {/* Unnecessary! */}
+      <StoreProvider container={app}>
+        {" "}
+        {/* Unnecessary! */}
         <Main />
       </StoreProvider>
     </StoreProvider>
@@ -438,7 +405,7 @@ function App() {
 ### 2. Container Outside Component
 
 ```tsx
-// ✅ Good - container created once
+// ✅ Good - container created once at module level
 const app = container();
 
 function App() {
@@ -460,24 +427,9 @@ function App() {
 }
 ```
 
-### 3. Cleanup on Unmount
-
-```tsx
-function FeatureWithIsolation() {
-  const featureContainer = useMemo(() => container(), []);
-  
-  // Cleanup when feature unmounts
-  useEffect(() => {
-    return () => featureContainer.dispose();
-  }, [featureContainer]);
-  
-  return (
-    <StoreProvider container={featureContainer}>
-      <Feature />
-    </StoreProvider>
-  );
-}
-```
+::: tip No Cleanup Needed
+When the container is created outside the component (at module level), it lives for the app's entire lifetime. No cleanup is needed - it will be garbage collected when the app closes.
+:::
 
 ## Troubleshooting
 
@@ -528,11 +480,12 @@ const app = container();
 ::: warning Important Distinction
 The `get()` function returns different types depending on where it's used:
 
-| Context | Usage | Returns |
-|---------|-------|---------|
-| `container.get(store)` | Outside React | `StoreInstance` (object with `.state`, `.actions`) |
-| Selector's `get(store)` | Inside `useStore()` | `[state, actions]` tuple |
-| Setup's `get(store)` | Inside store `setup()` | `[state, actions]` tuple |
+| Context                 | Usage                  | Returns                                            |
+| ----------------------- | ---------------------- | -------------------------------------------------- |
+| `container.get(store)`  | Outside React          | `StoreInstance` (object with `.state`, `.actions`) |
+| Selector's `get(store)` | Inside `useStore()`    | `[state, actions]` tuple                           |
+| Setup's `get(store)`    | Inside store `setup()` | `[state, actions]` tuple                           |
+
 :::
 
 ```tsx
@@ -542,7 +495,7 @@ const [state, actions] = app.get(userStore);
 // ✅ CORRECT - container.get() returns StoreInstance
 const userInstance = app.get(userStore);
 userInstance.state.name;
-userInstance.actions.setName('John');
+userInstance.actions.setName("John");
 
 // ✅ CORRECT - selector's get() returns tuple
 const { name } = useStore(({ get }) => {
