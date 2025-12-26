@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.14.1] - 2024-12-27
+
+### Fixed
+
+- Remove unused import in persist module
+
+---
+
 ## [0.14.0] - 2024-12-27
 
 ### Added

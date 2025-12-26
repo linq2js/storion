@@ -961,7 +961,9 @@ export interface StoreOptions<
    *   ...
    * })
    */
-  meta?: MetaEntry<keyof TState, any> | MetaEntry<keyof TState, any>[];
+  meta?: {} extends TState
+    ? MetaEntry<any, any> | MetaEntry<any, any>[]
+    : MetaEntry<keyof TState, any> | MetaEntry<keyof TState, any>[];
 
   /**
    * Controls what `toJSON()` returns when the store instance is serialized.
