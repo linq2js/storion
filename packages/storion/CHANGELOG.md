@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `useStore()` now properly re-renders when store is hydrated after initial render. Changed subscription cleanup and `scoped()` store disposal from microtask (`Promise.resolve`) to macrotask (`setTimeout`) because in React 19 concurrent mode, microtasks run BEFORE `useLayoutEffect`, causing subscriptions/stores to be removed prematurely before the component commits.
+
+- `effect()` in selector now properly re-renders component when state changes inside the effect. Previously, `scheduledEffects` array was not cleared between renders, causing effects to accumulate and state changes during effect execution to not trigger re-renders.
+
 ---
 
 ## [0.16.6] - 2024-12-27

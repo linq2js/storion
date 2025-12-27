@@ -169,8 +169,26 @@ export function useStoreWithContainer<T extends object>(
   // 2. Clear tracked deps for fresh collection
   refs.trackedDeps.clear();
 
+  // 3. Clear scheduled effects for this render cycle
+  // Each render collects its own effects; previous effects are disposed in useEffect cleanup
+  scheduledEffects.length = 0;
+
   // Capture once flag before selector runs (so all once() calls see the same value)
   const shouldRunOnce = !refs.onceRan;
+
+  // Schedule cleanup for abandoned renders (concurrent mode / error boundaries).
+  // IMPORTANT: We use setTimeout (macrotask) instead of Promise.resolve (microtask) because
+  // in React 19 concurrent mode, microtasks run BEFORE useLayoutEffect. Since we set
+  // refs.committed = true in useLayoutEffect, using microtask would cause subscriptions
+  // to be cleaned up prematurely (before commit). setTimeout runs AFTER useLayoutEffect,
+  // ensuring proper commit detection.
+  if (shouldScheduleDispose) {
+    setTimeout(() => {
+      if (!refs.committed) {
+        cleanupSubscriptions();
+      }
+    }, 0);
+  }
 
   // Create selector context (no tracking proxy needed - hooks handle it)
   const selectorContext: SelectorContext = useMemo(() => {
@@ -329,19 +347,13 @@ export function useStoreWithContainer<T extends object>(
     refs.onceRan = true;
   }
 
-  // === RENDER PHASE: Subscribe and schedule microtask cleanup ===
+  // === RENDER PHASE: Subscribe and schedule macrotask cleanup ===
   // Subscribe during render to catch changes immediately (e.g., hydration)
   subscribe();
 
-  if (shouldScheduleDispose) {
-    // Schedule microtask cleanup in case effect never runs (component suspended/unmounted)
-    // Note: Layout effect runs BEFORE microtasks, so if committed, microtask is no-op
-    queueMicrotask(() => {
-      if (!refs.committed) {
-        cleanupSubscriptions();
-      }
-    });
-  }
+  // Note: Cleanup is scheduled via setTimeout (macrotask) above, not microtask,
+  // because in React 19 concurrent mode microtasks run BEFORE useLayoutEffect.
+  // This ensures cleanup only happens for truly abandoned renders.
 
   // Scoped store lifecycle management
   // Use layout effect for synchronous commit before paint
@@ -360,7 +372,7 @@ export function useStoreWithContainer<T extends object>(
       subscribe();
     }
 
-    // 2. Mark as committed (prevents microtask cleanup)
+    // 2. Mark as committed
     refs.committed = true;
 
     // 3. If store changed since render, re-render with fresh values
@@ -381,9 +393,10 @@ export function useStoreWithContainer<T extends object>(
   // executed in useEffect, giving them access to fresh closure values
   // (refs, props, other hook results) while auto-tracking store state.
   //
-  // Note: We don't clear scheduledEffects here because StrictMode runs
-  // effects twice (mount → cleanup → remount). The effect's internal
-  // isStarted guard prevents double-execution of the same instance.
+  // scheduledEffects is cleared at render start (not here) so each render
+  // cycle processes only effects scheduled during that render. StrictMode
+  // double-mounting is handled by effect cleanup/restart, not by keeping
+  // stale effects around.
   useEffect(() => {
     // Run each effect and collect dispose functions
     const disposers = emitter();
@@ -724,8 +737,10 @@ const useIsomorphicLayoutEffect =
   isServer || typeof useLayoutEffect === "undefined"
     ? useEffect
     : useLayoutEffect;
-// Always use microtask for disposal in browser to handle StrictMode correctly
-// The microtask allows StrictMode's effect re-run to commit before disposal check
+// Always use macrotask (setTimeout) for disposal in browser to handle StrictMode correctly.
+// IMPORTANT: We use setTimeout instead of Promise.resolve because in React 19 concurrent mode,
+// microtasks (Promise.resolve) run BEFORE useLayoutEffect, but we need the disposal check
+// to run AFTER useLayoutEffect sets _committed = true. setTimeout (macrotask) ensures this.
 const shouldScheduleDispose =
   !isServer && dev() && typeof useLayoutEffect === "function";
 
@@ -736,7 +751,7 @@ class ScopeController {
   /** Whether this controller has been disposed */
   private _disposed = false;
 
-  /** Whether a disposal check microtask is pending */
+  /** Whether a disposal check is pending (scheduled via setTimeout) */
   private _pendingDisposalCheck = false;
 
   private _stores = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
@@ -757,11 +772,11 @@ class ScopeController {
   };
 
   /**
-   * Schedule disposal check via microtask.
+   * Schedule disposal check via macrotask (setTimeout).
    *
-   * This deferred check is crucial for StrictMode:
+   * This deferred check is crucial for StrictMode and React 19 concurrent mode:
    * - StrictMode runs cleanup then effect again synchronously
-   * - The microtask runs AFTER the re-commit, so store survives
+   * - The macrotask runs AFTER useLayoutEffect commits, so store survives
    * - On real unmount, no re-commit happens, so disposal proceeds
    */
   private _disposeIfUnused = () => {
@@ -769,17 +784,18 @@ class ScopeController {
     if (this._committed || this._disposed || this._pendingDisposalCheck) return;
 
     if (shouldScheduleDispose) {
-      // Mark that a disposal check is pending to prevent duplicate microtasks
+      // Mark that a disposal check is pending to prevent duplicate checks
       this._pendingDisposalCheck = true;
-      // Defer check to next microtask
-      // This allows StrictMode's effect re-run to commit before we check
-      Promise.resolve().then(() => {
+      // Defer check to next macrotask (setTimeout instead of Promise.resolve)
+      // In React 19 concurrent mode, microtasks run BEFORE useLayoutEffect,
+      // so we use setTimeout to ensure the check runs AFTER effects commit
+      setTimeout(() => {
         this._pendingDisposalCheck = false;
-        // If still not committed after microtask, it's a real unmount
+        // If still not committed after macrotask, it's a real unmount
         if (!this._committed) {
           this.dispose();
         }
-      });
+      }, 0);
     } else {
       this.dispose();
     }
