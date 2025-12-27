@@ -351,9 +351,12 @@ export function useStoreWithContainer<T extends object>(
   // Subscribe during render to catch changes immediately (e.g., hydration)
   subscribe();
 
-  // Note: Cleanup is scheduled via setTimeout (macrotask) above, not microtask,
-  // because in React 19 concurrent mode microtasks run BEFORE useLayoutEffect.
-  // This ensures cleanup only happens for truly abandoned renders.
+  // Note: Cleanup is scheduled via setTimeout (macrotask) above (not microtask),
+  // because in React 19 concurrent mode microtasks can run BEFORE useLayoutEffect.
+  //
+  // The goal is to avoid prematurely cleaning up subscriptions before commit.
+  // Even so, subscriptions can still end up temporarily cleared in some lifecycles
+  // (e.g. StrictMode/unmount sequences), so layoutEffect below will resubscribe if needed.
 
   // Scoped store lifecycle management
   // Use layout effect for synchronous commit before paint

@@ -122,6 +122,36 @@ describe("store instance", () => {
     instance1.actions.increment();
     expect(instance2.state.count).toBe(1);
   });
+
+  it("should replay a buffered property change when emitter exists but has no listeners", () => {
+    const s = store({
+      name: "buffered",
+      state: { value: 0 },
+      setup: ({ state }) => ({
+        setValue: (value: number) => {
+          state.value = value;
+        },
+      }),
+    });
+
+    const stores = container();
+    const instance = stores.get(s);
+
+    // Create the property emitter by subscribing, then remove the listener.
+    const unsub1 = instance._subscribeInternal("value", () => {});
+    unsub1(); // emitter exists but has 0 listeners
+
+    // Change the property while there are no listeners.
+    instance.actions.setValue(123);
+
+    // Subscribe again: the buffered change should be replayed immediately.
+    const onChange = vi.fn();
+    const unsub2 = instance._subscribeInternal("value", onChange);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    unsub2();
+  });
 });
 
 describe("effects", () => {

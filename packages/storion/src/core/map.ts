@@ -324,6 +324,7 @@ export function map<T>(
 
           onAdded?.(value, key);
         });
+
         return value;
       },
 

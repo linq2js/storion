@@ -2,7 +2,7 @@
  * Tests for useStore hook.
  */
 
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { act } from "@testing-library/react";
 import { wrappers } from "./strictMode";
@@ -22,19 +22,6 @@ describe.each(wrappers)(
         <StoreProvider container={stores}>{children}</StoreProvider>
       );
     };
-
-    it("test refs", () => {
-      const refs = new Set();
-      renderHook(() => {
-        const ref = useRef<{}>();
-        if (!ref.current) {
-          ref.current = {};
-        }
-        refs.add(ref.current);
-      });
-
-      console.log("refs size", mode, refs.size);
-    });
 
     describe("basic usage", () => {
       it("should select state from store", () => {

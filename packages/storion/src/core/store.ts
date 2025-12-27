@@ -173,6 +173,9 @@ export function createStoreInstance<
     () => emitter<PropertyChangeEvent>()
   );
 
+  // Track last change event for each property (for subscriptions set up after change)
+  const lastPropertyChanges = new Map<keyof TState, PropertyChangeEvent>();
+
   // ==========================================================================
   // Action Dispatch Tracking
   // ==========================================================================
@@ -268,9 +271,27 @@ export function createStoreInstance<
 
     // Notify property subscribers (using emitter)
     // Effects subscribe via this mechanism through the hooks system
-    propertyEmitters.tap(key as keyof TState, (em) =>
-      em.emit({ newValue, oldValue })
-    );
+    let hasEmitter = false;
+    let listenerCount = 0;
+    propertyEmitters.tap(key as keyof TState, (em) => {
+      hasEmitter = true;
+      listenerCount = em.size;
+      if (listenerCount > 0) {
+        em.emit({ newValue, oldValue });
+      }
+    });
+
+    // If no emitter exists OR the emitter exists but currently has no listeners, store the
+    // change so a later subscription can "replay" it immediately.
+    //
+    // This handles timing windows where a component's subscription may be temporarily
+    // detached (e.g. concurrent/StrictMode cleanup around a render-commit boundary).
+    if (!hasEmitter || listenerCount === 0) {
+      // Store the change event - when subscriptions are set up later, they'll see this change
+      lastPropertyChanges.set(key as keyof TState, { newValue, oldValue });
+      // Create emitter so subscriptions set up later attach to existing emitter
+      propertyEmitters.get(key as keyof TState);
+    }
 
     // Schedule global subscriber notification
     scheduleNotification(() => {
@@ -401,7 +422,19 @@ export function createStoreInstance<
       }
 
       // Property subscription
-      return propertyEmitters.get(propKey as keyof TState).on(listener);
+      const emitter = propertyEmitters.get(propKey as keyof TState);
+
+      // If there was a change before the subscription was attached (or while it was temporarily detached),
+      // trigger the listener immediately to mark stale before layoutEffect runs.
+      const lastChange = lastPropertyChanges.get(propKey as keyof TState);
+      if (lastChange) {
+        // Clear the stored change (we've notified about it)
+        lastPropertyChanges.delete(propKey as keyof TState);
+        // Trigger listener synchronously so subscription callback can set isStale before layoutEffect runs
+        listener();
+      }
+
+      return emitter.on(listener);
     },
 
     dispose() {
@@ -423,6 +456,7 @@ export function createStoreInstance<
         em.clear();
       }
       propertyEmitters.clear();
+      lastPropertyChanges.clear();
 
       // Clear action subscribers
       wildcardActionEmitter.clear();

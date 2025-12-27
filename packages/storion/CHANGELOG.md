@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Store property subscriptions now correctly re-render when a property changes while its emitter temporarily has **0 listeners** (e.g. around render/commit timing windows), by buffering the last change and replaying it on the next subscription.
+
 ---
 
 ## [0.16.7] - 2024-12-27
