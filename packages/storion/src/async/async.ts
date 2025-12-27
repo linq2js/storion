@@ -21,6 +21,7 @@ import type {
   AsyncKey,
   AsyncRequestId,
   SerializedAsyncState,
+  PromiseState,
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
@@ -32,12 +33,6 @@ import { isAbortable, type Abortable } from "./abortable";
 import { isPromiseLike } from "../utils/isPromiseLike";
 
 // ===== Global Promise Cache for Suspense =====
-
-interface PromiseState<T = any> {
-  status: "pending" | "fulfilled" | "rejected";
-  resolved: T | undefined;
-  rejected: any;
-}
 
 const pendingPromises = new WeakMap<AsyncKey<any>, Promise<any>>();
 const promiseStates = new WeakMap<PromiseLike<any>, PromiseState>();

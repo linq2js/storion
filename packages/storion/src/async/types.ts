@@ -430,3 +430,13 @@ export class AsyncAggregateError extends Error {
     this.name = "AsyncAggregateError";
   }
 }
+
+export interface PromiseWithState<T> extends Promise<T> {
+  state: PromiseState<T>;
+}
+
+export interface PromiseState<T = any> {
+  status: "pending" | "fulfilled" | "rejected";
+  resolved: T | undefined;
+  rejected: any;
+}

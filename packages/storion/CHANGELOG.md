@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.14.2] - 2024-12-27
+
+### Added
+
+- Export `PromiseState` and `PromiseWithState` types from `storion/async`
+
+---
+
 ## [0.14.1] - 2024-12-27
 
 ### Fixed

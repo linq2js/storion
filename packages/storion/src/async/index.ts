@@ -82,4 +82,6 @@ export {
   type RaceResult,
   type AsyncKey,
   type SerializedAsyncState,
+  type PromiseState,
+  type PromiseWithState,
 } from "./types";
