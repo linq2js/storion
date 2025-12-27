@@ -97,12 +97,12 @@ export interface FocusMap<T> {
   set(key: string, valueOrReducerOrUpdater: T | ((prev: T) => T | void)): void;
 
   /**
-   * Get value at key, or create it if it doesn't exist.
+   * Ensure value exists at key, creating it if necessary.
    *
    * @example
-   * const user = users.tryGet('user-123', () => ({ id: 'user-123', name: 'New' }));
+   * const user = users.ensure('user-123', () => ({ id: 'user-123', name: 'New' }));
    */
-  tryGet(key: string, create: () => T): T;
+  ensure(key: string, create: () => T): T;
 
   /**
    * Swap values at two keys.
@@ -306,7 +306,7 @@ export function map<T>(
         });
       },
 
-      tryGet(key: string, create: () => T): T {
+      ensure(key: string, create: () => T): T {
         const currentRecord = getRecord();
         if (key in currentRecord) {
           return currentRecord[key];

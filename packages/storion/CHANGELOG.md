@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.15.0] - 2024-12-27
+
+### Changed
+
+- **BREAKING**: Rename `tryGet(key, create)` to `ensure(key, create)` in `list()` and `map()` focus helpers
+
+---
+
 ## [0.14.4] - 2024-12-27
 
 ### Changed

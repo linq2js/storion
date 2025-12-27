@@ -124,12 +124,12 @@ export interface FocusList<T> {
   set(index: number, itemOrReducerOrUpdater: T | ((prev: T) => T | void)): void;
 
   /**
-   * Get item at index, or create it if it doesn't exist.
+   * Ensure item exists at index, creating it if necessary.
    *
    * @example
-   * const item = items.tryGet(5, () => ({ id: 5, name: 'New' }));
+   * const item = items.ensure(5, () => ({ id: 5, name: 'New' }));
    */
-  tryGet(index: number, create: () => T): T;
+  ensure(index: number, create: () => T): T;
 
   /**
    * Swap items at two indices.
@@ -496,7 +496,7 @@ export function list<T>(
         });
       },
 
-      tryGet(index: number, create: () => T): T {
+      ensure(index: number, create: () => T): T {
         const currentArray = getArray();
         if (index >= 0 && index < currentArray.length) {
           return currentArray[index];
