@@ -59,7 +59,7 @@ export type PersistLoadResult =
   | Record<string, unknown>
   | null
   | undefined
-  | Promise<Record<string, unknown> | null | undefined>;
+  | PromiseLike<Record<string, unknown> | null | undefined>;
 
 /**
  * Context passed to the handler function.

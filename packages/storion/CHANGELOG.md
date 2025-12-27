@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.16.2] - 2024-12-27
+
+### Changed
+
+- `PersistLoadResult` type now accepts `PromiseLike` instead of `Promise` for better flexibility
+
+---
+
 ## [0.16.1] - 2024-12-27
 
 ### Changed
