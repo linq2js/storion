@@ -115,7 +115,7 @@ const cartStore = store({
     const [auth] = get(authStore); // Cross-store access
     return {
       add: (item) => {
-        state.items.push(item);
+        state.items = [...state.items, item];
       },
       clear: () => {
         state.items = [];
