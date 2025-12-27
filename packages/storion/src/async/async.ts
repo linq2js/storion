@@ -1015,6 +1015,10 @@ export namespace async {
    * @returns The state of the promise.
    */
   export function state<T>(promise: PromiseLike<T>): PromiseWithState<T> {
+    if (!isPromiseLike(promise)) {
+      throw new Error("Promise is not a PromiseLike");
+    }
+
     if ("state" in promise) {
       return promise as PromiseWithState<T>;
     }
