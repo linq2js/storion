@@ -1502,4 +1502,369 @@ describe("effect", () => {
       expect(runCount).toBe(3);
     });
   });
+
+  describe("automatic promise catching (Suspense-like)", () => {
+    it("should auto-catch thrown promises and refresh when resolved", async () => {
+      let runCount = 0;
+      let resolvePromise: ((value: string) => void) | undefined;
+      let result: string | null = null;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect(() => {
+            runCount++;
+
+            if (runCount === 1) {
+              // Simulate async.wait throwing a promise
+              const promise = new Promise<string>((resolve) => {
+                resolvePromise = resolve;
+              });
+              throw promise;
+            } else {
+              // Second run - data is available
+              result = "computed result";
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+      expect(result).toBeNull();
+
+      // Resolve the promise
+      resolvePromise?.("data");
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(runCount).toBe(2);
+      expect(result).toBe("computed result");
+    });
+
+    it("should skip promise refresh if deps changed before promise resolved", async () => {
+      let runCount = 0;
+      let resolvePromise: ((value: string) => void) | undefined;
+      let manualTrigger: (() => void) | undefined;
+      const results: string[] = [];
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect((ctx) => {
+            runCount++;
+            results.push(`run-${runCount}`);
+
+            if (runCount === 1) {
+              // Save manual trigger for dep change simulation
+              manualTrigger = ctx.refresh;
+              // Throw a promise
+              const promise = new Promise<string>((resolve) => {
+                resolvePromise = resolve;
+              });
+              throw promise;
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+      expect(results).toEqual(["run-1"]);
+
+      // Simulate dep change BEFORE promise resolves
+      manualTrigger?.();
+      expect(runCount).toBe(2);
+      expect(results).toEqual(["run-1", "run-2"]);
+
+      // Now resolve the original promise - should be skipped (stale)
+      resolvePromise?.("data");
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Should still be 2 - promise callback was skipped
+      expect(runCount).toBe(2);
+      expect(results).toEqual(["run-1", "run-2"]);
+    });
+
+    it("should call handleError on promise rejection (respects onError option)", async () => {
+      let runCount = 0;
+      let rejectPromise: ((error: Error) => void) | undefined;
+      let handledError: unknown = null;
+      let retryCount = 0;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect(
+            () => {
+              runCount++;
+
+              if (runCount === 1) {
+                // Throw a promise that will be rejected
+                const promise = new Promise<string>((_, reject) => {
+                  rejectPromise = reject;
+                });
+                throw promise;
+              }
+            },
+            {
+              // Custom error handler to capture the rejection
+              onError: ({ error, retryCount: count }) => {
+                handledError = error;
+                retryCount = count;
+              },
+            }
+          );
+        }
+      );
+
+      expect(runCount).toBe(1);
+      expect(handledError).toBeNull();
+
+      // Reject the promise
+      rejectPromise?.(new Error("rejected"));
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Effect should NOT have re-run (custom handler doesn't call retry)
+      // But the error should have been passed to handleError
+      expect(runCount).toBe(1);
+      expect((handledError as Error)?.message).toBe("rejected");
+      expect(retryCount).toBe(0);
+    });
+
+    it("should retry on promise rejection when retry config is set", async () => {
+      let runCount = 0;
+      let rejectPromise: ((error: Error) => void) | undefined;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect(
+            () => {
+              runCount++;
+
+              if (runCount <= 2) {
+                // Throw a promise that will be rejected
+                const promise = new Promise<string>((_, reject) => {
+                  rejectPromise = reject;
+                });
+                throw promise;
+              }
+            },
+            {
+              onError: { retries: 3, delay: 5 },
+            }
+          );
+        }
+      );
+
+      expect(runCount).toBe(1);
+
+      // First rejection - should trigger retry
+      rejectPromise?.(new Error("rejected 1"));
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Effect should have retried
+      expect(runCount).toBe(2);
+
+      // Second rejection - should trigger another retry
+      rejectPromise?.(new Error("rejected 2"));
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(runCount).toBe(3);
+    });
+
+    it("should handle multiple sequential thrown promises", async () => {
+      let runCount = 0;
+      let resolveFirst: ((value: string) => void) | undefined;
+      let resolveSecond: ((value: string) => void) | undefined;
+      const results: string[] = [];
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect(() => {
+            runCount++;
+
+            if (runCount === 1) {
+              // First promise
+              const promise = new Promise<string>((resolve) => {
+                resolveFirst = resolve;
+              });
+              throw promise;
+            } else if (runCount === 2) {
+              results.push("run-2");
+              // Second promise
+              const promise = new Promise<string>((resolve) => {
+                resolveSecond = resolve;
+              });
+              throw promise;
+            } else {
+              results.push("run-3-success");
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+      expect(results).toEqual([]);
+
+      // Resolve first promise
+      resolveFirst?.("first");
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(runCount).toBe(2);
+      expect(results).toEqual(["run-2"]);
+
+      // Resolve second promise
+      resolveSecond?.("second");
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(runCount).toBe(3);
+      expect(results).toEqual(["run-2", "run-3-success"]);
+    });
+
+    it("should not refresh if effect is disposed before promise resolves", async () => {
+      let runCount = 0;
+      let resolvePromise: ((value: string) => void) | undefined;
+      let dispose: VoidFunction | undefined;
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            dispose = runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+        },
+        () => {
+          effect(() => {
+            runCount++;
+
+            if (runCount === 1) {
+              const promise = new Promise<string>((resolve) => {
+                resolvePromise = resolve;
+              });
+              throw promise;
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+
+      // Dispose effect
+      dispose?.();
+
+      // Resolve promise after disposal
+      resolvePromise?.("data");
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Should not have re-run
+      expect(runCount).toBe(1);
+    });
+
+    it("should keep subscriptions alive when promise is thrown", async () => {
+      let runCount = 0;
+      let resolvePromise: ((value: string) => void) | undefined;
+      let triggerDep: (() => void) | undefined;
+      const results: string[] = [];
+
+      // Create a mock tracked state
+      const createTrackedState = () => {
+        const listeners = new Set<VoidFunction>();
+        return {
+          get: () => {
+            // Will be tracked by effect hooks
+          },
+          subscribe: (fn: VoidFunction) => {
+            listeners.add(fn);
+            return () => listeners.delete(fn);
+          },
+          notify: () => {
+            for (const fn of listeners) fn();
+          },
+        };
+      };
+
+      const trackedState = createTrackedState();
+
+      withHooks(
+        {
+          scheduleEffect: (runEffect) => {
+            runEffect();
+          },
+          scheduleNotification: (execute) => {
+            execute();
+          },
+          onRead: (event) => {
+            // This simulates the effect tracking the state read
+          },
+        },
+        () => {
+          effect((ctx) => {
+            runCount++;
+            results.push(`run-${runCount}`);
+
+            // Save trigger for manual dep notification
+            triggerDep = ctx.refresh;
+
+            if (runCount === 1) {
+              // Throw a promise
+              const promise = new Promise<string>((resolve) => {
+                resolvePromise = resolve;
+              });
+              throw promise;
+            }
+          });
+        }
+      );
+
+      expect(runCount).toBe(1);
+
+      // Trigger dep change while waiting for promise
+      triggerDep?.();
+      expect(runCount).toBe(2);
+      expect(results).toEqual(["run-1", "run-2"]);
+
+      // Resolve original promise - should be skipped
+      resolvePromise?.("data");
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(runCount).toBe(2);
+    });
+  });
 });

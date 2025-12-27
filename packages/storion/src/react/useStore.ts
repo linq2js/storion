@@ -37,6 +37,7 @@ import { isSpec } from "../is";
 import { storeTuple } from "../utils/storeTuple";
 import { emitter } from "../emitter";
 import { dev } from "../dev";
+import { microtask } from "../utils/microtask";
 
 // Re-export types from types.ts for convenience
 export type { MixinMap, MergeMixin, MergeMixinResult, MixinMapResult };
@@ -79,6 +80,11 @@ export type UseFromSelectorHook<
   TArgs extends unknown[]
 > = (...args: TArgs) => StableResult<TResult>;
 
+// Tracks whether ANY useStore selector is currently executing (module-global).
+// Used to avoid sync setState from store subscriptions while React is rendering
+// another Storion selector (which triggers React's "setState in render" warning).
+let useStoreSelectorDepth = 0;
+
 /**
  * React hook to consume stores with automatic optimization.
  *
@@ -101,6 +107,8 @@ interface UseStoreRefs {
   committed: boolean;
   /** Whether store changed since render (for stale detection) */
   isStale: boolean;
+  /** Whether a committed update flush is already scheduled */
+  flushScheduled: boolean;
 }
 
 /**
@@ -124,7 +132,25 @@ export function useStoreWithContainer<T extends object>(
     subscribed: false,
     committed: false,
     isStale: false,
+    flushScheduled: false,
   }));
+
+  const scheduleFlushIfCommitted = () => {
+    // Never call React setState (forceUpdate) synchronously from a subscription.
+    // If a store changes while React is rendering another component, a sync setState
+    // triggers: "Cannot update a component while rendering a different component".
+    if (!refs.committed || refs.flushScheduled) return;
+    refs.flushScheduled = true;
+
+    const flush = () => {
+      refs.flushScheduled = false;
+      if (!refs.committed || !refs.isStale) return;
+      refs.isStale = false;
+      forceUpdate();
+    };
+
+    microtask(flush);
+  };
 
   // Scoped controller for component-local stores (lazy initialized)
   const [scopeController] = useState<ScopeController>(
@@ -147,14 +173,23 @@ export function useStoreWithContainer<T extends object>(
   const subscribe = () => {
     for (const [key, dep] of refs.trackedDeps) {
       const unsub = dep.subscribe(() => {
-        // If not committed yet (between render and effect), mark stale
-        // Effect will handle the re-render
+        // If not committed yet (between render and layoutEffect), mark stale.
+        // LayoutEffect will forceUpdate after commit.
         if (!refs.committed) {
           refs.isStale = true;
-        } else {
-          // Normal change after commit - trigger re-render directly
-          forceUpdate();
+          return;
         }
+
+        // If a store updates while React is rendering another Storion selector, do NOT
+        // synchronously call setState. Defer to a microtask to avoid React warnings.
+        if (useStoreSelectorDepth > 0) {
+          refs.isStale = true;
+          scheduleFlushIfCommitted();
+          return;
+        }
+
+        // Normal post-commit update path: re-render immediately.
+        forceUpdate();
       });
       refs.subscriptions.set(key, unsub);
     }
@@ -284,6 +319,7 @@ export function useStoreWithContainer<T extends object>(
   // (e.g., when user returns state proxy directly: `return state`)
   let output: StableResult<T>;
   selectorExecution.active = true;
+  useStoreSelectorDepth++;
   try {
     output = withHooks(
       {
@@ -340,6 +376,7 @@ export function useStoreWithContainer<T extends object>(
     );
   } finally {
     selectorExecution.active = false;
+    useStoreSelectorDepth--;
   }
 
   // Mark once as ran after first selector execution
@@ -388,6 +425,7 @@ export function useStoreWithContainer<T extends object>(
     return () => {
       cleanupSubscriptions();
       refs.committed = false;
+      refs.flushScheduled = false;
     };
   });
 

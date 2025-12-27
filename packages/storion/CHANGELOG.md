@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `effect()` now automatically catches thrown promises (Suspense-like behavior). When `async.wait()` throws a promise inside an effect, the effect will automatically re-run when the promise resolves. Uses `ctx.nth` to detect staleness - if dependencies change before the promise resolves, the refresh is skipped. On promise rejection, the error is handled via `options.onError` (supports `keepAlive`, `failFast`, retry config, or custom handler).
+  ```ts
+  effect(() => {
+    const s = state.otherProp;
+    const user = async.wait(state.userAsync); // throws if pending
+    // Effect auto-catches the promise and re-runs when resolved
+    // If otherProp changes first, the promise refresh is skipped
+    // On rejection, error goes through handleError (respects onError option)
+  });
+  ```
+
 ### Fixed
 
 - Store property subscriptions now correctly re-render when a property changes while its emitter temporarily has **0 listeners** (e.g. around render/commit timing windows), by buffering the last change and replaying it on the next subscription.

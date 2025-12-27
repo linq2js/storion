@@ -618,6 +618,67 @@ describe.each(wrappers)(
       });
     });
 
+    describe("render-phase update safety", () => {
+      it("should not synchronously setState in a subscribed component when another component updates store during render", () => {
+        const counter = store({
+          name: "counter",
+          state: { count: 0 },
+          setup: ({ state }) => ({
+            inc: () => {
+              state.count++;
+            },
+          }),
+        });
+
+        const stores = container();
+        const instance = stores.get(counter);
+
+        // Component A subscribes to the store (would previously forceUpdate synchronously)
+        function Subscriber() {
+          useStore(({ get }) => {
+            const [s] = get(counter);
+            return { count: s.count };
+          });
+          return null;
+        }
+
+        // Component B updates the store during a Storion selector render (matches the reported case)
+        function RenderUpdater() {
+          const did = React.useRef(false);
+          useStore(({ get }) => {
+            const [s] = get(counter);
+            if (!did.current) {
+              did.current = true;
+              instance.actions.inc();
+            }
+            return { count: s.count };
+          });
+          return null;
+        }
+
+        const consoleSpy = vi
+          .spyOn(console, "error")
+          .mockImplementation(() => {});
+
+        render(
+          <StoreProvider container={stores}>
+            <Subscriber />
+            <RenderUpdater />
+          </StoreProvider>
+        );
+
+        const calls = consoleSpy.mock.calls
+          .map((args) => args.join(" "))
+          .join("\n");
+
+        expect(calls).not.toMatch(
+          /Cannot update a component .* while rendering a different component/i
+        );
+
+        consoleSpy.mockRestore();
+      });
+    });
+
     describe("SelectorContext.mixin()", () => {
       it("should use a mixin to compose selector logic", () => {
         const counter = store({

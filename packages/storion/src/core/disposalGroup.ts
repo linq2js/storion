@@ -6,6 +6,7 @@
  */
 
 import type { AutoDisposeOptions } from "../types";
+import { microtask } from "../utils/microtask";
 import { tryDispose } from "./disposable";
 
 // =============================================================================
@@ -209,7 +210,7 @@ export function disposalGroup(): DisposalGroup {
         if (gracePeriodMs <= 0) {
           // Use microtask for immediate disposal
           pendingItems.set(item, "microtask");
-          queueMicrotask(() => {
+          microtask(() => {
             if (pendingItems.get(item) === "microtask") {
               pendingItems.delete(item);
               tryDispose(item);
@@ -277,7 +278,7 @@ export function createLocalDisposalTracker(gracePeriodMs: number) {
 
         if (gracePeriodMs <= 0) {
           pendingItems.set(item, "microtask");
-          queueMicrotask(() => {
+          microtask(() => {
             if (pendingItems.get(item) === "microtask") {
               pendingItems.delete(item);
               tryDispose(item);

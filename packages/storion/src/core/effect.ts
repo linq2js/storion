@@ -14,6 +14,7 @@ import {
   type Hooks,
 } from "./tracking";
 import { EffectRefreshError, AsyncFunctionError } from "../errors";
+import { isPromiseLike } from "../utils/isPromiseLike";
 import { createSafe, type SafeFnWithUtils } from "../async/safe";
 import { retryStrategy, type RetryStrategyName } from "../async/types";
 
@@ -298,6 +299,12 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
  *
  * Effects can span multiple stores - use `resolver` from ReadEvent to subscribe.
  *
+ * ## Suspense-like Behavior
+ *
+ * Effects automatically catch thrown promises (e.g., from `async.wait()`) and
+ * re-run when they resolve. Uses `ctx.nth` for staleness detection - if dependencies
+ * change before the promise resolves, the refresh is skipped.
+ *
  * @param fn - Effect function that receives EffectContext
  * @param options - Effect options (error handling, etc.)
  * @returns Dispose function to stop the effect
@@ -307,6 +314,16 @@ function getRetryDelay(config: EffectRetryConfig, attempt: number): number {
  * effect((ctx) => {
  *   const sub = subscribe();
  *   ctx.onCleanup(() => sub.unsubscribe());
+ * });
+ *
+ * @example
+ * // Suspense-like: auto-catches thrown promises
+ * effect(() => {
+ *   const s = state.otherProp;
+ *   const user = async.wait(state.userAsync); // throws if pending
+ *   // Effect auto-re-runs when promise resolves
+ *   // If otherProp changes first, promise refresh is skipped
+ *   state.computed = transform(user);
  * });
  *
  * @example
@@ -579,6 +596,39 @@ export function effect(fn: EffectFn, options?: EffectOptions): VoidFunction {
       if (error instanceof EffectRefreshError) {
         throw error;
       }
+
+      // Check if it's a thrown promise (from async.wait on pending state)
+      // This enables Suspense-like behavior in effects
+      if (isPromiseLike(error)) {
+        // Use ctx.nth to detect if promise callback is stale
+        // If another dep triggers re-run before promise resolves, skip
+        const nthAtThrow = currentGeneration;
+        (error as Promise<unknown>).then(
+          () => {
+            // Only refresh if this is still the same run (nth unchanged)
+            if (!isDisposed && runGeneration === nthAtThrow) {
+              execute();
+            }
+          },
+          (rejectionError) => {
+            // On rejection, treat as normal error and use handleError
+            // This respects options.onError (keepAlive, failFast, retry, custom)
+            if (!isDisposed && runGeneration === nthAtThrow) {
+              handleError(rejectionError);
+            }
+          }
+        );
+
+        // Keep subscriptions alive (similar to keepAlive strategy)
+        // So dep changes can still trigger re-runs
+        if (newTrackedDeps && newTrackedDeps.size > 0) {
+          trackedDeps = newTrackedDeps;
+        }
+        subscribeToTrackedDeps();
+        isRunning = false;
+        return;
+      }
+
       handleError(error);
     } finally {
       isRunning = false;
