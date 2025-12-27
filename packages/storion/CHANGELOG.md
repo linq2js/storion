@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.16.5] - 2024-12-27
+
 ### Added
 
 - `useStore()` now accepts void selectors for side effects only (e.g., `trigger`, effects)
@@ -22,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `async.all()`, `async.race()`, `async.any()` now properly throw promises for Suspense when states are pending (instead of throwing `AsyncNotReadyError`)
 - `AsyncNotReadyError` is now only thrown for idle states (not started yet)
+- `useStore()` now properly re-renders after `hydrate()` is called, fixing race condition where state changes during async hydration were missed (especially in Expo/React Native with AsyncStorage)
+
+---
+
+## [0.16.4] - 2024-12-27
+
+### Changed
+
+- Internal improvements
 
 ---
 
