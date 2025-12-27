@@ -721,7 +721,9 @@ export const useStore: UseStoreFn = Object.assign(useStoreImpl, {
 
 const isServer = typeof window === "undefined";
 const useIsomorphicLayoutEffect =
-  isServer || !dev() ? useEffect : useLayoutEffect;
+  isServer || typeof useLayoutEffect === "undefined"
+    ? useEffect
+    : useLayoutEffect;
 // Always use microtask for disposal in browser to handle StrictMode correctly
 // The microtask allows StrictMode's effect re-run to commit before disposal check
 const shouldScheduleDispose =

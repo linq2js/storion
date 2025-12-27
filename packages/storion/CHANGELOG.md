@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.16.6] - 2024-12-27
+
+### Fixed
+
+- `useIsomorphicLayoutEffect` now properly checks for `useLayoutEffect` availability instead of using `dev()` flag, improving React Native/Expo compatibility
+
+---
+
 ## [0.16.5] - 2024-12-27
 
 ### Added
