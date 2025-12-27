@@ -97,6 +97,10 @@ interface UseStoreRefs {
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
   id: string; // unique id for this component instance
   onceRan: boolean; // whether once has been executed
+  /** Whether effect has committed */
+  committed: boolean;
+  /** Whether store changed since render (for stale detection) */
+  isStale: boolean;
 }
 
 /**
@@ -117,6 +121,9 @@ export function useStoreWithContainer<T extends object>(
     subscriptions: new Map(),
     id,
     onceRan: false,
+    subscribed: false,
+    committed: false,
+    isStale: false,
   }));
 
   // Scoped controller for component-local stores (lazy initialized)
@@ -128,7 +135,38 @@ export function useStoreWithContainer<T extends object>(
   const [selectorExecution] = useState(() => ({ active: false }));
   const [scheduledEffects] = useState<(() => VoidFunction)[]>(() => []);
 
-  // Clear tracked deps for this render
+  // Helper: cleanup all subscriptions
+  const cleanupSubscriptions = () => {
+    for (const unsub of refs.subscriptions.values()) {
+      unsub();
+    }
+    refs.subscriptions.clear();
+  };
+
+  // Helper: subscribe to all tracked deps
+  const subscribe = () => {
+    for (const [key, dep] of refs.trackedDeps) {
+      const unsub = dep.subscribe(() => {
+        // If not committed yet (between render and effect), mark stale
+        // Effect will handle the re-render
+        if (!refs.committed) {
+          refs.isStale = true;
+        } else {
+          // Normal change after commit - trigger re-render directly
+          forceUpdate();
+        }
+      });
+      refs.subscriptions.set(key, unsub);
+    }
+  };
+
+  // === RENDER PHASE START ===
+  // 1. Reset flags and cleanup for this render cycle
+  refs.isStale = false;
+  refs.committed = false;
+  cleanupSubscriptions();
+
+  // 2. Clear tracked deps for fresh collection
   refs.trackedDeps.clear();
 
   // Capture once flag before selector runs (so all once() calls see the same value)
@@ -291,6 +329,20 @@ export function useStoreWithContainer<T extends object>(
     refs.onceRan = true;
   }
 
+  // === RENDER PHASE: Subscribe and schedule microtask cleanup ===
+  // Subscribe during render to catch changes immediately (e.g., hydration)
+  subscribe();
+
+  if (shouldScheduleDispose) {
+    // Schedule microtask cleanup in case effect never runs (component suspended/unmounted)
+    // Note: Layout effect runs BEFORE microtasks, so if committed, microtask is no-op
+    queueMicrotask(() => {
+      if (!refs.committed) {
+        cleanupSubscriptions();
+      }
+    });
+  }
+
   // Scoped store lifecycle management
   // Use layout effect for synchronous commit before paint
   useIsomorphicLayoutEffect(() => {
@@ -300,42 +352,29 @@ export function useStoreWithContainer<T extends object>(
     };
   }, [scopeController]);
 
-  // Compute subscription token based on tracked keys
-  // Token changes only when the set of tracked keys changes
-  const trackedKeysToken = [...refs.trackedDeps.keys()].sort().join("|");
-
-  // Sync subscriptions incrementally
-  useEffect(() => {
-    const currentKeys = refs.trackedDeps;
-    const prevSubscriptions = refs.subscriptions;
-
-    // Unsubscribe from keys no longer tracked
-    for (const key of prevSubscriptions.keys()) {
-      if (!currentKeys.has(key)) {
-        prevSubscriptions.get(key)?.();
-        prevSubscriptions.delete(key);
-      }
+  // === EFFECT: Commit subscriptions and handle stale detection ===
+  // Use layout effect for synchronous commit before paint
+  useIsomorphicLayoutEffect(() => {
+    // 1. Resubscribe if StrictMode cleanup cleared subscriptions
+    if (refs.subscriptions.size === 0 && refs.trackedDeps.size > 0) {
+      subscribe();
     }
 
-    // Subscribe to new keys only
-    // Note: subscription only fires when value actually changes (store handles equality)
-    for (const [key, dep] of currentKeys) {
-      if (!prevSubscriptions.has(key)) {
-        const unsub = dep.subscribe(forceUpdate);
-        prevSubscriptions.set(key, unsub);
-      }
+    // 2. Mark as committed (prevents microtask cleanup)
+    refs.committed = true;
+
+    // 3. If store changed since render, re-render with fresh values
+    if (refs.isStale) {
+      refs.isStale = false;
+      forceUpdate();
     }
 
-    // Cleanup all on unmount
+    // Cleanup: cleanup all for StrictMode/unmount
     return () => {
-      for (const unsub of refs.subscriptions.values()) {
-        unsub();
-      }
-      refs.subscriptions.clear();
+      cleanupSubscriptions();
+      refs.committed = false;
     };
-    // Re-run only when tracked keys change, not on every render
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackedKeysToken]);
+  });
 
   // Run scheduled effects after render
   // Effects defined via effect() in the selector are collected here and

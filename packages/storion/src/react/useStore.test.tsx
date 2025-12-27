@@ -135,8 +135,8 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
     });
   });
 
-  describe("subscription optimization", () => {
-    it("should not re-subscribe when tracked keys are the same", () => {
+  describe("subscription behavior", () => {
+    it("should resubscribe on every render to catch hydration changes", () => {
       const counter = store({
         state: { count: 0 },
         setup: ({ state }) => ({
@@ -165,13 +165,13 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       const initialCalls = subscribeSpy.mock.calls.length;
       expect(initialCalls).toBeGreaterThan(0);
 
-      // Re-render without changing tracked keys
+      // Re-render - will resubscribe (by design for hydration support)
       rerender();
       rerender();
       rerender();
 
-      // Should not have any new subscriptions (same token)
-      expect(subscribeSpy).toHaveBeenCalledTimes(initialCalls);
+      // Each render causes resubscription (cleanup + subscribe)
+      expect(subscribeSpy.mock.calls.length).toBeGreaterThan(initialCalls);
 
       subscribeSpy.mockRestore();
     });
