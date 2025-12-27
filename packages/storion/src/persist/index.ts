@@ -8,6 +8,7 @@
 
 export {
   persist,
+  persisted,
   notPersisted,
   type PersistOptions,
   type PersistLoadResult,

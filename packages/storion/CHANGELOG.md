@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.16.3] - 2024-12-27
+
+### Fixed
+
+- Export `persisted` meta from `storion/persist`
+
+---
+
 ## [0.16.2] - 2024-12-27
 
 ### Changed
