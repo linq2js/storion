@@ -23,6 +23,13 @@ import type {
   SerializedAsyncState,
   PromiseState,
   PromiseWithState,
+  AsyncOrPromise,
+  InferData,
+  MapData,
+  MapRecordData,
+  CombinedSettledResult,
+  MapCombinedSettledResult,
+  CombinedRaceResult,
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
@@ -965,44 +972,113 @@ export namespace async {
     throw new AsyncNotReadyError(message, state.status);
   }
 
+  // ===== Helper: Check if value is PromiseWithState =====
+
+  function isPromiseWithState(value: unknown): value is PromiseWithState<any> {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      "state" in value &&
+      typeof (value as any).state === "object" &&
+      "status" in (value as any).state &&
+      ((value as any).state.status === "pending" ||
+        (value as any).state.status === "fulfilled" ||
+        (value as any).state.status === "rejected")
+    );
+  }
+
+  // ===== Helper: Check if value is AsyncState =====
+
+  function isAsyncState(value: unknown): value is AsyncState<any, any> {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      "status" in value &&
+      "mode" in value &&
+      ((value as any).status === "idle" ||
+        (value as any).status === "pending" ||
+        (value as any).status === "success" ||
+        (value as any).status === "error")
+    );
+  }
+
+  // ===== Helper: Get data from AsyncOrPromise =====
+
+  function getData(
+    item: AsyncOrPromise,
+    index: number | string
+  ): { ready: true; data: any } | { ready: false; error?: Error } {
+    if (isPromiseWithState(item)) {
+      const s = item.state;
+      if (s.status === "fulfilled") {
+        return { ready: true, data: s.resolved };
+      }
+      if (s.status === "rejected") {
+        return { ready: false, error: s.rejected };
+      }
+      return { ready: false };
+    }
+
+    if (isAsyncState(item)) {
+      if (item.status === "success") {
+        return { ready: true, data: item.data };
+      }
+      if (item.mode === "stale" && item.data !== undefined) {
+        return { ready: true, data: item.data };
+      }
+      if (item.status === "error") {
+        return { ready: false, error: item.error };
+      }
+      return { ready: false };
+    }
+
+    throw new Error(`Invalid state at ${index}`);
+  }
+
   /**
-   * Returns the first successful result from a record of async states.
-   * Also considers stale data as "ready" in stale mode.
+   * Returns the first successful result from an array or record of async states.
+   * Supports both AsyncState and PromiseWithState.
+   *
+   * @example
+   * ```ts
+   * // Array form
+   * const [key, data] = async.race([state1, state2]);
+   *
+   * // Map form
+   * const [key, data] = async.race({ user: userState, posts: postsState });
+   * ```
    */
-  export function race<T extends Record<string, AsyncState<any, any>>>(
+  export function race<const T extends readonly AsyncOrPromise[]>(
     states: T
-  ): RaceResult<T> {
-    // First check for success
-    for (const key in states) {
-      if (Object.prototype.hasOwnProperty.call(states, key)) {
-        const state = states[key];
-        if (state.status === "success") {
-          return [key, state.data] as RaceResult<T>;
-        }
+  ): [number, InferData<T[number]>];
+  export function race<T extends Record<string, AsyncOrPromise>>(
+    states: T
+  ): CombinedRaceResult<T>;
+  export function race(
+    states: readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>
+  ): [string | number, any] {
+    const isArray = Array.isArray(states);
+    const entries = isArray
+      ? (states as AsyncOrPromise[]).map((v, i) => [i, v] as const)
+      : Object.entries(states);
+
+    // First check for ready data
+    for (const [key, item] of entries) {
+      const result = getData(item, key);
+      if (result.ready) {
+        return [key, result.data];
       }
     }
 
-    // Then check for stale data
-    for (const key in states) {
-      if (Object.prototype.hasOwnProperty.call(states, key)) {
-        const state = states[key];
-        if (state.mode === "stale" && state.data !== undefined) {
-          return [key, state.data] as RaceResult<T>;
-        }
+    // Then check for errors
+    for (const [key, item] of entries) {
+      const result = getData(item, key);
+      if (!result.ready && result.error) {
+        throw result.error;
       }
     }
 
-    // Check for errors
-    for (const key in states) {
-      if (Object.prototype.hasOwnProperty.call(states, key)) {
-        const state = states[key];
-        if (state.status === "error") {
-          throw state.error;
-        }
-      }
-    }
-
-    // All pending or idle (fresh mode)
+    // All pending or idle
     throw new AsyncNotReadyError(
       "No async state has resolved successfully",
       "pending"
@@ -1044,67 +1120,146 @@ export namespace async {
 
   /**
    * Returns all data if all states are ready.
-   * In stale mode, stale data counts as ready.
+   * Supports both AsyncState and PromiseWithState, as array, record, or rest params.
+   *
+   * @example
+   * ```ts
+   * // Rest params (backward compatible)
+   * const [a, b, c] = async.all(state1, state2, state3);
+   *
+   * // Array form - returns tuple of data
+   * const [userData, postsData] = async.all([userState, postsState]);
+   *
+   * // Map form - returns record of data
+   * const { user, posts } = async.all({ user: userState, posts: postsState });
+   * ```
    */
-  export function all<T extends readonly AsyncState<any, any>[]>(
+  export function all<const T extends readonly AsyncOrPromise[]>(
+    states: T
+  ): MapData<T>;
+  export function all<T extends Record<string, AsyncOrPromise>>(
+    states: T
+  ): MapRecordData<T>;
+  export function all<const T extends readonly AsyncOrPromise[]>(
     ...states: T
-  ): MapAsyncData<T> {
-    const results: any[] = [];
-
-    for (let i = 0; i < states.length; i++) {
-      const state = states[i];
-
-      if (state.status === "success") {
-        results.push(state.data);
-        continue;
-      }
-
-      // In stale mode, use stale data
-      if (state.mode === "stale" && state.data !== undefined) {
-        results.push(state.data);
-        continue;
-      }
-
-      if (state.status === "error") {
-        throw state.error;
-      }
-
-      throw new AsyncNotReadyError(
-        `State at index ${i} is ${state.status}`,
-        state.status
-      );
+  ): MapData<T>;
+  export function all(
+    ...args:
+      | [readonly AsyncOrPromise[]]
+      | [Record<string, AsyncOrPromise>]
+      | AsyncOrPromise[]
+  ): any[] | Record<string, any> {
+    // Normalize arguments: support both all([...]) and all(...rest)
+    let states: readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    if (args.length === 1 && (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))) {
+      states = args[0] as readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    } else {
+      states = args as AsyncOrPromise[];
     }
 
-    return results as MapAsyncData<T>;
+    const isArray = Array.isArray(states);
+
+    if (isArray) {
+      const results: any[] = [];
+      for (let i = 0; i < states.length; i++) {
+        const result = getData(states[i], i);
+        if (result.ready) {
+          results.push(result.data);
+        } else if (result.error) {
+          throw result.error;
+        } else {
+          throw new AsyncNotReadyError(
+            `State at index ${i} is not ready`,
+            "pending"
+          );
+        }
+      }
+      return results;
+    }
+
+    const results: Record<string, any> = {};
+    for (const key in states) {
+      if (Object.prototype.hasOwnProperty.call(states, key)) {
+        const result = getData(states[key], key);
+        if (result.ready) {
+          results[key] = result.data;
+        } else if (result.error) {
+          throw result.error;
+        } else {
+          throw new AsyncNotReadyError(
+            `State at key "${key}" is not ready`,
+            "pending"
+          );
+        }
+      }
+    }
+    return results;
+  }
+
+  // Helper to check if value is AsyncOrPromise
+  function isAsyncOrPromise(value: unknown): value is AsyncOrPromise {
+    return isAsyncState(value) || isPromiseWithState(value);
   }
 
   /**
    * Returns the first ready data from multiple states.
+   * Supports both AsyncState and PromiseWithState, as array, record, or rest params.
+   *
+   * @example
+   * ```ts
+   * // Rest params (backward compatible)
+   * const data = async.any(state1, state2, state3);
+   *
+   * // Array form
+   * const data = async.any([state1, state2, state3]);
+   *
+   * // Map form
+   * const data = async.any({ primary: primaryState, fallback: fallbackState });
+   * ```
    */
-  export function any<T extends readonly AsyncState<any, any>[]>(
+  export function any<const T extends readonly AsyncOrPromise[]>(
+    states: T
+  ): InferData<T[number]>;
+  export function any<T extends Record<string, AsyncOrPromise>>(
+    states: T
+  ): InferData<T[keyof T]>;
+  export function any<const T extends readonly AsyncOrPromise[]>(
     ...states: T
-  ): InferAsyncData<T[number]> {
-    const errors: Error[] = [];
-
-    // First check success
-    for (const state of states) {
-      if (state.status === "success") {
-        return state.data;
-      }
+  ): InferData<T[number]>;
+  export function any(
+    ...args:
+      | [readonly AsyncOrPromise[]]
+      | [Record<string, AsyncOrPromise>]
+      | AsyncOrPromise[]
+  ): any {
+    // Normalize arguments
+    let states: readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    if (args.length === 1 && (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))) {
+      states = args[0] as readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    } else {
+      states = args as AsyncOrPromise[];
     }
 
-    // Then check stale data
-    for (const state of states) {
-      if (state.mode === "stale" && state.data !== undefined) {
-        return state.data;
+    const isArray = Array.isArray(states);
+    const entries = isArray
+      ? (states as AsyncOrPromise[]).map((v, i) => [i, v] as const)
+      : Object.entries(states);
+
+    const errors: Error[] = [];
+
+    // First check for ready data
+    for (const [key, item] of entries) {
+      const result = getData(item, key);
+      if (result.ready) {
+        return result.data;
       }
-      if (state.status === "error") {
-        errors.push(state.error);
+      if (result.error) {
+        errors.push(result.error);
       }
     }
 
     // If all are errors, throw aggregate
-    if (errors.length === states.length) {
+    if (errors.length === entries.length) {
       throw new AsyncAggregateError("All async states have errors", errors);
     }
 
@@ -1115,43 +1270,101 @@ export namespace async {
     );
   }
 
-  /**
-   * Returns settled results for all states (never throws).
-   * Includes mode-aware data in results.
-   */
-  export function settled<T extends readonly AsyncState<any, any>[]>(
-    ...states: T
-  ): MapSettledResult<T> {
-    const results: SettledResult<any, any>[] = [];
+  // ===== Helper: Get settled result from AsyncOrPromise =====
 
-    for (const state of states) {
-      switch (state.status) {
+  function getSettledResult(item: AsyncOrPromise): CombinedSettledResult<any> {
+    if (isPromiseWithState(item)) {
+      const s = item.state;
+      if (s.status === "fulfilled") {
+        return { status: "fulfilled", value: s.resolved };
+      }
+      if (s.status === "rejected") {
+        return { status: "rejected", reason: s.rejected };
+      }
+      return { status: "pending" };
+    }
+
+    if (isAsyncState(item)) {
+      // Preserve old format for AsyncState (backward compatibility)
+      switch (item.status) {
         case "success":
-          results.push({ status: "success", data: state.data });
-          break;
+          return { status: "success", data: item.data } as any;
         case "error":
-          results.push({
+          return {
             status: "error",
-            error: state.error,
-            data: state.mode === "stale" ? state.data : undefined,
-          });
-          break;
+            error: item.error,
+            data: item.mode === "stale" ? item.data : undefined,
+          } as any;
         case "pending":
-          results.push({
+          return {
             status: "pending",
-            data: state.mode === "stale" ? state.data : undefined,
-          });
-          break;
+            data: item.mode === "stale" ? item.data : undefined,
+          } as any;
         case "idle":
-          results.push({
+          return {
             status: "idle",
-            data: state.mode === "stale" ? state.data : undefined,
-          });
-          break;
+            data: item.mode === "stale" ? item.data : undefined,
+          } as any;
       }
     }
 
-    return results as MapSettledResult<T>;
+    throw new Error("Invalid state");
+  }
+
+  /**
+   * Returns settled results for all states (never throws).
+   * Supports both AsyncState and PromiseWithState, as array, record, or rest params.
+   *
+   * @example
+   * ```ts
+   * // Rest params (backward compatible)
+   * const results = async.settled(state1, state2);
+   *
+   * // Array form
+   * const results = async.settled([state1, state2]);
+   * // [{ status: "fulfilled", value: data1 }, { status: "rejected", reason: error }]
+   *
+   * // Map form
+   * const results = async.settled({ user: userState, posts: postsState });
+   * // { user: { status: "fulfilled", value: userData }, posts: { status: "pending" } }
+   * ```
+   */
+  export function settled<const T extends readonly AsyncOrPromise[]>(
+    states: T
+  ): MapCombinedSettledResult<T>;
+  export function settled<T extends Record<string, AsyncOrPromise>>(
+    states: T
+  ): { [K in keyof T]: CombinedSettledResult<InferData<T[K]>> };
+  export function settled<const T extends readonly AsyncOrPromise[]>(
+    ...states: T
+  ): MapCombinedSettledResult<T>;
+  export function settled(
+    ...args:
+      | [readonly AsyncOrPromise[]]
+      | [Record<string, AsyncOrPromise>]
+      | AsyncOrPromise[]
+  ): CombinedSettledResult<any>[] | Record<string, CombinedSettledResult<any>> {
+    // Normalize arguments
+    let states: readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    if (args.length === 1 && (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))) {
+      states = args[0] as readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    } else {
+      states = args as AsyncOrPromise[];
+    }
+
+    const isArray = Array.isArray(states);
+
+    if (isArray) {
+      return states.map(getSettledResult);
+    }
+
+    const results: Record<string, CombinedSettledResult<any>> = {};
+    for (const key in states) {
+      if (Object.prototype.hasOwnProperty.call(states, key)) {
+        results[key] = getSettledResult(states[key]);
+      }
+    }
+    return results;
   }
 
   /**

@@ -84,4 +84,18 @@ export {
   type SerializedAsyncState,
   type PromiseState,
   type PromiseWithState,
+  // PromiseWithState utilities
+  type InferPromiseData,
+  type MapPromiseData,
+  type PromiseSettledResult,
+  type MapPromiseSettledResult,
+  type PromiseRaceResult,
+  // Combined utilities (AsyncState | PromiseWithState)
+  type AsyncOrPromise,
+  type InferData,
+  type MapData,
+  type MapRecordData,
+  type CombinedSettledResult,
+  type MapCombinedSettledResult,
+  type CombinedRaceResult,
 } from "./types";

@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.16.0] - 2024-12-27
+
+### Added
+
+- `async.all()`, `async.race()`, `async.any()`, `async.settled()` now support both `AsyncState` and `PromiseWithState`
+- New array and map overloads for all combinators:
+
+  ```ts
+  // Array form (new)
+  const [a, b] = async.all([state1, state2]);
+  const [key, value] = async.race([state1, state2]);
+
+  // Map form (new)
+  const { user, posts } = async.all({ user: userState, posts: postsState });
+  const [key, value] = async.race({ user: userState, posts: postsState });
+
+  // Rest params (backward compatible)
+  const [a, b] = async.all(state1, state2);
+  ```
+
+- New type utilities for `PromiseWithState`: `InferPromiseData`, `MapPromiseData`, `PromiseSettledResult`, `MapPromiseSettledResult`, `PromiseRaceResult`
+- Combined type utilities for both: `AsyncOrPromise`, `InferData`, `MapData`, `MapRecordData`, `CombinedSettledResult`, `MapCombinedSettledResult`, `CombinedRaceResult`
+
+---
+
 ## [0.15.0] - 2024-12-27
 
 ### Changed

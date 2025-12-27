@@ -409,10 +409,104 @@ export type MapSettledResult<T extends readonly AsyncState<any, any>[]> = {
 };
 
 /**
- * Race result type - tuple of [key, value]
+ * Race result type - tuple of [key, value] for AsyncState
  */
 export type RaceResult<T extends Record<string, AsyncState<any, any>>> = {
   [K in keyof T]: [K, InferAsyncData<T[K]>];
+}[keyof T];
+
+// ===== PromiseWithState Type Utilities =====
+
+/**
+ * Infer the data type from a PromiseWithState
+ */
+export type InferPromiseData<T> = T extends PromiseWithState<infer D>
+  ? D
+  : never;
+
+/**
+ * Map a tuple of PromiseWithState to their data types
+ */
+export type MapPromiseData<T extends readonly PromiseWithState<any>[]> = {
+  -readonly [K in keyof T]: InferPromiseData<T[K]>;
+};
+
+/**
+ * Settled result for a PromiseWithState
+ */
+export type PromiseSettledResult<T> =
+  | { status: "fulfilled"; value: T }
+  | { status: "rejected"; reason: any }
+  | { status: "pending" };
+
+/**
+ * Map a tuple of PromiseWithState to PromiseSettledResult
+ */
+export type MapPromiseSettledResult<
+  T extends readonly PromiseWithState<any>[]
+> = {
+  -readonly [K in keyof T]: PromiseSettledResult<InferPromiseData<T[K]>>;
+};
+
+/**
+ * Race result type - tuple of [key, value] for PromiseWithState
+ */
+export type PromiseRaceResult<T extends Record<string, PromiseWithState<any>>> =
+  {
+    [K in keyof T]: [K, InferPromiseData<T[K]>];
+  }[keyof T];
+
+// ===== Combined Type Utilities (AsyncState | PromiseWithState) =====
+
+/**
+ * Union type for either AsyncState or PromiseWithState
+ */
+export type AsyncOrPromise<T = any> = AsyncState<T, any> | PromiseWithState<T>;
+
+/**
+ * Infer data type from either AsyncState or PromiseWithState
+ */
+export type InferData<T> = T extends AsyncState<infer D, any>
+  ? D
+  : T extends PromiseWithState<infer D>
+  ? D
+  : never;
+
+/**
+ * Map a tuple of AsyncOrPromise to their data types
+ */
+export type MapData<T extends readonly AsyncOrPromise[]> = {
+  -readonly [K in keyof T]: InferData<T[K]>;
+};
+
+/**
+ * Map a record of AsyncOrPromise to their data types
+ */
+export type MapRecordData<T extends Record<string, AsyncOrPromise>> = {
+  [K in keyof T]: InferData<T[K]>;
+};
+
+/**
+ * Combined settled result for either AsyncState or PromiseWithState
+ */
+export type CombinedSettledResult<T> =
+  | { status: "fulfilled" | "success"; value: T }
+  | { status: "rejected" | "error"; reason: any }
+  | { status: "pending" }
+  | { status: "idle" };
+
+/**
+ * Map a tuple of AsyncOrPromise to CombinedSettledResult
+ */
+export type MapCombinedSettledResult<T extends readonly AsyncOrPromise[]> = {
+  -readonly [K in keyof T]: CombinedSettledResult<InferData<T[K]>>;
+};
+
+/**
+ * Race result type - tuple of [key, value] for either type
+ */
+export type CombinedRaceResult<T extends Record<string, AsyncOrPromise>> = {
+  [K in keyof T]: [K, InferData<T[K]>];
 }[keyof T];
 
 // ===== Error Classes =====
