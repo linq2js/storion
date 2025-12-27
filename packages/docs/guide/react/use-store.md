@@ -502,13 +502,15 @@ export const headerMixin = (ctx: SelectorContext) => ({
 | Isolated hook with own state | Custom hook with `useStore` |
 | Third-party hook integration | Custom hook with `useStore` |
 
-### Shorthand: Array and Object Syntax
+### Shorthand: mixins() Helper
 
-For cleaner mixin composition, `useStore` accepts arrays and objects directly:
+For cleaner mixin composition, use the `mixins()` helper:
 
-**Array syntax (MergeMixin)** — Merge multiple mixins:
+**Array syntax** — Merge multiple mixins:
 
 ```tsx
+import { useStore, mixins } from "storion/react";
+
 // Direct mixin returns object that gets spread
 const selectUser = (ctx: SelectorContext) => {
   const [state] = ctx.get(userStore);
@@ -523,33 +525,38 @@ const selectCount = (ctx: SelectorContext) => {
 
 function Component() {
   // Array merges all results
-  const { name, email, count } = useStore([
-    selectUser,            // → { name, email } spread into result
-    { count: selectCount } // → { count: number }
-  ]);
+  const { name, email, count } = useStore(
+    mixins([
+      selectUser,            // → { name, email } spread into result
+      { count: selectCount } // → { count: number }
+    ])
+  );
   
   return <div>{name}: {count}</div>;
 }
 ```
 
-**Object syntax (MixinMap)** — Map keys to mixin results:
+**Object syntax** — Map keys to mixin results (keys ending with "Mixin" are stripped):
 
 ```tsx
-const selectName = (ctx: SelectorContext) => ctx.get(userStore)[0].name;
-const selectAge = (ctx: SelectorContext) => ctx.get(userStore)[0].age;
+const selectNameMixin = (ctx: SelectorContext) => ctx.get(userStore)[0].name;
+const selectAgeMixin = (ctx: SelectorContext) => ctx.get(userStore)[0].age;
 const selectIncrement = (ctx: SelectorContext) => ctx.get(counterStore)[1].increment;
 
 function Component() {
   // Each key maps to its mixin's return value
-  const { userName, userAge, inc } = useStore({
-    userName: selectName,   // string
-    userAge: selectAge,     // number  
-    inc: selectIncrement,   // () => void
-  });
+  // "Mixin" suffix stripped: selectNameMixin → selectName
+  const { selectName, selectAge, inc } = useStore(
+    mixins({
+      selectNameMixin,   // string
+      selectAgeMixin,    // number  
+      inc: selectIncrement,   // () => void
+    })
+  );
   
   return (
     <div>
-      <p>{userName}, age {userAge}</p>
+      <p>{selectName}, age {selectAge}</p>
       <button onClick={inc}>+</button>
     </div>
   );
@@ -565,17 +572,19 @@ const data = useStore((ctx) => ({
   ...ctx.mixin(cartMixin),
 }));
 
-// Array shorthand - cleaner composition
-const data = useStore([userMixin, cartMixin]);
+// mixins() array - cleaner composition
+const data = useStore(mixins([userMixin, cartMixin]));
 
-// Object shorthand - explicit key mapping
-const data = useStore({
-  user: userMixin,
-  cart: cartMixin,
-});
+// mixins() object - explicit key mapping
+const data = useStore(
+  mixins({
+    user: userMixin,
+    cart: cartMixin,
+  })
+);
 ```
 
-See [`useStore()` API reference](/api/use-store#mixin-shorthand-overloads) for more details.
+See [`useStore()` API reference](/api/use-store#mixin-composition-with-mixins) for more details.
 
 ### Real-World Example
 

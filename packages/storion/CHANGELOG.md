@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   });
   ```
 
+- `mixins()` helper function for composing multiple mixins into a single selector. Supports array syntax for merging and object syntax for key mapping. Keys ending with "Mixin" suffix are automatically stripped.
+  ```ts
+  import { useStore, mixins } from "storion/react";
+
+  // Object syntax - keys mapped to results, "Mixin" suffix stripped
+  const { t, language } = useStore(mixins({ tMixin, languageMixin }));
+
+  // Array syntax - merge multiple mixins
+  const data = useStore(mixins([userMixin, { count: countMixin }]));
+  ```
+
+### Changed
+
+- **BREAKING**: Removed `useStore(MergeMixin)` and `useStore(MixinMap)` overloads. Use `useStore(mixins(...))` instead:
+  ```ts
+  // Before
+  useStore({ tMixin, countMixin })
+  useStore([userMixin, { count: countMixin }])
+
+  // After
+  useStore(mixins({ tMixin, countMixin }))
+  useStore(mixins([userMixin, { count: countMixin }]))
+  ```
+
 ### Fixed
 
 - Store property subscriptions now correctly re-render when a property changes while its emitter temporarily has **0 listeners** (e.g. around render/commit timing windows), by buffering the last change and replaying it on the next subscription.

@@ -96,3 +96,6 @@ export {
 export { meta } from "./meta/meta";
 export { withMeta } from "./meta/withMeta";
 export { pool } from "./pool";
+
+// Mixin composition
+export { mixins } from "./core/mixins";

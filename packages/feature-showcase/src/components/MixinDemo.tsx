@@ -1,8 +1,8 @@
 /**
  * Mixin Demo Component
- * Demonstrates useStore with MergeMixin (array) and MixinMap (object) overloads
+ * Demonstrates useStore with mixins() helper for composition
  */
-import { useStore, type SelectorContext } from "storion/react";
+import { useStore, mixins, type SelectorContext } from "storion/react";
 import { store } from "storion";
 
 // =============================================================================
@@ -85,25 +85,27 @@ const selectIncrementLikes = (ctx: SelectorContext) => {
 // =============================================================================
 
 /**
- * Demonstrates useStore([...mixins]) - MergeMixin array syntax
+ * Demonstrates useStore(mixins([...])) - Array syntax for merging
  */
 function ArraySyntaxDemo() {
-  // MergeMixin: Array merges all results
+  // mixins([...]): Array merges all results
   // - Direct mixins (functions returning objects) get spread
   // - Named mixins ({ key: mixin }) map keys to results
-  const result = useStore([
-    selectUserInfo, // → { userName, userEmail, setName }
-    { views: selectViews }, // → { views: number }
-    { likes: selectLikes, incLikes: selectIncrementLikes }, // → { likes, incLikes }
-  ]);
+  const result = useStore(
+    mixins([
+      selectUserInfo, // → { userName, userEmail, setName }
+      { views: selectViews }, // → { views: number }
+      { likes: selectLikes, incLikes: selectIncrementLikes }, // → { likes, incLikes }
+    ])
+  );
 
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-purple-400">
-        Array Syntax (MergeMixin)
+        Array Syntax with mixins()
       </h3>
       <code className="block text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded">
-        useStore([selectUserInfo, {"{"} views: selectViews {"}"}, ...])
+        useStore(mixins([selectUserInfo, {"{"} views: selectViews {"}"}, ...]))
       </code>
 
       <div className="grid grid-cols-2 gap-4">
@@ -140,26 +142,29 @@ function ArraySyntaxDemo() {
 }
 
 /**
- * Demonstrates useStore({...}) - MixinMap object syntax
+ * Demonstrates useStore(mixins({...})) - Object syntax for mapping keys
  */
 function ObjectSyntaxDemo() {
-  // MixinMap: Each key maps to its mixin's return value
-  const { name, email, views, likes, incViews, incLikes } = useStore({
-    name: (ctx: SelectorContext) => ctx.get(userStore)[0].name,
-    email: (ctx: SelectorContext) => ctx.get(userStore)[0].email,
-    views: selectViews,
-    likes: selectLikes,
-    incViews: selectIncrementViews,
-    incLikes: selectIncrementLikes,
-  });
+  // mixins({...}): Each key maps to its mixin's return value
+  // Note: "Mixin" suffix is automatically stripped from keys
+  const { name, email, views, likes, incViews, incLikes } = useStore(
+    mixins({
+      name: (ctx: SelectorContext) => ctx.get(userStore)[0].name,
+      email: (ctx: SelectorContext) => ctx.get(userStore)[0].email,
+      views: selectViews,
+      likes: selectLikes,
+      incViews: selectIncrementViews,
+      incLikes: selectIncrementLikes,
+    })
+  );
 
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-green-400">
-        Object Syntax (MixinMap)
+        Object Syntax with mixins()
       </h3>
       <code className="block text-xs text-zinc-500 bg-zinc-800/50 p-2 rounded">
-        useStore({"{"} name: selectName, views: selectViews, ... {"}"})
+        useStore(mixins({"{"} name: selectName, views: selectViews, ... {"}"}))
       </code>
 
       <div className="bg-zinc-800/50 rounded-lg p-4">

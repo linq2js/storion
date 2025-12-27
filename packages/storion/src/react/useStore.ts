@@ -25,8 +25,6 @@ import {
   type StoreInstance,
   type MixinMap,
   type MergeMixin,
-  type MergeMixinResult,
-  type MixinMapResult,
 } from "../types";
 
 import { withHooks, type ReadEvent } from "../core/tracking";
@@ -38,9 +36,6 @@ import { storeTuple } from "../utils/storeTuple";
 import { emitter } from "../emitter";
 import { dev } from "../dev";
 import { microtask } from "../utils/microtask";
-
-// Re-export types from types.ts for convenience
-export type { MixinMap, MergeMixin, MergeMixinResult, MixinMapResult };
 
 /**
  * Selector for useStore.from(spec) hook.
@@ -508,44 +503,11 @@ export function useStoreWithContainer<T extends object>(
  * }
  * ```
  */
-function useStoreImpl(
-  selectorOrMixins: Selector<any> | MergeMixin | MixinMap
-): any {
+function useStoreImpl(selector: Selector<any>): any {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const container = useContainer();
-
-  // Overload 1: MergeMixin (array of mixins)
-  if (Array.isArray(selectorOrMixins)) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    return useStoreWithContainer(
-      (ctx) => ctx.mixin(selectorOrMixins),
-      container
-    );
-  }
-
-  // Overload 2: MixinMap (object of mixins)
-  if (
-    typeof selectorOrMixins === "object" &&
-    selectorOrMixins !== null &&
-    !Array.isArray(selectorOrMixins)
-  ) {
-    // Check if it looks like a MixinMap (has function values)
-    const keys = Object.keys(selectorOrMixins);
-    if (
-      keys.length > 0 &&
-      keys.every((k) => typeof (selectorOrMixins as MixinMap)[k] === "function")
-    ) {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      return useStoreWithContainer(
-        (ctx) => ctx.mixin(selectorOrMixins as MixinMap),
-        container
-      );
-    }
-  }
-
-  // Overload 3: Regular Selector function
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useStoreWithContainer(selectorOrMixins as Selector<any>, container);
+  return useStoreWithContainer(selector, container);
 }
 
 /**
@@ -669,59 +631,6 @@ export interface UseStoreFn {
    * ```
    */
   (selector: Selector<void>): void;
-
-  /**
-   * Merge multiple mixins into a single result object.
-   *
-   * @example
-   * ```tsx
-   * const selectName = (ctx: SelectorContext) => {
-   *   const [state] = ctx.get(userStore);
-   *   return { name: state.name };
-   * };
-   *
-   * const selectCount = (ctx: SelectorContext) => {
-   *   const [state] = ctx.get(counterStore);
-   *   return state.count;
-   * };
-   *
-   * function Component() {
-   *   // Direct mixin spreads its result, named mixin maps key to result
-   *   const result = useStore([
-   *     selectName,           // → { name: string }
-   *     { count: selectCount } // → { count: number }
-   *   ]);
-   *   // result: { name: string, count: number }
-   * }
-   * ```
-   */
-  <const T extends MergeMixin>(mixins: T): MergeMixinResult<T>;
-
-  /**
-   * Map mixin keys to their results.
-   *
-   * @example
-   * ```tsx
-   * const selectName = (ctx: SelectorContext) => {
-   *   const [state] = ctx.get(userStore);
-   *   return state.name;
-   * };
-   *
-   * const selectAge = (ctx: SelectorContext) => {
-   *   const [state] = ctx.get(userStore);
-   *   return state.age;
-   * };
-   *
-   * function Component() {
-   *   const { name, age } = useStore({
-   *     name: selectName,
-   *     age: selectAge,
-   *   });
-   *   // name: string, age: number
-   * }
-   * ```
-   */
-  <const T extends MixinMap>(mixinMap: T): MixinMapResult<T>;
 
   /**
    * Create a pre-bound hook for a specific store.
