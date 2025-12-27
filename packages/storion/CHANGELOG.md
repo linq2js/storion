@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.14.4] - 2024-12-27
+
+### Changed
+
+- **BREAKING**: `async.state()` now returns `PromiseWithState<T>` (promise with attached state) instead of `PromiseState<T>`
+- Removed `async.withState()` - use `async.state()` instead which now attaches state directly to the promise
+
+---
+
 ## [0.14.3] - 2024-12-27
 
 ### Fixed

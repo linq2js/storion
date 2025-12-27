@@ -22,6 +22,7 @@ import type {
   AsyncRequestId,
   SerializedAsyncState,
   PromiseState,
+  PromiseWithState,
 } from "./types";
 import { AsyncNotReadyError, AsyncAggregateError } from "./types";
 import { effect } from "../core/effect";
@@ -35,7 +36,6 @@ import { isPromiseLike } from "../utils/isPromiseLike";
 // ===== Global Promise Cache for Suspense =====
 
 const pendingPromises = new WeakMap<AsyncKey<any>, Promise<any>>();
-const promiseStates = new WeakMap<PromiseLike<any>, PromiseState>();
 
 /**
  * Get the pending promise for an async state (for Suspense).
@@ -1010,27 +1010,15 @@ export namespace async {
   }
 
   /**
-   * Wraps a promise with the state of the promise.
-   * @param promise - The promise to get the state of.
-   * @returns The promise with the state attached.
-   */
-  export function withState<T>(
-    promise: PromiseLike<T>
-  ): PromiseLike<T> & { state: PromiseState<T> } {
-    const s = state(promise);
-    return Object.assign(promise, { state: s });
-  }
-
-  /**
    * Get the state of a promise.
    * @param promise - The promise to get the state of.
    * @returns The state of the promise.
    */
-  export function state<T>(promise: PromiseLike<T>): PromiseState<T> {
-    const state = promiseStates.get(promise);
-    if (state) {
-      return state;
+  export function state<T>(promise: PromiseLike<T>): PromiseWithState<T> {
+    if ("state" in promise) {
+      return promise as PromiseWithState<T>;
     }
+
     const newState: PromiseState = {
       status: "pending",
       resolved: undefined,
@@ -1046,8 +1034,8 @@ export namespace async {
         newState.rejected = error;
       }
     );
-    promiseStates.set(promise, newState);
-    return newState;
+
+    return Object.assign(promise, { state: newState });
   }
 
   /**
