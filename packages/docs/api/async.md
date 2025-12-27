@@ -815,7 +815,7 @@ async.derive(focus("fullName"), () => {
 
 // Derive from multiple sources
 async.derive(focus("summary"), () => {
-  const [user, posts] = async.all(state.user, state.posts);
+  const [user, posts] = async.all([state.user, state.posts]);
   return {
     userName: user.name,
     postCount: posts.length,

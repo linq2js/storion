@@ -1443,7 +1443,7 @@ export namespace async {
    * @example
    * // For parallel waiting, use async.all
    * async.derive(focus('combined'), () => {
-   *   const [a, b, c] = async.all(state.a, state.b, state.c);
+   *   const [a, b, c] = async.all([state.a, state.b, state.c]);
    *   return { a, b, c };
    * });
    *
