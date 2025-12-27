@@ -431,8 +431,8 @@ export class AsyncAggregateError extends Error {
   }
 }
 
-export interface PromiseWithState<T> extends Promise<T> {
-  state: PromiseState<T>;
+export interface PromiseWithState<T> extends PromiseLike<T> {
+  state: NoInfer<PromiseState<T>>;
 }
 
 export interface PromiseState<T = any> {
