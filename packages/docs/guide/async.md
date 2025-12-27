@@ -363,7 +363,50 @@ Compared to React Query, RTK Query, and Apollo:
 | **Dependency injection**      | Easy testing with mock services                                             |
 | **Unified state**             | Async state lives alongside regular state in the same store                 |
 
-See the [detailed API reference](/api/async) for advanced features like `async.all()`, `async.race()`, `async.derive()`, and more.
+## Combining Multiple Async States
+
+Storion provides combinators for working with multiple async states:
+
+```ts
+import { async } from "storion/async";
+
+// Wait for all - array form (returns tuple)
+const [user, posts] = async.all([state.user, state.posts]);
+
+// Wait for all - record form (returns object)
+const { user, posts } = async.all({
+  user: state.user,
+  posts: state.posts,
+});
+
+// Race - get first ready result
+const [source, data] = async.race({
+  cache: state.cache,
+  network: state.network,
+});
+
+// Any - get first success (like Promise.any)
+const userData = async.any([state.primary, state.fallback]);
+
+// Settled - get all results without throwing
+const results = async.settled([state.a, state.b, state.c]);
+```
+
+These combinators also work with `PromiseWithState` from `async.state()`:
+
+```ts
+// Track promise state
+const promise = async.state(fetchData());
+// promise.state.status → "pending" | "fulfilled" | "rejected"
+
+// Combine with async states
+const [apiData, storeData] = async.all([
+  async.state(fetchFromApi()),
+  state.cachedData,
+]);
+```
+
+See the [detailed API reference](/api/async) for complete documentation on `async.all()`, `async.race()`, `async.any()`, `async.settled()`, `async.derive()`, and more.
 
 ## Next Steps
 

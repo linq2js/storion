@@ -315,7 +315,7 @@ export function UserList() {
 
 ## Step 5: Combining Multiple Async States
 
-Wait for multiple data sources with `async.all()`:
+Wait for multiple data sources with `async.all()`. You can use array, record, or rest parameter syntax:
 
 ```tsx
 // components/Dashboard.tsx
@@ -333,12 +333,23 @@ function DashboardContent() {
     trigger(userActions.fetchUsers, []);
     trigger(statsActions.fetchStats, []);
 
-    // Wait for both to be ready
-    // Throws if either is pending/error → caught by Suspense/ErrorBoundary
-    const [users, stats] = async.all(
+    // Option 1: Array form - returns tuple
+    const [users, stats] = async.all([
       userState.users,
-      statsState.stats
-    );
+      statsState.stats,
+    ]);
+
+    // Option 2: Record form - returns named object
+    // const { users, stats } = async.all({
+    //   users: userState.users,
+    //   stats: statsState.stats,
+    // });
+
+    // Option 3: Rest params (backward compatible)
+    // const [users, stats] = async.all(
+    //   userState.users,
+    //   statsState.stats
+    // );
 
     return { users, stats };
   });
@@ -356,6 +367,34 @@ export function Dashboard() {
     <Suspense fallback={<DashboardSkeleton />}>
       <DashboardContent />
     </Suspense>
+  );
+}
+```
+
+### Using async.race() for Fastest Source
+
+Get data from the first available source:
+
+```tsx
+function DataWithFallback() {
+  const { source, data } = useStore(({ get }) => {
+    const [cacheState] = get(cacheStore);
+    const [apiState] = get(apiStore);
+    
+    // Returns [key, data] tuple - whichever resolves first
+    const [source, data] = async.race({
+      cache: cacheState.data,
+      api: apiState.data,
+    });
+
+    return { source, data };
+  });
+
+  return (
+    <div>
+      <span className="source-badge">From: {source}</span>
+      <DataView data={data} />
+    </div>
   );
 }
 ```

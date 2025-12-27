@@ -556,105 +556,208 @@ function UserProfile() {
 
 ### async.all()
 
-Wait for all async states to be ready. Returns a tuple of all data values.
+Wait for all async states to be ready. Supports both `AsyncState` and `PromiseWithState`, with array, record, or rest parameter syntax.
 
 ```ts
-function async.all<T extends AsyncState<any>[]>(
-  ...states: T
-): [Data<T[0]>, Data<T[1]>, ...];
+// Array form (recommended for type inference)
+function async.all<T extends AsyncOrPromise[]>(states: T): MapData<T>;
+
+// Record form
+function async.all<T extends Record<string, AsyncOrPromise>>(
+  states: T
+): MapRecordData<T>;
+
+// Rest params (backward compatible)
+function async.all<T extends AsyncOrPromise[]>(...states: T): MapData<T>;
 ```
 
 **Example:**
 
 ```ts
-// Wait for multiple async states
-const [user, posts, comments] = async.all(
+// Array form - tuple inference with const
+const [user, posts, comments] = async.all([
   state.user,
   state.posts,
-  state.comments
-);
+  state.comments,
+]);
+
+// Record form - named results
+const { user, posts } = async.all({
+  user: state.user,
+  posts: state.posts,
+});
+
+// Rest params (backward compatible)
+const [a, b, c] = async.all(state.a, state.b, state.c);
+
+// Works with PromiseWithState too
+const [userData, postsData] = async.all([
+  async.state(fetchUser()),
+  async.state(fetchPosts()),
+]);
 
 // Use in derive()
 async.derive(focus("combined"), () => {
-  const [a, b, c] = async.all(state.a, state.b, state.c);
-  return { a, b, c };
+  const { user, posts } = async.all({
+    user: state.user,
+    posts: state.posts,
+  });
+  return { userName: user.name, postCount: posts.length };
 });
 ```
 
 ### async.race()
 
-Returns the first successful result from a record of async states.
+Returns the first successful result from async states. Supports both `AsyncState` and `PromiseWithState`, with array or record syntax.
 
 ```ts
-function async.race<T extends Record<string, AsyncState<any>>>(
+// Array form - returns [index, data]
+function async.race<T extends AsyncOrPromise[]>(
   states: T
-): [key: keyof T, data: Data<T[keyof T]>];
+): [number, InferData<T[number]>];
+
+// Record form - returns [key, data]
+function async.race<T extends Record<string, AsyncOrPromise>>(
+  states: T
+): [keyof T, InferData<T[keyof T]>];
 ```
 
 **Example:**
 
 ```ts
-// Race multiple data sources
+// Array form
+const [index, data] = async.race([state.primary, state.fallback]);
+console.log(`Winner at index ${index}:`, data);
+
+// Record form
 const [winner, data] = async.race({
   cache: state.cachedData,
   network: state.networkData,
   fallback: state.fallbackData,
 });
-
 console.log(`First ready: ${winner}`, data);
+
+// With PromiseWithState
+const [source, result] = async.race({
+  api1: async.state(fetchFromApi1()),
+  api2: async.state(fetchFromApi2()),
+});
 ```
 
 ### async.any()
 
-Returns the first ready data from multiple states (like `Promise.any`).
+Returns the first ready data from multiple states (like `Promise.any`). Supports both `AsyncState` and `PromiseWithState`, with array, record, or rest parameter syntax.
 
 ```ts
-function async.any<T extends AsyncState<any>[]>(
+// Array form
+function async.any<T extends AsyncOrPromise[]>(states: T): InferData<T[number]>;
+
+// Record form
+function async.any<T extends Record<string, AsyncOrPromise>>(
+  states: T
+): InferData<T[keyof T]>;
+
+// Rest params (backward compatible)
+function async.any<T extends AsyncOrPromise[]>(
   ...states: T
-): Data<T[number]>;
+): InferData<T[number]>;
 ```
 
 **Example:**
 
 ```ts
-// Get data from first available source
+// Array form
+const userData = async.any([
+  state.primarySource,
+  state.secondarySource,
+  state.fallbackSource,
+]);
+
+// Record form
+const data = async.any({
+  primary: state.primarySource,
+  fallback: state.fallbackSource,
+});
+
+// Rest params (backward compatible)
 const userData = async.any(
   state.primarySource,
   state.secondarySource,
   state.fallbackSource
 );
+
+// With PromiseWithState
+const result = async.any([
+  async.state(tryFastApi()),
+  async.state(trySlowApi()),
+]);
 ```
 
 ### async.settled()
 
-Returns settled results for all states (never throws). Useful for handling mixed success/error states.
+Returns settled results for all states (never throws). Useful for handling mixed success/error states. Supports both `AsyncState` and `PromiseWithState`, with array, record, or rest parameter syntax.
 
 ```ts
-interface SettledResult<T> {
-  status: "success" | "error" | "pending" | "idle";
-  data?: T;
-  error?: Error;
-}
+// Result types differ by source:
+// AsyncState → { status: "success"|"error"|"pending"|"idle", data?, error? }
+// PromiseWithState → { status: "fulfilled"|"rejected"|"pending", value?, reason? }
 
-function async.settled<T extends AsyncState<any>[]>(
+// Array form
+function async.settled<T extends AsyncOrPromise[]>(
+  states: T
+): CombinedSettledResult<InferData<T[number]>>[];
+
+// Record form
+function async.settled<T extends Record<string, AsyncOrPromise>>(
+  states: T
+): { [K in keyof T]: CombinedSettledResult<InferData<T[K]>> };
+
+// Rest params (backward compatible)
+function async.settled<T extends AsyncOrPromise[]>(
   ...states: T
-): SettledResult<Data<T[number]>>[];
+): CombinedSettledResult<InferData<T[number]>>[];
 ```
 
 **Example:**
 
 ```ts
-// Get all results regardless of status
-const results = async.settled(state.a, state.b, state.c);
+// Array form
+const results = async.settled([state.a, state.b, state.c]);
 
 for (const result of results) {
-  if (result.status === "success") {
-    console.log("Data:", result.data);
-  } else if (result.status === "error") {
-    console.log("Error:", result.error);
-    // In stale mode, may still have data
-    if (result.data) console.log("Stale data:", result.data);
+  if (result.status === "success" || result.status === "fulfilled") {
+    console.log("Data:", result.data ?? result.value);
+  } else if (result.status === "error" || result.status === "rejected") {
+    console.log("Error:", result.error ?? result.reason);
   }
+}
+
+// Record form - named results
+const { user, posts } = async.settled({
+  user: state.user,
+  posts: state.posts,
+});
+
+if (user.status === "success") {
+  console.log("User loaded:", user.data);
+}
+if (posts.status === "error") {
+  console.log("Posts failed:", posts.error);
+  // In stale mode, may still have data
+  if (posts.data) console.log("Stale posts:", posts.data);
+}
+
+// Rest params (backward compatible)
+const results = async.settled(state.a, state.b, state.c);
+
+// With PromiseWithState
+const [apiResult, dbResult] = async.settled([
+  async.state(fetchFromApi()),
+  async.state(fetchFromDb()),
+]);
+
+if (apiResult.status === "fulfilled") {
+  console.log("API returned:", apiResult.value);
 }
 ```
 
