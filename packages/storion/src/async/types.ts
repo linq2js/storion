@@ -456,19 +456,19 @@ export type PromiseRaceResult<T extends Record<string, PromiseWithState<any>>> =
     [K in keyof T]: [K, InferPromiseData<T[K]>];
   }[keyof T];
 
-// ===== Combined Type Utilities (AsyncState | PromiseWithState) =====
+// ===== Combined Type Utilities (AsyncState | PromiseLike) =====
 
 /**
- * Union type for either AsyncState or PromiseWithState
+ * Union type for either AsyncState or PromiseLike
  */
-export type AsyncOrPromise<T = any> = AsyncState<T, any> | PromiseWithState<T>;
+export type AsyncOrPromise<T = any> = AsyncState<T, any> | PromiseLike<T>;
 
 /**
- * Infer data type from either AsyncState or PromiseWithState
+ * Infer data type from either AsyncState or PromiseLike
  */
 export type InferData<T> = T extends AsyncState<infer D, any>
   ? D
-  : T extends PromiseWithState<infer D>
+  : T extends PromiseLike<infer D>
   ? D
   : never;
 

@@ -556,7 +556,7 @@ function UserProfile() {
 
 ### async.all()
 
-Wait for all async states to be ready. Supports both `AsyncState` and `PromiseWithState`, with array, record, or rest parameter syntax.
+Wait for all async states to be ready. Supports both `AsyncState` and `PromiseLike`, with array, record, or rest parameter syntax.
 
 ```ts
 // Array form (recommended for type inference)
@@ -590,10 +590,10 @@ const { user, posts } = async.all({
 // Rest params (backward compatible)
 const [a, b, c] = async.all(state.a, state.b, state.c);
 
-// Works with PromiseWithState too
+// Mix AsyncState with raw promises - no wrapping needed!
 const [userData, postsData] = async.all([
-  async.state(fetchUser()),
-  async.state(fetchPosts()),
+  state.user,
+  fetch("/api/posts").then((r) => r.json()),
 ]);
 
 // Use in derive()
@@ -608,7 +608,7 @@ async.derive(focus("combined"), () => {
 
 ### async.race()
 
-Returns the first successful result from async states. Supports both `AsyncState` and `PromiseWithState`, with array or record syntax.
+Returns the first successful result from async states. Supports both `AsyncState` and `PromiseLike`, with array or record syntax.
 
 ```ts
 // Array form - returns [index, data]
@@ -637,16 +637,16 @@ const [winner, data] = async.race({
 });
 console.log(`First ready: ${winner}`, data);
 
-// With PromiseWithState
+// Mix AsyncState with raw promises
 const [source, result] = async.race({
-  api1: async.state(fetchFromApi1()),
-  api2: async.state(fetchFromApi2()),
+  cached: state.cachedData,
+  fresh: fetch("/api/data").then((r) => r.json()),
 });
 ```
 
 ### async.any()
 
-Returns the first ready data from multiple states (like `Promise.any`). Supports both `AsyncState` and `PromiseWithState`, with array, record, or rest parameter syntax.
+Returns the first ready data from multiple states (like `Promise.any`). Supports both `AsyncState` and `PromiseLike`, with array, record, or rest parameter syntax.
 
 ```ts
 // Array form
@@ -686,21 +686,22 @@ const userData = async.any(
   state.fallbackSource
 );
 
-// With PromiseWithState
+// Mix AsyncState with raw promises
 const result = async.any([
-  async.state(tryFastApi()),
-  async.state(trySlowApi()),
+  state.cachedData,
+  fetch("/api/fast").then((r) => r.json()),
+  fetch("/api/slow").then((r) => r.json()),
 ]);
 ```
 
 ### async.settled()
 
-Returns settled results for all states (never throws). Useful for handling mixed success/error states. Supports both `AsyncState` and `PromiseWithState`, with array, record, or rest parameter syntax.
+Returns settled results for all states (never throws). Useful for handling mixed success/error states. Supports both `AsyncState` and `PromiseLike`, with array, record, or rest parameter syntax.
 
 ```ts
 // Result types differ by source:
 // AsyncState → { status: "success"|"error"|"pending"|"idle", data?, error? }
-// PromiseWithState → { status: "fulfilled"|"rejected"|"pending", value?, reason? }
+// PromiseLike → { status: "fulfilled"|"rejected"|"pending", value?, reason? }
 
 // Array form
 function async.settled<T extends AsyncOrPromise[]>(
@@ -750,14 +751,17 @@ if (posts.status === "error") {
 // Rest params (backward compatible)
 const results = async.settled(state.a, state.b, state.c);
 
-// With PromiseWithState
-const [apiResult, dbResult] = async.settled([
-  async.state(fetchFromApi()),
-  async.state(fetchFromDb()),
+// Mix AsyncState with raw promises
+const [stateResult, promiseResult] = async.settled([
+  state.cachedData,
+  fetch("/api/data").then((r) => r.json()),
 ]);
 
-if (apiResult.status === "fulfilled") {
-  console.log("API returned:", apiResult.value);
+if (stateResult.status === "success") {
+  console.log("Cached:", stateResult.data);
+}
+if (promiseResult.status === "fulfilled") {
+  console.log("Fresh:", promiseResult.value);
 }
 ```
 

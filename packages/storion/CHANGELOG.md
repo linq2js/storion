@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.16.1] - 2024-12-27
+
+### Changed
+
+- Async combinators (`all`, `race`, `any`, `settled`) now accept raw `PromiseLike` directly instead of requiring `PromiseWithState`
+  ```ts
+  // Before - had to wrap promises
+  async.all([state1, async.state(fetch("/api"))]);
+
+  // After - just pass promises directly
+  async.all([state1, fetch("/api").then((r) => r.json())]);
+  ```
+
+---
+
 ## [0.16.0] - 2024-12-27
 
 ### Added

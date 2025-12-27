@@ -967,21 +967,6 @@ export namespace async {
     throw new AsyncNotReadyError(message, state.status);
   }
 
-  // ===== Helper: Check if value is PromiseWithState =====
-
-  function isPromiseWithState(value: unknown): value is PromiseWithState<any> {
-    return (
-      value !== null &&
-      typeof value === "object" &&
-      "state" in value &&
-      typeof (value as any).state === "object" &&
-      "status" in (value as any).state &&
-      ((value as any).state.status === "pending" ||
-        (value as any).state.status === "fulfilled" ||
-        (value as any).state.status === "rejected")
-    );
-  }
-
   // ===== Helper: Check if value is AsyncState =====
 
   function isAsyncState(value: unknown): value is AsyncState<any, any> {
@@ -997,23 +982,22 @@ export namespace async {
     );
   }
 
+  // ===== Helper: Normalize to PromiseWithState =====
+
+  function toPromiseWithState(item: AsyncOrPromise): PromiseWithState<any> {
+    if (isPromiseLike(item) && !isAsyncState(item)) {
+      return state(item);
+    }
+    throw new Error("Expected PromiseLike");
+  }
+
   // ===== Helper: Get data from AsyncOrPromise =====
 
   function getData(
     item: AsyncOrPromise,
     index: number | string
   ): { ready: true; data: any } | { ready: false; error?: Error } {
-    if (isPromiseWithState(item)) {
-      const s = item.state;
-      if (s.status === "fulfilled") {
-        return { ready: true, data: s.resolved };
-      }
-      if (s.status === "rejected") {
-        return { ready: false, error: s.rejected };
-      }
-      return { ready: false };
-    }
-
+    // Handle AsyncState
     if (isAsyncState(item)) {
       if (item.status === "success") {
         return { ready: true, data: item.data };
@@ -1023,6 +1007,19 @@ export namespace async {
       }
       if (item.status === "error") {
         return { ready: false, error: item.error };
+      }
+      return { ready: false };
+    }
+
+    // Handle PromiseLike (convert to PromiseWithState)
+    if (isPromiseLike(item)) {
+      const pws = toPromiseWithState(item);
+      const s = pws.state;
+      if (s.status === "fulfilled") {
+        return { ready: true, data: s.resolved };
+      }
+      if (s.status === "rejected") {
+        return { ready: false, error: s.rejected };
       }
       return { ready: false };
     }
@@ -1198,7 +1195,7 @@ export namespace async {
 
   // Helper to check if value is AsyncOrPromise
   function isAsyncOrPromise(value: unknown): value is AsyncOrPromise {
-    return isAsyncState(value) || isPromiseWithState(value);
+    return isAsyncState(value) || isPromiseLike(value);
   }
 
   /**
@@ -1278,17 +1275,7 @@ export namespace async {
   // ===== Helper: Get settled result from AsyncOrPromise =====
 
   function getSettledResult(item: AsyncOrPromise): CombinedSettledResult<any> {
-    if (isPromiseWithState(item)) {
-      const s = item.state;
-      if (s.status === "fulfilled") {
-        return { status: "fulfilled", value: s.resolved };
-      }
-      if (s.status === "rejected") {
-        return { status: "rejected", reason: s.rejected };
-      }
-      return { status: "pending" };
-    }
-
+    // Handle AsyncState
     if (isAsyncState(item)) {
       // Preserve old format for AsyncState (backward compatibility)
       switch (item.status) {
@@ -1311,6 +1298,19 @@ export namespace async {
             data: item.mode === "stale" ? item.data : undefined,
           } as any;
       }
+    }
+
+    // Handle PromiseLike (convert to PromiseWithState)
+    if (isPromiseLike(item)) {
+      const pws = toPromiseWithState(item);
+      const s = pws.state;
+      if (s.status === "fulfilled") {
+        return { status: "fulfilled", value: s.resolved };
+      }
+      if (s.status === "rejected") {
+        return { status: "rejected", reason: s.rejected };
+      }
+      return { status: "pending" };
     }
 
     throw new Error("Invalid state");

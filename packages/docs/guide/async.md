@@ -392,19 +392,31 @@ const userData = async.any([state.primary, state.fallback]);
 const results = async.settled([state.a, state.b, state.c]);
 ```
 
-These combinators also work with `PromiseWithState` from `async.state()`:
+These combinators accept both `AsyncState` and raw `PromiseLike` - no wrapping needed:
 
 ```ts
-// Track promise state
-const promise = async.state(fetchData());
-// promise.state.status → "pending" | "fulfilled" | "rejected"
-
-// Combine with async states
-const [apiData, storeData] = async.all([
-  async.state(fetchFromApi()),
-  state.cachedData,
+// Mix AsyncState with raw promises directly
+const [cachedUser, freshPosts] = async.all([
+  state.user, // AsyncState
+  fetch("/api/posts").then((r) => r.json()), // PromiseLike
 ]);
+
+// Race between cached state and fresh fetch
+const [source, data] = async.race({
+  cache: state.cachedData,
+  fresh: fetch("/api/data").then((r) => r.json()),
+});
 ```
+
+::: tip
+You can also use `async.state(promise)` to explicitly convert a promise to `PromiseWithState` if you need to access the state synchronously:
+
+```ts
+const pws = async.state(fetchData());
+pws.state.status; // "pending" | "fulfilled" | "rejected"
+```
+
+:::
 
 See the [detailed API reference](/api/async) for complete documentation on `async.all()`, `async.race()`, `async.any()`, `async.settled()`, `async.derive()`, and more.
 
