@@ -13,11 +13,6 @@ import type {
   AsyncActions,
   AsyncLastInvocation,
   CancellablePromise,
-  InferAsyncData,
-  SettledResult,
-  MapAsyncData,
-  MapSettledResult,
-  RaceResult,
   AsyncKey,
   AsyncRequestId,
   SerializedAsyncState,
@@ -1151,18 +1146,22 @@ export namespace async {
   ): any[] | Record<string, any> {
     // Normalize arguments: support both all([...]) and all(...rest)
     let states: readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
-    if (args.length === 1 && (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))) {
-      states = args[0] as readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    if (
+      args.length === 1 &&
+      (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))
+    ) {
+      states = args[0] as
+        | readonly AsyncOrPromise[]
+        | Record<string, AsyncOrPromise>;
     } else {
       states = args as AsyncOrPromise[];
     }
 
-    const isArray = Array.isArray(states);
-
-    if (isArray) {
+    if (Array.isArray(states)) {
+      const arr = states as readonly AsyncOrPromise[];
       const results: any[] = [];
-      for (let i = 0; i < states.length; i++) {
-        const result = getData(states[i], i);
+      for (let i = 0; i < arr.length; i++) {
+        const result = getData(arr[i], i);
         if (result.ready) {
           results.push(result.data);
         } else if (result.error) {
@@ -1177,10 +1176,11 @@ export namespace async {
       return results;
     }
 
+    const record = states as Record<string, AsyncOrPromise>;
     const results: Record<string, any> = {};
-    for (const key in states) {
-      if (Object.prototype.hasOwnProperty.call(states, key)) {
-        const result = getData(states[key], key);
+    for (const key in record) {
+      if (Object.prototype.hasOwnProperty.call(record, key)) {
+        const result = getData(record[key], key);
         if (result.ready) {
           results[key] = result.data;
         } else if (result.error) {
@@ -1234,8 +1234,13 @@ export namespace async {
   ): any {
     // Normalize arguments
     let states: readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
-    if (args.length === 1 && (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))) {
-      states = args[0] as readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    if (
+      args.length === 1 &&
+      (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))
+    ) {
+      states = args[0] as
+        | readonly AsyncOrPromise[]
+        | Record<string, AsyncOrPromise>;
     } else {
       states = args as AsyncOrPromise[];
     }
@@ -1346,22 +1351,26 @@ export namespace async {
   ): CombinedSettledResult<any>[] | Record<string, CombinedSettledResult<any>> {
     // Normalize arguments
     let states: readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
-    if (args.length === 1 && (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))) {
-      states = args[0] as readonly AsyncOrPromise[] | Record<string, AsyncOrPromise>;
+    if (
+      args.length === 1 &&
+      (Array.isArray(args[0]) || !isAsyncOrPromise(args[0]))
+    ) {
+      states = args[0] as
+        | readonly AsyncOrPromise[]
+        | Record<string, AsyncOrPromise>;
     } else {
       states = args as AsyncOrPromise[];
     }
 
-    const isArray = Array.isArray(states);
-
-    if (isArray) {
-      return states.map(getSettledResult);
+    if (Array.isArray(states)) {
+      return (states as readonly AsyncOrPromise[]).map(getSettledResult);
     }
 
+    const record = states as Record<string, AsyncOrPromise>;
     const results: Record<string, CombinedSettledResult<any>> = {};
-    for (const key in states) {
-      if (Object.prototype.hasOwnProperty.call(states, key)) {
-        results[key] = getSettledResult(states[key]);
+    for (const key in record) {
+      if (Object.prototype.hasOwnProperty.call(record, key)) {
+        results[key] = getSettledResult(record[key]);
       }
     }
     return results;
