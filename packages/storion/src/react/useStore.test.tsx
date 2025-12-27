@@ -103,6 +103,36 @@ describe.each(wrappers)("useStore ($mode mode)", ({ render, renderHook }) => {
       expect(result.current.count).toBe(0);
       expect(result.current.name).toBe("Alice");
     });
+
+    it("should accept void selector for side effects only", () => {
+      const counter = store({
+        state: { count: 0 },
+        setup: ({ state }) => ({
+          increment: () => {
+            state.count++;
+          },
+        }),
+      });
+
+      const stores = container();
+      const sideEffectRan = { value: false };
+
+      const { result } = renderHook(
+        () => {
+          useStore(({ get }) => {
+            const [state] = get(counter);
+            // Side effect - just access the state, no return
+            sideEffectRan.value = true;
+            void state.count; // Access to track
+          });
+          return null;
+        },
+        { wrapper: createWrapper(stores) }
+      );
+
+      expect(sideEffectRan.value).toBe(true);
+      expect(result.current).toBe(null);
+    });
   });
 
   describe("subscription optimization", () => {

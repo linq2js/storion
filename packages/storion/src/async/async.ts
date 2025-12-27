@@ -993,10 +993,16 @@ export namespace async {
 
   // ===== Helper: Get data from AsyncOrPromise =====
 
+  type GetDataResult =
+    | { ready: true; data: any }
+    | { ready: false; error: Error }
+    | { ready: false; promise: PromiseLike<any> }
+    | { ready: false; status: "idle" };
+
   function getData(
     item: AsyncOrPromise,
     index: number | string
-  ): { ready: true; data: any } | { ready: false; error?: Error } {
+  ): GetDataResult {
     // Handle AsyncState
     if (isAsyncState(item)) {
       if (item.status === "success") {
@@ -1008,7 +1014,13 @@ export namespace async {
       if (item.status === "error") {
         return { ready: false, error: item.error };
       }
-      return { ready: false };
+      // Check for pending promise (used for Suspense)
+      const pendingPromise = getPendingPromise(item);
+      if (item.status === "pending" && pendingPromise) {
+        return { ready: false, promise: pendingPromise };
+      }
+      // idle state or pending without promise
+      return { ready: false, status: "idle" };
     }
 
     // Handle PromiseLike (convert to PromiseWithState)
@@ -1021,7 +1033,8 @@ export namespace async {
       if (s.status === "rejected") {
         return { ready: false, error: s.rejected };
       }
-      return { ready: false };
+      // Promise is pending - return the promise for Suspense
+      return { ready: false, promise: item };
     }
 
     throw new Error(`Invalid state at ${index}`);
@@ -1054,26 +1067,31 @@ export namespace async {
       ? (states as AsyncOrPromise[]).map((v, i) => [i, v] as const)
       : Object.entries(states);
 
-    // First check for ready data
+    const promises: PromiseLike<any>[] = [];
+
+    // First check for ready data or errors
     for (const [key, item] of entries) {
       const result = getData(item, key);
       if (result.ready) {
         return [key, result.data];
       }
-    }
-
-    // Then check for errors
-    for (const [key, item] of entries) {
-      const result = getData(item, key);
-      if (!result.ready && result.error) {
+      if ("error" in result) {
         throw result.error;
+      }
+      if ("promise" in result) {
+        promises.push(result.promise);
       }
     }
 
-    // All pending or idle
+    // If there are pending promises, throw Promise.race for Suspense
+    if (promises.length > 0) {
+      throw Promise.race(promises);
+    }
+
+    // All are idle (not started)
     throw new AsyncNotReadyError(
       "No async state has resolved successfully",
-      "pending"
+      "idle"
     );
   }
 
@@ -1161,12 +1179,16 @@ export namespace async {
         const result = getData(arr[i], i);
         if (result.ready) {
           results.push(result.data);
-        } else if (result.error) {
+        } else if ("error" in result) {
           throw result.error;
+        } else if ("promise" in result) {
+          // Throw promise for Suspense
+          throw result.promise;
         } else {
+          // idle state - not started yet
           throw new AsyncNotReadyError(
             `State at index ${i} is not ready`,
-            "pending"
+            "idle"
           );
         }
       }
@@ -1180,12 +1202,16 @@ export namespace async {
         const result = getData(record[key], key);
         if (result.ready) {
           results[key] = result.data;
-        } else if (result.error) {
+        } else if ("error" in result) {
           throw result.error;
+        } else if ("promise" in result) {
+          // Throw promise for Suspense
+          throw result.promise;
         } else {
+          // idle state - not started yet
           throw new AsyncNotReadyError(
             `State at key "${key}" is not ready`,
-            "pending"
+            "idle"
           );
         }
       }
@@ -1248,6 +1274,7 @@ export namespace async {
       : Object.entries(states);
 
     const errors: Error[] = [];
+    const promises: PromiseLike<any>[] = [];
 
     // First check for ready data
     for (const [key, item] of entries) {
@@ -1255,8 +1282,10 @@ export namespace async {
       if (result.ready) {
         return result.data;
       }
-      if (result.error) {
+      if ("error" in result) {
         errors.push(result.error);
+      } else if ("promise" in result) {
+        promises.push(result.promise);
       }
     }
 
@@ -1265,10 +1294,15 @@ export namespace async {
       throw new AsyncAggregateError("All async states have errors", errors);
     }
 
-    // Some are pending/idle
+    // If there are pending promises, throw Promise.race for Suspense
+    if (promises.length > 0) {
+      throw Promise.race(promises);
+    }
+
+    // All are idle (not started)
     throw new AsyncNotReadyError(
       "No async state has resolved successfully",
-      "pending"
+      "idle"
     );
   }
 

@@ -254,6 +254,11 @@ export function useStoreWithContainer<T extends object>(
           );
         }
 
+        // Handle void/undefined selectors - used for side effects only (trigger, effects)
+        if (result === undefined || result === null) {
+          return undefined as any;
+        }
+
         // Build output with stable values (preserve array vs object)
         // This is inside withHooks so Object.entries reads are tracked
         const out = (Array.isArray(result) ? [] : {}) as StableResult<T>;
@@ -410,9 +415,9 @@ export function useStoreWithContainer<T extends object>(
  * }
  * ```
  */
-function useStoreImpl<T extends object>(
-  selectorOrMixins: Selector<T> | MergeMixin | MixinMap
-): StableResult<T> {
+function useStoreImpl(
+  selectorOrMixins: Selector<any> | MergeMixin | MixinMap
+): any {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const container = useContainer();
 
@@ -420,7 +425,7 @@ function useStoreImpl<T extends object>(
   if (Array.isArray(selectorOrMixins)) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useStoreWithContainer(
-      (ctx) => ctx.mixin(selectorOrMixins) as T,
+      (ctx) => ctx.mixin(selectorOrMixins),
       container
     );
   }
@@ -439,7 +444,7 @@ function useStoreImpl<T extends object>(
     ) {
       // eslint-disable-next-line react-hooks/rules-of-hooks
       return useStoreWithContainer(
-        (ctx) => ctx.mixin(selectorOrMixins as MixinMap) as T,
+        (ctx) => ctx.mixin(selectorOrMixins as MixinMap),
         container
       );
     }
@@ -447,7 +452,7 @@ function useStoreImpl<T extends object>(
 
   // Overload 3: Regular Selector function
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useStoreWithContainer(selectorOrMixins as Selector<T>, container);
+  return useStoreWithContainer(selectorOrMixins as Selector<any>, container);
 }
 
 /**
@@ -554,6 +559,23 @@ export interface UseStoreFn {
    * Main useStore hook - consumes stores with automatic optimization.
    */
   <T extends object>(selector: Selector<T>): StableResult<T>;
+
+  /**
+   * useStore with void selector - for side effects only (trigger, effects).
+   *
+   * @example
+   * ```tsx
+   * function MyComponent({ id }: { id: string }) {
+   *   useStore(({ get }) => {
+   *     const [, actions] = get(dataStore);
+   *     trigger(actions.fetch, [id], id);
+   *     // No return - just side effects
+   *   });
+   *   return <div>...</div>;
+   * }
+   * ```
+   */
+  (selector: Selector<void>): void;
 
   /**
    * Merge multiple mixins into a single result object.

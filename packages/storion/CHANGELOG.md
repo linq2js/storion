@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `useStore()` now accepts void selectors for side effects only (e.g., `trigger`, effects)
+  ```tsx
+  useStore(({ get }) => {
+    const [, actions] = get(dataStore);
+    trigger(actions.fetch, [id], id);
+    // No return - just side effects
+  });
+  ```
+
+### Fixed
+
+- `async.all()`, `async.race()`, `async.any()` now properly throw promises for Suspense when states are pending (instead of throwing `AsyncNotReadyError`)
+- `AsyncNotReadyError` is now only thrown for idle states (not started yet)
+
 ---
 
 ## [0.16.3] - 2024-12-27
