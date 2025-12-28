@@ -19,7 +19,16 @@
  * ```
  */
 
-export { async, type AsyncMixinOptions, type AsyncMixinResult } from "./async";
+export {
+  async,
+  asyncState,
+  asyncStateFrom,
+  getPendingPromise,
+  toPromise,
+  type AsyncMixinOptions,
+  type AsyncMixinResult,
+  type AsyncStateExtra,
+} from "./async";
 export {
   abortable,
   isAbortable,

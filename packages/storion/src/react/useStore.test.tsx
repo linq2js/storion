@@ -4,7 +4,7 @@
 
 import React, { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
-import { act } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { wrappers } from "./strictMode";
 import { StoreProvider } from "./context";
 import { useStore } from "./useStore";
@@ -1435,7 +1435,9 @@ describe.each(wrappers)(
         );
 
         // Effect should have run after mount
-        expect(effectCalls).toContain(0);
+        await waitFor(() => {
+          expect(effectCalls).toContain(0);
+        });
       });
 
       it("should cleanup effect on unmount", async () => {
@@ -1470,7 +1472,9 @@ describe.each(wrappers)(
 
         // Cleanup should have been called at least once
         // (In StrictMode: may be called multiple times due to mount/unmount cycles)
-        expect(cleanupCalls.length).toBeGreaterThanOrEqual(1);
+        await waitFor(() => {
+          expect(cleanupCalls.length).toBeGreaterThanOrEqual(1);
+        });
       });
 
       it("should have access to external values via closure", async () => {
@@ -1524,7 +1528,11 @@ describe.each(wrappers)(
         );
 
         // Should have captured initial values
-        expect(capturedValues.some((v) => v.external === "initial")).toBe(true);
+        await waitFor(() => {
+          expect(capturedValues.some((v) => v.external === "initial")).toBe(
+            true
+          );
+        });
 
         // Rerender with new prop
         rerender(
@@ -1534,7 +1542,11 @@ describe.each(wrappers)(
         );
 
         // Effect should have fresh closure with new prop value
-        expect(capturedValues.some((v) => v.external === "updated")).toBe(true);
+        await waitFor(() => {
+          expect(capturedValues.some((v) => v.external === "updated")).toBe(
+            true
+          );
+        });
       });
 
       it("should re-run effect when tracked state changes", async () => {
@@ -1568,6 +1580,11 @@ describe.each(wrappers)(
           { wrapper: createWrapper(stores) }
         );
 
+        // Wait for initial effect to run
+        await waitFor(() => {
+          expect(effectCalls.length).toBeGreaterThan(0);
+        });
+
         const initialCallCount = effectCalls.length;
 
         // Trigger state change
@@ -1576,8 +1593,10 @@ describe.each(wrappers)(
         });
 
         // Effect should have re-run with new count
-        expect(effectCalls.length).toBeGreaterThan(initialCallCount);
-        expect(effectCalls).toContain(1);
+        await waitFor(() => {
+          expect(effectCalls.length).toBeGreaterThan(initialCallCount);
+          expect(effectCalls).toContain(1);
+        });
       });
     });
 
