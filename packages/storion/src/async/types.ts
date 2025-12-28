@@ -362,6 +362,17 @@ export interface AsyncActions<T, M extends AsyncMode, TArgs extends any[]> {
    * @returns Last invocation info with state, or undefined if never dispatched
    */
   last(): AsyncLastInvocation<T, M, TArgs> | undefined;
+  /**
+   * Set state to success with the given data.
+   * Useful for optimistic updates, websocket data, SSR hydration, or testing.
+   *
+   * Respects `autoCancel` option:
+   * - If `autoCancel: true` (default): cancels any in-flight request
+   * - If `autoCancel: false`: lets in-flight request complete but prevents it from overwriting state
+   *
+   * @param data - The data to set as success value
+   */
+  success(data: T): void;
 }
 
 // ===== Type Utilities =====

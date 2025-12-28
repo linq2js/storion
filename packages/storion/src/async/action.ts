@@ -329,6 +329,40 @@ export function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
       state: getState(),
     };
   }
+
+  // Set state to success directly (for optimistic updates, websocket, SSR, testing)
+  function success(data: T): void {
+    untrack(() => {
+      const autoCancel = options?.autoCancel !== false;
+
+      // Respect autoCancel option (same logic as dispatch)
+      if (lastCancel && autoCancel) {
+        lastCancel();
+        lastCancel = null;
+      }
+
+      const currentState = getState();
+      const mode = currentState.mode;
+
+      // For requestId:
+      // - autoCancel: true → new requestId (any mismatch = external modification)
+      // - autoCancel: false → undefined (matches the "external modification" check)
+      const successRequestId: AsyncRequestId | undefined = autoCancel
+        ? {}
+        : undefined;
+
+      setState({
+        status: "success",
+        mode,
+        data,
+        error: undefined,
+        timestamp: Date.now(),
+        __requestId: successRequestId,
+        toJSON: stateToJSON,
+      } as AsyncState<T, M>);
+    });
+  }
+
   if (options?.autoCancel) {
     focus._storeContext.onDispose(() => {
       cancel();
@@ -341,6 +375,7 @@ export function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
     cancel,
     reset,
     last,
+    success,
   };
 }
 

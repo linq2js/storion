@@ -28,6 +28,7 @@ export default defineConfig({
         ),
         "async/index": resolve(__dirname, "src/async/index.ts"),
         "persist/index": resolve(__dirname, "src/persist/index.ts"),
+        "network/index": resolve(__dirname, "src/network/index.ts"),
       },
       formats: ["es"],
     },

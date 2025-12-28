@@ -522,6 +522,118 @@ describe("async", () => {
     });
   });
 
+  describe("success", () => {
+    it("should set state to success with given data", () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+
+      const { success } = async.action(focus, async () => "from-fetch");
+
+      success("manual-data");
+
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("manual-data");
+      expect(getState().mode).toBe("fresh");
+      expect(getState().timestamp).toBeDefined();
+    });
+
+    it("should preserve stale mode when setting success", () => {
+      const [focus, { getState }] = createMockFocus(
+        async.stale<string>("initial")
+      );
+
+      const { success } = async.action(focus, async () => "from-fetch");
+
+      success("manual-data");
+
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("manual-data");
+      expect(getState().mode).toBe("stale");
+    });
+
+    it("should cancel in-flight request when autoCancel is true (default)", async () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+      let resolveFn: (value: string) => void;
+
+      const { dispatch, success } = async.action(focus, async (ctx) => {
+        return new Promise<string>((resolve) => {
+          resolveFn = resolve;
+        });
+      });
+
+      const promise = dispatch();
+      expect(getState().status).toBe("pending");
+
+      // Set success manually - should cancel in-flight
+      success("manual-data");
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("manual-data");
+
+      // The dispatch promise should reject with AbortError
+      await expect(promise).rejects.toThrow();
+    });
+
+    it("should not cancel in-flight request when autoCancel is false", async () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+      let resolveFn: (value: string) => void;
+
+      const { dispatch, success } = async.action(
+        focus,
+        async (ctx) => {
+          return new Promise<string>((resolve) => {
+            resolveFn = resolve;
+          });
+        },
+        { autoCancel: false }
+      );
+
+      const promise = dispatch();
+      expect(getState().status).toBe("pending");
+
+      // Set success manually - should NOT cancel in-flight
+      success("manual-data");
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("manual-data");
+
+      // Resolve the original promise - it should complete but not overwrite state
+      resolveFn!("from-fetch");
+      const result = await promise;
+      expect(result).toBe("from-fetch"); // Promise resolves with fetched data
+
+      // But state should still be "manual-data" (not overwritten)
+      expect(getState().data).toBe("manual-data");
+    });
+
+    it("should work from idle state", () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+
+      const { success } = async.action(focus, async () => "from-fetch");
+
+      // Never dispatched, directly set success
+      success("hydrated-data");
+
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("hydrated-data");
+    });
+
+    it("should overwrite error state", async () => {
+      const [focus, { getState }] = createMockFocus(async.fresh<string>());
+
+      const { dispatch, success } = async.action(focus, async () => {
+        throw new Error("failed");
+      });
+
+      await expect(dispatch()).rejects.toThrow("failed");
+      expect(getState().status).toBe("error");
+
+      // Set success to recover from error
+      success("recovered-data");
+
+      expect(getState().status).toBe("success");
+      expect(getState().data).toBe("recovered-data");
+      expect(getState().error).toBeUndefined();
+    });
+  });
+
   describe("async.wait", () => {
     it("should return data for success state", () => {
       const state = asyncState("fresh", "success", "hello");

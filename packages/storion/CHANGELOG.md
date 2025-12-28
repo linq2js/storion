@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `async.action()` now returns a `success(data)` method for directly setting state without executing the handler. Useful for optimistic updates, websocket/push data, SSR hydration, or testing. Respects `autoCancel` option: with `autoCancel: true` (default), cancels any in-flight request; with `autoCancel: false`, lets in-flight requests complete but prevents them from overwriting the manually set state.
+  ```ts
+  const userQuery = async.action(focus('user'), fetchUser);
+  
+  // Optimistic update
+  userQuery.success(optimisticData);
+  
+  // Websocket push
+  websocket.on('user_updated', (data) => userQuery.success(data));
+  
+  // SSR hydration
+  userQuery.success(window.__DATA__.user);
+  ```
+
+- `observe()` wrapper for abortable functions to observe lifecycle events. The `onStart` callback can return an object with lifecycle callbacks: `onAbort`, `onSuccess`, `onError`, `onDone`.
+  ```ts
+  import { abortable, observe } from "storion/async";
+  
+  // Simple logging
+  const fetchUser = abortable(async (ctx, id: string) => { ... })
+    .use(observe((ctx, id) => {
+      console.log(`Fetching user ${id}`);
+    }));
+  
+  // Full lifecycle
+  const fetchData = abortable(async () => { ... })
+    .use(observe(() => ({
+      onAbort: () => console.log('Aborted'),
+      onSuccess: (data) => console.log('Success:', data),
+      onError: (err) => console.error('Error:', err),
+      onDone: () => console.log('Done'),
+    })));
+  
+  // Loading indicator pattern
+  const fetchData = abortable(async () => { ... })
+    .use(observe(() => {
+      showLoading();
+      return { onDone: hideLoading };
+    }));
+  ```
+
 - `effect()` now automatically catches thrown promises (Suspense-like behavior). When `async.wait()` throws a promise inside an effect, the effect will automatically re-run when the promise resolves. Uses `ctx.nth` to detect staleness - if dependencies change before the promise resolves, the refresh is skipped. On promise rejection, the error is handled via `options.onError` (supports `keepAlive`, `failFast`, retry config, or custom handler).
   ```ts
   effect(() => {

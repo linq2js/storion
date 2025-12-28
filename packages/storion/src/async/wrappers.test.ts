@@ -11,6 +11,7 @@ import {
   cache,
   rateLimit,
   circuitBreaker,
+  observe,
 } from "./wrappers";
 
 describe("wrappers", () => {
@@ -738,6 +739,192 @@ describe("wrappers", () => {
       // Abort and catch to clean up
       result.abort();
       await result.catch(() => {});
+    });
+  });
+
+  describe("observe()", () => {
+    it("should call onStart when function is invoked", async () => {
+      const onStart = vi.fn();
+
+      const fn = abortable(async (_ctx, id: string) => `user-${id}`).use(
+        observe(onStart)
+      );
+
+      await fn("123");
+
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(onStart).toHaveBeenCalledWith(
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        "123"
+      );
+    });
+
+    it("should call onAbort callback when aborted", async () => {
+      const onAbort = vi.fn();
+
+      const fn = abortable(
+        async (ctx) =>
+          new Promise((resolve) => {
+            ctx.signal.addEventListener("abort", () => resolve("aborted"));
+          })
+      ).use(observe(() => ({ onAbort })));
+
+      const result = fn();
+      result.abort();
+
+      await expect(result).resolves.toBe("aborted");
+      expect(onAbort).toHaveBeenCalledTimes(1);
+    });
+
+    it("should call onSuccess callback on success", async () => {
+      const onSuccess = vi.fn();
+
+      const fn = abortable(async () => "result").use(
+        observe(() => ({ onSuccess }))
+      );
+
+      await fn();
+
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+      expect(onSuccess).toHaveBeenCalledWith("result");
+    });
+
+    it("should call onError callback on error and re-throw", async () => {
+      const onError = vi.fn();
+      const error = new Error("test error");
+
+      const fn = abortable(async () => {
+        throw error;
+      }).use(observe(() => ({ onError })));
+
+      await expect(fn()).rejects.toThrow("test error");
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(error);
+    });
+
+    it("should call onDone callback after success", async () => {
+      const onDone = vi.fn();
+
+      const fn = abortable(async () => "result").use(
+        observe(() => ({ onDone }))
+      );
+
+      await fn();
+
+      expect(onDone).toHaveBeenCalledTimes(1);
+    });
+
+    it("should call onDone callback after error", async () => {
+      const onDone = vi.fn();
+
+      const fn = abortable(async () => {
+        throw new Error("test");
+      }).use(observe(() => ({ onDone })));
+
+      await fn().catch(() => {});
+
+      expect(onDone).toHaveBeenCalledTimes(1);
+    });
+
+    it("should call all callbacks in correct order on success", async () => {
+      const calls: string[] = [];
+
+      const fn = abortable(async () => "result").use(
+        observe(() => ({
+          onSuccess: () => calls.push("onSuccess"),
+          onDone: () => calls.push("onDone"),
+        }))
+      );
+
+      await fn();
+
+      expect(calls).toEqual(["onSuccess", "onDone"]);
+    });
+
+    it("should call all callbacks in correct order on error", async () => {
+      const calls: string[] = [];
+
+      const fn = abortable(async () => {
+        throw new Error("test");
+      }).use(
+        observe(() => ({
+          onError: () => calls.push("onError"),
+          onDone: () => calls.push("onDone"),
+        }))
+      );
+
+      await fn().catch(() => {});
+
+      expect(calls).toEqual(["onError", "onDone"]);
+    });
+
+    it("should not call onAbort if not aborted", async () => {
+      const onAbort = vi.fn();
+
+      const fn = abortable(async () => "done").use(
+        observe(() => ({ onAbort }))
+      );
+
+      await fn();
+
+      expect(onAbort).not.toHaveBeenCalled();
+    });
+
+    it("should work with multiple observers", async () => {
+      const onStart1 = vi.fn();
+      const onStart2 = vi.fn();
+
+      const fn = abortable(async (_ctx, x: number) => x * 2)
+        .use(observe(onStart1))
+        .use(observe(onStart2));
+
+      const result = await fn(5);
+
+      expect(result).toBe(10);
+      expect(onStart1).toHaveBeenCalledTimes(1);
+      expect(onStart2).toHaveBeenCalledTimes(1);
+    });
+
+    it("should pass correct args to onStart", async () => {
+      const onStart = vi.fn();
+
+      const fn = abortable(
+        async (_ctx, name: string, age: number) => `${name}-${age}`
+      ).use(observe(onStart));
+
+      await fn("John", 30);
+
+      expect(onStart).toHaveBeenCalledWith(expect.any(Object), "John", 30);
+    });
+
+    it("should work when onStart returns void", async () => {
+      const fn = abortable(async () => "result").use(
+        observe(() => {
+          // No return - just logging
+        })
+      );
+
+      const result = await fn();
+
+      expect(result).toBe("result");
+    });
+
+    it("should handle loading indicator pattern", async () => {
+      let isLoading = false;
+
+      const fn = abortable(async () => {
+        expect(isLoading).toBe(true); // Loading during execution
+        return "data";
+      }).use(
+        observe(() => {
+          isLoading = true;
+          return { onDone: () => (isLoading = false) };
+        })
+      );
+
+      await fn();
+
+      expect(isLoading).toBe(false); // Loading cleared after
     });
   });
 });

@@ -53,10 +53,13 @@ export {
   rateLimit,
   circuitBreaker,
   map,
+  observe,
   type RetryOptions,
   type CacheOptions,
   type RateLimitOptions,
   type CircuitBreakerOptions,
+  type ObserveOnStart,
+  type ObserveCallbacks,
 } from "./wrappers";
 
 export {

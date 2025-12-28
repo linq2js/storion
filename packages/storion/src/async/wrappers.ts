@@ -14,6 +14,7 @@
  * ```
  */
 
+import { dev } from "../dev";
 import {
   type AbortableContext,
   type AbortableWrapper,
@@ -63,6 +64,34 @@ export interface CircuitBreakerOptions {
 
 /** Circuit breaker state */
 type CircuitState = "closed" | "open" | "half-open";
+
+/**
+ * Lifecycle callbacks returned from observe's onStart handler.
+ *
+ * @template TResult - The result type of the observed function
+ */
+export type ObserveCallbacks<TResult> = {
+  /** Called when the function is aborted via AbortController */
+  onAbort?: () => void;
+  /** Called when the function completes successfully */
+  onSuccess?: (result: TResult) => void;
+  /** Called when the function throws an error (error is re-thrown after) */
+  onError?: (error: unknown) => void;
+  /** Called after completion, regardless of success or error (like finally) */
+  onDone?: VoidFunction;
+};
+
+/**
+ * Callback invoked when the observed function starts execution.
+ * Can return lifecycle callbacks for success/error/abort handling.
+ *
+ * @template TArgs - The argument types of the observed function
+ * @template TResult - The result type of the observed function
+ */
+export type ObserveOnStart<TArgs extends readonly any[], TResult> = (
+  ctx: AbortableContext<any>,
+  ...args: TArgs
+) => void | ObserveCallbacks<TResult>;
 
 // =============================================================================
 // Wrappers
@@ -216,20 +245,48 @@ export function timeout(
 /**
  * Log function calls for debugging.
  *
+ * Behavior varies by environment:
+ * - **Development**: Always logs using `devLogger` (default: console)
+ * - **Production**: Only logs if `proLogger` is provided
+ *   - `proLogger: true` → use `devLogger` in prod too
+ *   - `proLogger: customLogger` → use custom logger in prod
+ *   - `proLogger: undefined` → no logging in prod (no-op wrapper)
+ *
+ * @param name - Label for log messages (e.g., function name)
+ * @param devLogger - Logger for development (default: console)
+ * @param proLogger - Logger for production, or `true` to use devLogger
+ *
  * @example
  * ```ts
+ * // Basic: logs in dev only
  * fn.use(logging("getUser"))
- * // Logs: [getUser] calling with: ["123"]
- * // Logs: [getUser] success: { id: "123", name: "John" }
- * // Or:   [getUser] error: Error: Not found
+ * // [getUser] calling with: ["123"]
+ * // [getUser] success: { id: "123", name: "John" }
+ * // [getUser] error: Error: Not found
+ *
+ * // Log in prod too (same logger)
+ * fn.use(logging("getUser", console, true))
+ *
+ * // Custom prod logger (e.g., error tracking service)
+ * fn.use(logging("getUser", console, Sentry))
  * ```
  */
 export function logging(
   name: string,
-  logger: Pick<Console, "log" | "error"> = console
+  devLogger: Pick<Console, "log" | "error"> = console,
+  proLogger?: Pick<Console, "log" | "error"> | boolean
 ): IdentityWrapper {
-  return (next) =>
-    async (ctx, ...args) => {
+  return (next) => {
+    const logger = dev()
+      ? devLogger
+      : proLogger === true
+      ? devLogger
+      : proLogger || undefined;
+    if (!logger) {
+      return next;
+    }
+
+    return async (ctx, ...args) => {
       logger.log(`[${name}] calling with:`, args);
 
       try {
@@ -241,6 +298,7 @@ export function logging(
         throw error;
       }
     };
+  };
 }
 
 /**
@@ -636,5 +694,90 @@ export function map<
   return (next) =>
     async (ctx, ...newArgs) => {
       return mapper((...args) => next(ctx as any, ...args), ...newArgs);
+    };
+}
+
+/**
+ * Observe lifecycle events of an abortable function.
+ * Useful for logging, analytics, loading indicators, or cleanup on abort.
+ *
+ * The `onStart` callback is invoked when the function starts. It can optionally
+ * return an object with lifecycle callbacks:
+ * - `onAbort` - Called when the function is aborted
+ * - `onSuccess` - Called when the function completes successfully (receives result)
+ * - `onError` - Called when the function throws (error is re-thrown after)
+ * - `onDone` - Called after completion, regardless of outcome (like finally)
+ *
+ * @param onStart - Called when the function starts. Can return lifecycle callbacks.
+ *
+ * @example Simple logging (no callbacks returned)
+ * ```ts
+ * const fetchUser = abortable(async (ctx, id: string) => { ... })
+ *   .use(observe((ctx, id) => {
+ *     console.log(`Fetching user ${id}`);
+ *   }));
+ * ```
+ *
+ * @example Abort handling
+ * ```ts
+ * const fetchUser = abortable(async (ctx, id: string) => { ... })
+ *   .use(observe((ctx, id) => ({
+ *     onAbort: () => console.log(`Fetch ${id} aborted`),
+ *   })));
+ * ```
+ *
+ * @example Loading indicator with cleanup
+ * ```ts
+ * const fetchData = abortable(async () => { ... })
+ *   .use(observe(() => {
+ *     showLoading();
+ *     return { onDone: hideLoading };
+ *   }));
+ * ```
+ *
+ * @example Full lifecycle
+ * ```ts
+ * const fetchUser = abortable(async (ctx, id: string) => { ... })
+ *   .use(observe((ctx, id) => ({
+ *     onAbort: () => console.log(`Aborted: ${id}`),
+ *     onSuccess: (user) => console.log(`Fetched: ${user.name}`),
+ *     onError: (err) => console.error(`Failed: ${err}`),
+ *     onDone: () => console.log('Completed'),
+ *   })));
+ * ```
+ */
+export function observe<
+  TArgs extends any[],
+  TResult,
+  TYield extends void | object = void
+>(
+  onStart: NoInfer<ObserveOnStart<TArgs, TResult>>
+): AbortableWrapper<TArgs, TResult, TYield, TArgs, TResult, TYield> {
+  return (next) =>
+    async (ctx, ...args) => {
+      // Call onStart and capture returned cleanup
+      const onStartResult = onStart(ctx, ...(args as unknown as TArgs));
+
+      if (!onStartResult) {
+        return next(ctx, ...args);
+      }
+
+      const { onAbort, onSuccess, onError, onDone } = onStartResult ?? {};
+
+      // Register abort handlers if any cleanup is needed
+      if (onAbort) {
+        ctx.signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      try {
+        const result = await next(ctx, ...args);
+        onSuccess?.(result);
+        return result;
+      } catch (error) {
+        onError?.(error);
+        throw error;
+      } finally {
+        onDone?.();
+      }
     };
 }
