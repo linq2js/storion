@@ -725,7 +725,7 @@ describe("persist", () => {
               state.count++;
             },
           }),
-          meta: [notPersisted()],
+          meta: notPersisted(),
         });
 
         const app = container({
@@ -763,7 +763,7 @@ describe("persist", () => {
               state.name = n;
             },
           }),
-          meta: [notPersisted.for(["password", "token"])],
+          meta: notPersisted.for(["password", "token"]),
         });
 
         const app = container({
@@ -795,7 +795,7 @@ describe("persist", () => {
           name: "user",
           state: { name: "Initial", password: "initial-pw", token: "init-tok" },
           setup: () => ({}),
-          meta: [notPersisted.for(["password", "token"])],
+          meta: notPersisted.for(["password", "token"]),
         });
 
         const app = container({
@@ -829,7 +829,7 @@ describe("persist", () => {
               state.a = !state.a;
             },
           }),
-          meta: [notPersisted.for(["a", "b"])],
+          meta: notPersisted.for(["a", "b"]),
         });
 
         const app = container({
@@ -877,10 +877,10 @@ describe("persist", () => {
             state.userId = id;
           },
         }),
-        meta: [
+        meta: meta.of(
           sessionStore.for(["accessToken", "lastActivity"]),
           localStore.for(["refreshToken", "userId"]),
-        ],
+        ),
       });
 
       const sessionMiddleware = persist({
@@ -1017,7 +1017,7 @@ describe("persist", () => {
               state.count = n;
             },
           }),
-          meta: [persisted()],
+          meta: persisted(),
         });
 
         const app = container({
@@ -1065,7 +1065,7 @@ describe("persist", () => {
               state.fontSize = s;
             },
           }),
-          meta: [persisted.for(["theme", "fontSize"])],
+          meta: persisted.for(["theme", "fontSize"]),
         });
 
         const app = container({
@@ -1110,7 +1110,7 @@ describe("persist", () => {
               state.name = n;
             },
           }),
-          meta: [persisted(), notPersisted.for("password")],
+          meta: meta.of(persisted(), notPersisted.for("password")),
         });
 
         const app = container({
@@ -1147,7 +1147,7 @@ describe("persist", () => {
             },
           }),
           // Both metas - notPersisted should win
-          meta: [persisted(), notPersisted()],
+          meta: meta.of(persisted(), notPersisted()),
         });
 
         const app = container({
@@ -1216,14 +1216,14 @@ describe("persist", () => {
           name: "allowed",
           state: { count: 0 },
           setup: () => ({}),
-          meta: [persisted()],
+          meta: persisted(),
         });
 
         const filteredStore = store({
           name: "filtered",
           state: { count: 0 },
           setup: () => ({}),
-          meta: [persisted()],
+          meta: persisted(),
         });
 
         const app = container({

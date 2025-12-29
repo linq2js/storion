@@ -290,10 +290,10 @@ const devtools = meta<{ hidden?: boolean; label?: string }>();
 const userStore = store({
   name: 'user',
   state: { name: '', _internal: '' },
-  meta: [
+  meta: meta.of(
     devtools({ label: 'User Profile' }),
     devtools.for('_internal', { hidden: true }),
-  ],
+  ),
   setup: /* ... */,
 });
 ```

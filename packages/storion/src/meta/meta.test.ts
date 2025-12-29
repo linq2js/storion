@@ -368,12 +368,12 @@ describe("meta", () => {
         name: "test",
         state: { count: 0 },
         setup: () => ({}),
-        meta: [persist(), priority(1)],
+        meta: meta.of(persist(), priority(1)),
       });
 
       expect(myStore.meta).toHaveLength(2);
-      expect(myStore.meta![0].value).toBe(true);
-      expect(myStore.meta![1].value).toBe(1);
+      expect(myStore.meta[0].value).toBe(true);
+      expect(myStore.meta[1].value).toBe(1);
     });
   });
 
@@ -382,7 +382,7 @@ describe("meta", () => {
       const persist = meta();
       const myService = withMeta(
         (_resolver) => ({ doSomething: () => {} }),
-        [persist()]
+        persist()
       );
 
       expect(myService.meta).toHaveLength(1);
@@ -401,7 +401,7 @@ describe("meta", () => {
 
     it("should preserve function behavior", () => {
       const persist = meta();
-      const myService = withMeta(() => ({ value: 42 }), [persist()]);
+      const myService = withMeta(() => ({ value: 42 }), persist());
 
       const result = myService();
       expect(result.value).toBe(42);
@@ -417,7 +417,7 @@ describe("meta", () => {
         name: "test",
         state: { count: 0 },
         setup: () => ({}),
-        meta: [persist()],
+        meta: persist(),
       });
 
       const app = container({
@@ -438,7 +438,7 @@ describe("meta", () => {
       const persist = meta();
       const logMeta = vi.fn();
 
-      const myService = withMeta((resolver) => ({ value: 42 }), [persist()]);
+      const myService = withMeta((resolver) => ({ value: 42 }), persist());
 
       const app = container({
         middleware: [
@@ -485,7 +485,7 @@ describe("meta", () => {
         name: "user",
         state: { name: "", token: "" },
         setup: () => ({}),
-        meta: [persist(), persistKey("user-data"), persist.for("token")],
+        meta: meta.of(persist(), persistKey("user-data"), persist.for("token")),
       });
 
       const app = container({
@@ -513,12 +513,84 @@ describe("meta", () => {
         name: "counter",
         state: { count: 0 },
         setup: () => ({}),
-        meta: [devtools({ name: "Counter Store", trace: true })],
+        meta: devtools({ name: "Counter Store", trace: true }),
       });
 
       const query = createMetaQuery(counterStore.meta!);
       const devtoolsConfig = query(devtools).store;
       expect(devtoolsConfig).toEqual({ name: "Counter Store", trace: true });
+    });
+  });
+
+  describe("meta field validation", () => {
+    it("should throw InvalidMetaFieldError for invalid field name", () => {
+      const persist = meta();
+
+      expect(() => {
+        store({
+          name: "test",
+          state: { name: "", age: 0 },
+          setup: () => ({}),
+          // @ts-expect-error - invalid field name
+          meta: persist.for("invalidField"),
+        });
+      }).toThrow('Meta references invalid field "invalidField"');
+    });
+
+    it("should throw InvalidMetaFieldError for invalid field in array", () => {
+      const persist = meta();
+
+      expect(() => {
+        store({
+          name: "test",
+          state: { name: "", age: 0 },
+          setup: () => ({}),
+          // @ts-expect-error - invalid field name
+          meta: persist.for(["name", "unknown"]),
+        });
+      }).toThrow('Meta references invalid field "unknown"');
+    });
+
+    it("should throw for invalid field in meta.of()", () => {
+      const persist = meta();
+      const priority = meta<number>();
+
+      expect(() => {
+        store({
+          name: "test",
+          state: { name: "" },
+          setup: () => ({}),
+          // @ts-expect-error - invalid field name
+          meta: meta.of(persist(), priority.for("nonexistent", 1)),
+        });
+      }).toThrow('Meta references invalid field "nonexistent"');
+    });
+
+    it("should allow valid field names", () => {
+      const persist = meta();
+
+      expect(() => {
+        store({
+          name: "test",
+          state: { name: "", age: 0 },
+          setup: () => ({}),
+          // @ts-expect-error - invalid field name
+          meta: persist.for(["name", "age"]),
+        });
+      }).not.toThrow();
+    });
+
+    it("should allow store-level meta (no fields)", () => {
+      const persist = meta();
+
+      expect(() => {
+        store({
+          name: "test",
+          state: { name: "" },
+          setup: () => ({}),
+          meta: persist(),
+        });
+      }).not.toThrow();
     });
   });
 });

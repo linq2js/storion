@@ -7,7 +7,7 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { store, container, effect } from "./index";
+import { store, container, effect, meta } from "./index";
 import { withStore } from "./react/withStore";
 import * as React from "react";
 import type { FC } from "react";
@@ -310,15 +310,24 @@ const instance = stores.get(testStore);
 // =============================================================================
 
 {
-  const storeWithMeta = store({
+  const persist = meta();
+  const priority = meta<number>();
+
+  // Single meta
+  const storeWithSingleMeta = store({
     state: { count: 0 },
-    meta: [
-      // StoreMeta is empty by default, but extensible
-    ],
+    meta: persist(), // single meta - no array needed
     setup: () => ({}),
   });
 
-  console.log(storeWithMeta);
+  // Multiple metas - use meta.of() for type safety
+  const storeWithMultipleMeta = store({
+    state: { count: 0 },
+    meta: meta.of(persist(), priority(1)),
+    setup: () => ({}),
+  });
+
+  console.log(storeWithSingleMeta, storeWithMultipleMeta);
 }
 
 // =============================================================================

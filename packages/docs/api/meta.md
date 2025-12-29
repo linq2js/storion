@@ -35,13 +35,22 @@ const deprecated = meta<{ message: string; since: string }>();
 ### Store-Level Meta
 
 ```ts
+// Single meta
 const userStore = store({
   name: 'user',
   state: { name: '', email: '' },
-  meta: [
+  meta: persist(),       // value: true
+  setup: /* ... */,
+});
+
+// Multiple metas - use meta.of()
+const userStore = store({
+  name: 'user',
+  state: { name: '', email: '' },
+  meta: meta.of(
     persist(),           // value: true
     validate('schema'),  // value: 'schema'
-  ],
+  ),
   setup: /* ... */,
 });
 ```
@@ -49,19 +58,24 @@ const userStore = store({
 ### Field-Level Meta
 
 ```ts
+// Single field meta
 const userStore = store({
   name: 'user',
-  state: {
-    name: '',
-    email: '',
-    password: '',
-  },
-  meta: [
+  state: { name: '', email: '', password: '' },
+  meta: persist.for('name'),  // persist name field only
+  setup: /* ... */,
+});
+
+// Multiple field metas - use meta.of()
+const userStore = store({
+  name: 'user',
+  state: { name: '', email: '', password: '' },
+  meta: meta.of(
     persist.for('name'),           // persist name field
     persist.for('email'),          // persist email field
     validate.for('email', 'email'), // validate email field with 'email' rule
     // password not marked - won't be persisted
-  ],
+  ),
   setup: /* ... */,
 });
 ```
@@ -69,10 +83,10 @@ const userStore = store({
 ### Multiple Fields
 
 ```ts
-meta: [
+meta: meta.of(
   persist.for(["name", "email", "preferences"]),
   validate.for(["email", "phone"], "required"),
-];
+);
 ```
 
 ## Naming Conventions
@@ -224,7 +238,10 @@ const inLocal = meta();
 const authStore = store({
   name: "auth",
   state: { token: "", refreshToken: "", userId: "" },
-  meta: [inSession.for(["token"]), inLocal.for(["refreshToken", "userId"])],
+  meta: meta.of(
+    inSession.for(["token"]),
+    inLocal.for(["refreshToken", "userId"]),
+  ),
 });
 
 // In middleware
@@ -246,11 +263,14 @@ const highPriorityFields = ctx.meta.fields(priority, (v) => v > 5);
 ```ts
 const persist = meta();
 
-// Usage
-meta: [
-  persist(), // persist entire store
-  persist.for("settings"), // persist settings field only
-];
+// Single meta usage
+meta: persist(); // persist entire store
+
+// Multiple metas
+meta: meta.of(
+  persist(),                    // persist entire store
+  persist.for("settings"),      // also mark specific field
+);
 
 // In middleware
 const info = ctx.meta(persist);
@@ -266,11 +286,11 @@ type ValidationRule = "required" | "email" | "min:N" | "max:N";
 const validate = meta<ValidationRule>();
 
 // Usage
-meta: [
+meta: meta.of(
   validate.for("email", "email"),
   validate.for("name", "required"),
   validate.for("password", "min:8"),
-];
+);
 
 // Query
 const rules = userStore.meta(validate).all();
@@ -283,10 +303,10 @@ const rules = userStore.meta(validate).all();
 const devtools = meta<{ hidden?: boolean; label?: string }>();
 
 // Usage
-meta: [
+meta: meta.of(
   devtools({ label: "User Profile" }),
   devtools.for("_internal", { hidden: true }),
-];
+);
 ```
 
 ### Deprecated Fields
@@ -295,12 +315,10 @@ meta: [
 const deprecated = meta<{ message: string; since: string }>();
 
 // Usage
-meta: [
-  deprecated.for("oldField", {
-    message: "Use newField instead",
-    since: "2.0.0",
-  }),
-];
+meta: deprecated.for("oldField", {
+  message: "Use newField instead",
+  since: "2.0.0",
+});
 
 // In middleware - warn when accessing deprecated fields
 const deprecatedInfo = ctx.meta(deprecated);
@@ -316,11 +334,18 @@ Attach meta to service factories:
 ```ts
 import { withMeta } from "storion";
 
+// Single meta
 const apiService = withMeta(
   (resolver) => ({
     fetch: (url: string) => fetch(url).then((r) => r.json()),
   }),
-  [persist()] // Meta entries
+  persist()
+);
+
+// Multiple metas
+const authService = withMeta(
+  (resolver) => ({ /* ... */ }),
+  meta.of(persist(), priority(1))
 );
 
 // Query in middleware

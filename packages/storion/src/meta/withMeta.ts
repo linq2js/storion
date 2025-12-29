@@ -32,7 +32,14 @@ import { Factory, MetaEntry } from "../types";
  * const userStore = store({
  *   name: "user",
  *   state: { name: "" },
- *   meta: [persist()], // spec meta
+ *   meta: persist(), // spec meta (single)
+ * });
+ *
+ * // For multiple metas, use meta.of()
+ * const adminStore = store({
+ *   name: "admin",
+ *   state: { name: "" },
+ *   meta: meta.of(persist(), priority(1)), // spec meta (multiple)
  * });
  *
  * // In middleware, ctx.meta includes both factory.meta and spec.meta

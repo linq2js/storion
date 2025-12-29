@@ -287,7 +287,7 @@ import { persist } from 'storion/persist'
 const settingsStore = store({
   name: 'settings',
   state: { theme: 'dark', fontSize: 14 },
-  meta: [persist()],  // ← Auto-saves to localStorage
+  meta: persist(),  // ← Auto-saves to localStorage
 })
 ```
 

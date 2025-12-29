@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Store `meta` property now accepts either a single `MetaEntry` or `meta.of(...)` for multiple entries (instead of raw arrays).
+  ```ts
+  // Single meta - no change needed
+  meta: persist(),
+
+  // Multiple metas - use meta.of() instead of array
+  meta: meta.of(persist(), notPersisted.for("password")),
+  ```
+
 ### Added
+
+- `meta.of()` helper for type-safe arrays of metadata entries. Returns `{ metas: [...] }` for proper typing.
+  ```ts
+  import { meta } from "storion";
+
+  const userStore = store({
+    state: { name: "", password: "" },
+    meta: meta.of(
+      persist(),
+      notPersisted.for("password"),
+    ),
+  });
+  ```
 
 - `async.action()` now returns a `success(data)` method for directly setting state without executing the handler. Useful for optimistic updates, websocket/push data, SSR hydration, or testing. Respects `autoCancel` option: with `autoCancel: true` (default), cancels any in-flight request; with `autoCancel: false`, lets in-flight requests complete but prevents them from overwriting the manually set state.
   ```ts

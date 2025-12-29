@@ -147,10 +147,10 @@ export type MiddlewareMap = Record<string, StoreMiddleware | StoreMiddleware[]>;
  * // Multiple patterns
  * applyFor(["userStore", "auth*"], loggingMiddleware);
  *
- * // Predicate function
+ * // Predicate function (using meta query)
  * applyFor(
- *   (ctx) => ctx.type === "store" && ctx.spec.options.meta?.persist === true,
- *   persist
+ *   (ctx) => ctx.type === "store" && ctx.meta.any(persist),
+ *   persistMiddleware
  * );
  *
  * // Multiple middleware

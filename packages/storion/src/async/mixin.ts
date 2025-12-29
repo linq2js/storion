@@ -40,9 +40,11 @@ export interface AsyncMixinOptions<T, M extends AsyncMode = "fresh">
    */
   name?: string;
   /**
-   * Metadata for the async state. Defaults to empty array.
+   * Metadata for the async state.
+   * - Single meta: `meta: persist()`
+   * - Multiple metas: `meta: meta.of(persist(), notPersisted.for("result"))`
    */
-  meta?: MetaEntry<"result"> | MetaEntry<"result">[];
+  meta?: MetaEntry<"result"> | { metas: MetaEntry<"result">[] };
 }
 
 /**

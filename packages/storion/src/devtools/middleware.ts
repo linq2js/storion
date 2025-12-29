@@ -132,7 +132,7 @@ function enhanceStoreWithDevtools(
     disposed: false,
     instance,
     createdAt: Date.now(),
-    meta: spec.options.meta,
+    meta: spec.meta,
   });
 
   // Track last action for associating with state changes

@@ -189,13 +189,14 @@ export const container: ContainerFn = function (
     set<S extends StateBase, A extends ActionsBase>(
       spec: StoreSpec<S, A>,
       override: StoreSpec<S, A>
-    ): void {
+    ) {
       // Dispose existing instance if any
       const existing = internalResolver.tryGet(spec) as
         | StoreInstance<S, A>
         | undefined;
       tryDispose(existing);
       internalResolver.set(spec, override);
+      return containerApi;
     },
 
     has(spec: StoreSpec<any, any>): boolean {

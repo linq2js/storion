@@ -99,3 +99,6 @@ export { pool } from "./pool";
 
 // Mixin composition
 export { mixins } from "./core/mixins";
+
+// Emitter
+export { emitter } from "./emitter";

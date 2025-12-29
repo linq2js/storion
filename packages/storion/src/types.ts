@@ -439,7 +439,7 @@ export interface StoreSpec<
 
   readonly fields: string[];
 
-  readonly meta?: MetaEntry<keyof TState, any> | MetaEntry<keyof TState, any>[];
+  readonly meta: MetaEntry<keyof TState, any>[];
 
   /**
    * Factory function - creates a new store instance.
@@ -961,9 +961,9 @@ export interface StoreOptions<
    *   ...
    * })
    */
-  meta?: {} extends TState
-    ? MetaEntry<any, any> | MetaEntry<any, any>[]
-    : MetaEntry<keyof TState, any> | MetaEntry<keyof TState, any>[];
+  meta?:
+    | MetaEntry<keyof TState, any>
+    | { metas: MetaEntry<keyof TState, any>[] };
 
   /**
    * Controls what `toJSON()` returns when the store instance is serialized.
@@ -1496,7 +1496,13 @@ export interface StoreContainer extends StorionObject<"container"> {
   set<S extends StateBase, A extends ActionsBase>(
     spec: StoreSpec<S, A>,
     override: StoreSpec<S, A>
-  ): void;
+  ): this;
+
+  /**
+   * Override a factory with a custom implementation.
+   * Useful for testing or environment-specific behavior.
+   */
+  set<T>(factory: Factory<T>, override: Factory<T>): this;
 
   /**
    * Check if a store instance is cached.
@@ -1761,10 +1767,16 @@ export type MetaEntry<TField = any, TValue = any> = {
  * const persist = meta();                           // boolean meta
  * const priority = meta((level: number) => level); // parameterized meta
  *
- * // Apply to store
+ * // Apply to store (single meta)
+ * const simpleStore = store({
+ *   state: { name: "" },
+ *   meta: persist(),  // single meta
+ * });
+ *
+ * // Apply to store (multiple metas)
  * const userStore = store({
  *   state: { name: "" },
- *   meta: [persist(), priority(1), persist.for("name")],
+ *   meta: meta.of(persist(), priority(1), persist.for("name")),  // use meta.of()
  * });
  *
  * // Query metadata (default returns first value)
@@ -1776,10 +1788,20 @@ export type MetaEntry<TField = any, TValue = any> = {
  * userStore.meta.all(persist).store; // [true]
  * ```
  */
-export type MetaType<TField, TArgs extends any[], TValue> = {
+export type MetaType<TArgs extends any[], TValue> = {
+  for<const TFields extends readonly string[]>(
+    fields: TFields,
+    ...args: TArgs
+  ): MetaEntry<
+    TFields extends ReadonlyArray<infer TField> ? TField : never,
+    TValue
+  >;
   /** Attach meta to a specific field or multiple fields */
-  for(field: TField, ...args: TArgs): MetaEntry<TField, TValue>;
-  for(fields: TField[], ...args: TArgs): MetaEntry<TField, TValue>;
+  for<TField extends string>(
+    field: TField,
+    ...args: TArgs
+  ): MetaEntry<TField, TValue>;
+
   /** Attach meta to the store itself, we must use any for TField otherwise it cannot passed to spec.meta */
   (...args: TArgs): MetaEntry<any, TValue>;
 };
@@ -1824,7 +1846,7 @@ export interface AllMetaInfo<TField extends string | symbol, TValue>
  *
  * const userStore = store({
  *   state: { name: "" },
- *   meta: [persist(), priority(1), priority(2)],
+ *   meta: meta.of(persist(), priority(1), priority(2)),
  * });
  *
  * // Default: returns first value (most common case)
@@ -1847,26 +1869,26 @@ export type MetaQuery = {
    * Get metadata using first-value strategy (default).
    * Returns the first matching value for store and each field.
    */
-  <TValue>(type: MetaType<any, any[], TValue>): MetaInfo<any, TValue>;
+  <TValue>(type: MetaType<any[], TValue>): MetaInfo<any, TValue>;
 
   /**
    * Get metadata using all-values strategy.
    * Returns arrays of all matching values.
    */
-  all<TValue>(type: MetaType<any, any[], TValue>): AllMetaInfo<any, TValue>;
+  all<TValue>(type: MetaType<any[], TValue>): AllMetaInfo<any, TValue>;
 
   /**
    * Check if the store has any of the specified meta types.
    * Returns true if at least one meta type is found.
    */
-  any(...types: MetaType<any, any[], any>[]): boolean;
+  any(...types: MetaType<any[], any>[]): boolean;
 
   /**
    * Get all fields that have the specified meta type.
    * Returns an array of field names.
    */
   fields<TValue>(
-    type: MetaType<any, any[], TValue>,
+    type: MetaType<any[], TValue>,
     predicate?: (value: TValue) => boolean
   ): string[];
 };

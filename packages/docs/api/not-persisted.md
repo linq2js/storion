@@ -23,7 +23,7 @@ const sessionStore = store({
     refreshToken: "",
     expiry: 0,
   },
-  meta: [notPersisted()], // Entire store excluded
+  meta: notPersisted(), // Entire store excluded
   setup({ state }) {
     return {
       setTokens: (token: string, refreshToken: string, expiry: number) => {
@@ -55,10 +55,10 @@ const userStore = store({
     confirmPassword: '',  // Temporary - don't persist
     rememberMe: false,    // Will be persisted
   },
-  meta: [
+  meta: meta.of(
     notPersisted.for('password'),
     notPersisted.for('confirmPassword'),
-  ],
+  ),
   setup: /* ... */,
 });
 ```
@@ -77,9 +77,7 @@ const formStore = store({
     securityAnswer: '',
     savedData: {},
   },
-  meta: [
-    notPersisted.for(['password', 'confirmPassword', 'securityAnswer']),
-  ],
+  meta: notPersisted.for(['password', 'confirmPassword', 'securityAnswer']),
   setup: /* ... */,
 });
 ```
@@ -110,14 +108,12 @@ const signupStore = store({
     validationErrors: {} as Record<string, string>,
     isSubmitting: false,
   },
-  meta: [
-    notPersisted.for([
-      "password",
-      "confirmPassword",
-      "validationErrors",
-      "isSubmitting",
-    ]),
-  ],
+  meta: notPersisted.for([
+    "password",
+    "confirmPassword",
+    "validationErrors",
+    "isSubmitting",
+  ]),
   setup({ state, update }) {
     return {
       setField: (field: keyof typeof state, value: unknown) => {
@@ -161,7 +157,7 @@ const signupStore = store({
 
 | Use Case            | Level       | Example                               |
 | ------------------- | ----------- | ------------------------------------- |
-| Session tokens      | Store       | `meta: [notPersisted()]`              |
+| Session tokens      | Store       | `meta: notPersisted()`                |
 | Passwords           | Field       | `notPersisted.for('password')`        |
 | Confirmation inputs | Field       | `notPersisted.for('confirmPassword')` |
 | Validation state    | Field       | `notPersisted.for('errors')`          |

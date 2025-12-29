@@ -30,7 +30,7 @@ import { persisted } from 'storion/persist';
 const userStore = store({
   name: 'user',
   state: { name: '', email: '', avatar: '' },
-  meta: [persisted()],  // All fields will be persisted
+  meta: persisted(),  // All fields will be persisted
   setup: () => ({}),
 });
 ```
@@ -50,9 +50,7 @@ const settingsStore = store({
     fontSize: 14,        // Will be persisted
     cache: {},           // Will NOT be persisted
   },
-  meta: [
-    persisted.for(['theme', 'fontSize']),
-  ],
+  meta: persisted.for(['theme', 'fontSize']),
   setup: () => ({}),
 });
 ```
@@ -88,10 +86,10 @@ import { persisted, notPersisted } from 'storion/persist';
 const userStore = store({
   name: 'user',
   state: { name: '', password: '', token: '' },
-  meta: [
+  meta: meta.of(
     persisted(),                          // All fields opted in
     notPersisted.for(['password', 'token']), // But these are excluded
-  ],
+  ),
 });
 // Result: Only 'name' is persisted
 ```

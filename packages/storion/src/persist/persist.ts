@@ -26,22 +26,23 @@ import { isPromiseLike } from "../utils/isPromiseLike";
  *   name: 'temp',
  *   state: { sessionData: {} },
  *   setup: () => ({}),
- *   meta: [notPersisted()],  // entire store skipped
+ *   meta: notPersisted(),  // entire store skipped
  * });
  * ```
  *
  * @example Field-level exclusion
  * ```ts
  * import { notPersisted } from 'storion/persist';
+ * import { meta } from 'storion';
  *
  * const userStore = store({
  *   name: 'user',
  *   state: { name: '', password: '', token: '' },
  *   setup: () => ({}),
- *   meta: [
+ *   meta: meta.of(
  *     notPersisted.for('password'),
  *     notPersisted.for('token'),
- *   ],
+ *   ),
  * });
  * ```
  */
@@ -109,17 +110,13 @@ export interface PersistOptions {
    * const userStore = store({
    *   name: 'user',
    *   state: { name: '', email: '', temp: '' },
-   *   meta: [
-   *     persisted(),  // marks entire store for persistence
-   *   ],
+   *   meta: persisted(),  // marks entire store for persistence
    * });
    *
    * const settingsStore = store({
    *   name: 'settings',
    *   state: { theme: '', fontSize: 14, cache: {} },
-   *   meta: [
-   *     persisted.for(['theme', 'fontSize']),  // only these fields persisted
-   *   ],
+   *   meta: persisted.for(['theme', 'fontSize']),  // only these fields persisted
    * });
    *
    * persist({

@@ -176,3 +176,20 @@ export class ScopedOutsideSelectorError extends StorionError {
   }
 }
 
+/**
+ * Thrown when a meta entry references a field that doesn't exist in the store state.
+ */
+export class InvalidMetaFieldError extends StorionError {
+  constructor(
+    storeName: string,
+    invalidField: string,
+    validFields: string[]
+  ) {
+    super(
+      `Meta references invalid field "${invalidField}" in store "${storeName}". ` +
+        `Valid fields are: ${validFields.join(", ")}.`
+    );
+    this.name = "InvalidMetaFieldError";
+  }
+}
+

@@ -215,7 +215,7 @@ import { notPersisted } from 'storion/persist';
 const modalStore = store({
   name: 'modal',
   state: { isOpen: false, content: null },
-  meta: [notPersisted()],  // Entire store excluded
+  meta: notPersisted(),  // Entire store excluded
   setup({ state }) {
     return {
       open: (content: any) => { state.isOpen = true; state.content = content; },
@@ -245,10 +245,8 @@ const userStore = store({
     token: '',          // ❌ Sensitive - don't persist!
     lastLogin: null,    // ❌ Computed - don't persist!
   },
-  meta: [
-    // Exclude these fields from persistence
-    notPersisted.for(['password', 'token', 'lastLogin']),
-  ],
+  // Exclude these fields from persistence
+  meta: notPersisted.for(['password', 'token', 'lastLogin']),
   setup({ state }) {
     return { /* actions */ };
   },
@@ -296,7 +294,7 @@ import { persisted, notPersisted } from 'storion/persist';
 const userStore = store({
   name: 'user',
   state: { name: '', email: '', avatar: '' },
-  meta: [persisted()],  // All fields persisted
+  meta: persisted(),  // All fields persisted
   setup: () => ({}),
 });
 
@@ -304,9 +302,7 @@ const userStore = store({
 const settingsStore = store({
   name: 'settings',
   state: { theme: 'light', fontSize: 14, cache: {} },
-  meta: [
-    persisted.for(['theme', 'fontSize']),  // Only these fields
-  ],
+  meta: persisted.for(['theme', 'fontSize']),  // Only these fields
   setup: () => ({}),
 });
 
@@ -326,10 +322,10 @@ When both `persisted` and `notPersisted` are present, `notPersisted` always wins
 const mixedStore = store({
   name: 'mixed',
   state: { name: '', password: '', token: '' },
-  meta: [
+  meta: meta.of(
     persisted(),                          // All fields should persist
     notPersisted.for(['password', 'token']), // Except these!
-  ],
+  ),
 });
 // Result: Only 'name' is persisted
 ```
@@ -563,7 +559,7 @@ const authStore = store({
 const authStore = store({
   name: 'auth',
   state: { user: null, token: '' },
-  meta: [notPersisted.for('token')],
+  meta: notPersisted.for('token'),
 });
 ```
 
@@ -781,9 +777,7 @@ const userStore = store({
     token: '',  // Excluded below
     preferences: { theme: 'light', language: 'en' },
   },
-  meta: [
-    notPersisted.for('token'),  // Don't persist auth token
-  ],
+  meta: notPersisted.for('token'),  // Don't persist auth token
   setup({ state }) {
     return {
       setName: (name: string) => { state.name = name; },

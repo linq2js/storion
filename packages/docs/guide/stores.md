@@ -782,10 +782,10 @@ const myStore = store({
   },
 
   // OPTIONAL: Metadata for middleware ───────────────────────────────────────
-  meta: [
+  meta: meta.of(
     persist(), // Mark for persistence
     logged(), // Mark for logging
-  ],
+  ),
 
   // OPTIONAL: Callbacks ─────────────────────────────────────────────────────
   onDispatch: (event) => {

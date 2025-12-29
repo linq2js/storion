@@ -170,10 +170,10 @@ const inSession = meta();  // Fields to persist in sessionStorage
 const userStore = store({
   name: 'user',
   state: { name: '', token: '', temp: '' },
-  meta: [
+  meta: meta.of(
     inSession.for(['name', 'token']),
     notPersisted.for('temp'),
-  ],
+  ),
   setup: /* ... */,
 });
 
@@ -332,7 +332,7 @@ import { notPersisted } from 'storion/persist';
 const sessionStore = store({
   name: 'session',
   state: { token: '', expiry: 0 },
-  meta: [notPersisted()],  // Won't be persisted
+  meta: notPersisted(),  // Won't be persisted
   setup: /* ... */,
 });
 
@@ -345,9 +345,7 @@ const userStore = store({
     password: '',         // Sensitive
     confirmPassword: '',  // Temporary
   },
-  meta: [
-    notPersisted.for(['password', 'confirmPassword']),
-  ],
+  meta: notPersisted.for(['password', 'confirmPassword']),
   setup: /* ... */,
 });
 ```
@@ -364,7 +362,7 @@ import { persist, persisted, notPersisted } from 'storion/persist';
 const userStore = store({
   name: 'user',
   state: { name: '', email: '', avatar: '' },
-  meta: [persisted()],  // All fields persisted
+  meta: persisted(),  // All fields persisted
   setup: () => ({}),
 });
 
@@ -372,9 +370,7 @@ const userStore = store({
 const settingsStore = store({
   name: 'settings',
   state: { theme: 'light', fontSize: 14, cache: {} },
-  meta: [
-    persisted.for(['theme', 'fontSize']),  // Only these fields
-  ],
+  meta: persisted.for(['theme', 'fontSize']),  // Only these fields
   setup: () => ({}),
 });
 
@@ -414,20 +410,20 @@ When `persistedOnly: true`, filtering happens in this order:
 const conflictingStore = store({
   name: 'conflict',
   state: { data: '' },
-  meta: [
+  meta: meta.of(
     persisted(),       // Wants to persist
     notPersisted(),    // But this wins - store is skipped
-  ],
+  ),
 });
 
 // Field-level priority
 const mixedStore = store({
   name: 'mixed',
   state: { name: '', password: '', token: '' },
-  meta: [
+  meta: meta.of(
     persisted(),                           // All fields persisted
     notPersisted.for(['password', 'token']), // Except these
-  ],
+  ),
 });
 // Only 'name' is persisted
 ```
@@ -535,10 +531,10 @@ const authStore = store({
       state.lastActivity = Date.now();
     },
   }),
-  meta: [
+  meta: meta.of(
     inSession.for(["accessToken", "lastActivity"]),
     inLocal.for(["refreshToken", "userId"]),
-  ],
+  ),
 });
 
 // Session storage middleware
@@ -591,10 +587,10 @@ const mixedStore = store({
     publicData: "",
     sensitiveData: "",
   },
-  meta: [
+  meta: meta.of(
     inSession.for(["publicData", "sensitiveData"]),
     notPersisted.for("sensitiveData"), // Excluded despite being in inSession
-  ],
+  ),
 });
 // Only publicData will be persisted
 ```

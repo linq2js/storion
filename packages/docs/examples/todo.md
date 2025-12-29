@@ -366,7 +366,7 @@ export const todoStore = store({
     filter: 'all' as Filter,
   },
   // Only persist 'items', not 'filter'
-  meta: [persisted.for('items')],
+  meta: persisted.for('items'),
   setup({ state, update }) {
     // ... same actions as before
   },
