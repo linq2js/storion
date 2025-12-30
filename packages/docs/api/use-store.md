@@ -421,6 +421,9 @@ function Component() {
 | `useStore(selector)` | Full control, custom logic |
 | `useStore(mixins([...]))` | Merging multiple reusable mixins |
 | `useStore(mixins({...}))` | Mapping keys to mixin results |
+| `mixins(storeSpec)` | Get proxy for store state/actions |
+| `proxy.select([...])` | Select multiple properties/actions |
+| `mixins(factory)` | Get proxy for service properties |
 
 ### Comparison
 
@@ -447,6 +450,120 @@ const { name, count } = useStore(
     count: (ctx) => ctx.get(counterStore)[0].count,
   })
 );
+```
+
+### mixins() with StoreSpec (Proxy)
+
+Pass a `StoreSpec` to get a proxy that provides mixins for all state properties and actions:
+
+```tsx
+import { useStore, mixins, store } from "storion/react";
+
+const userStore = store({
+  state: { name: "", age: 0 },
+  setup: ({ state }) => ({
+    setName: (name: string) => { state.name = name; },
+    setAge: (age: number) => { state.age = age; },
+  }),
+});
+
+// Create proxy for the store
+const proxy = mixins(userStore);
+
+function Component() {
+  // Access state properties and actions as mixins
+  const { name, age, setName, setAge } = useStore(
+    mixins({
+      name: proxy.name,        // mixin for state.name
+      age: proxy.age,          // mixin for state.age
+      setName: proxy.setName,   // mixin for actions.setName
+      setAge: proxy.setAge,     // mixin for actions.setAge
+    })
+  );
+  
+  return (
+    <div>
+      <p>{name}, age {age}</p>
+      <button onClick={() => setName("John")}>Set Name</button>
+    </div>
+  );
+}
+```
+
+### MixinProxy.select() Method
+
+Use `select()` to select multiple properties/actions at once. Mixins are cached for better performance:
+
+**Array syntax** — Use property names as keys:
+
+```tsx
+const proxy = mixins(userStore);
+
+function Component() {
+  // Select multiple properties/actions
+  const { name, age, setName } = useStore(
+    proxy.select(["name", "age", "setName"])
+  );
+  
+  return <div>{name}, age {age}</div>;
+}
+```
+
+**Object syntax** — Map to custom keys:
+
+```tsx
+const proxy = mixins(userStore);
+
+function Component() {
+  // Map to custom keys
+  const { userName, userAge, updateName } = useStore(
+    proxy.select({
+      userName: "name",
+      userAge: "age",
+      updateName: "setName",
+    })
+  );
+  
+  return <div>{userName}, age {userAge}</div>;
+}
+```
+
+### mixins() with Factory (Service Proxy)
+
+Pass a service factory to get a proxy that provides mixins for all service properties:
+
+```tsx
+import { useStore, mixins } from "storion/react";
+import type { Resolver } from "storion";
+
+const dbService = (resolver: Resolver) => ({
+  users: {
+    getAll: () => [],
+    getById: (id: string) => ({ id, name: "John" }),
+  },
+  posts: {
+    getAll: () => [],
+  },
+});
+
+// Create proxy for the service
+const proxy = mixins(dbService);
+
+function Component() {
+  // Access service properties as mixins
+  const { users, posts } = useStore(
+    mixins({
+      users: proxy.users,  // mixin for service.users
+      posts: proxy.posts,  // mixin for service.posts
+    })
+  );
+  
+  return (
+    <div>
+      <button onClick={() => users.getAll()}>Get Users</button>
+    </div>
+  );
+}
 ```
 
 ## Component-Local Stores with scoped()

@@ -584,6 +584,54 @@ const data = useStore(
 );
 ```
 
+**StoreSpec proxy** — Get a proxy for all store properties/actions:
+
+```tsx
+import { mixins, store } from "storion/react";
+
+const userStore = store({
+  state: { name: "", age: 0 },
+  setup: ({ state }) => ({
+    setName: (name: string) => { state.name = name; },
+  }),
+});
+
+const proxy = mixins(userStore);
+
+function Component() {
+  // Use proxy to access state/actions as mixins
+  const { name, setName } = useStore(
+    mixins({
+      name: proxy.name,
+      setName: proxy.setName,
+    })
+  );
+  
+  // Or use select() to select multiple at once
+  const { name, age, setName } = useStore(
+    proxy.select(["name", "age", "setName"])
+  );
+}
+```
+
+**Service factory proxy** — Get a proxy for service properties:
+
+```tsx
+const dbService = (resolver: Resolver) => ({
+  users: { getAll: () => [] },
+});
+
+const proxy = mixins(dbService);
+
+function Component() {
+  const { users } = useStore(
+    mixins({
+      users: proxy.users,
+    })
+  );
+}
+```
+
 See [`useStore()` API reference](/api/use-store#mixin-composition-with-mixins) for more details.
 
 ### Real-World Example
