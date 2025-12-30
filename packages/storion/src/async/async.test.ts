@@ -2397,3 +2397,133 @@ describe("asyncState()", () => {
     });
   });
 });
+
+// =============================================================================
+// async.state() UTILITY
+// =============================================================================
+
+describe("async.state()", () => {
+  describe("with promise (existing behavior)", () => {
+    it("should track pending promise state", async () => {
+      let resolvePromise: (value: string) => void;
+      const promise = new Promise<string>((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      const pws = async.state(promise);
+      expect(pws.state.status).toBe("pending");
+      expect(pws.state.value).toBeUndefined();
+
+      resolvePromise!("result");
+      await pws;
+
+      expect(pws.state.status).toBe("fulfilled");
+      expect(pws.state.value).toBe("result");
+    });
+
+    it("should track rejected promise state", async () => {
+      const error = new Error("test error");
+      const promise = Promise.reject(error);
+
+      const pws = async.state(promise);
+      await expect(pws).rejects.toThrow("test error");
+
+      expect(pws.state.status).toBe("rejected");
+      expect(pws.state.reason).toBe(error);
+    });
+  });
+
+  describe("with function (new overload)", () => {
+    it("should return fulfilled state when function returns a value", async () => {
+      const pws = async.state(() => "hello");
+
+      expect(pws.state.status).toBe("fulfilled");
+      expect(pws.state.value).toBe("hello");
+
+      const result = await pws;
+      expect(result).toBe("hello");
+    });
+
+    it("should return rejected state when function throws an Error", async () => {
+      const error = new Error("test error");
+      const pws = async.state(() => {
+        throw error;
+      });
+
+      expect(pws.state.status).toBe("rejected");
+      expect(pws.state.reason).toBe(error);
+
+      await expect(pws).rejects.toThrow("test error");
+    });
+
+    it("should return pending state when function throws a Promise (Suspense)", async () => {
+      let resolvePromise: (value: string) => void;
+      const thrownPromise = new Promise<string>((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      const pws = async.state(() => {
+        throw thrownPromise;
+      });
+
+      expect(pws.state.status).toBe("pending");
+      expect(pws.state.value).toBeUndefined();
+
+      // The returned promise should resolve to the thrown promise's value
+      resolvePromise!("suspense resolved");
+      const result = await pws;
+      expect(result).toBe("suspense resolved");
+
+      // After resolution, state should be fulfilled
+      expect(pws.state.status).toBe("fulfilled");
+      expect(pws.state.value).toBe("suspense resolved");
+    });
+
+    it("should handle function that throws a rejected promise", async () => {
+      const error = new Error("promise rejection");
+      const thrownPromise = Promise.reject(error);
+
+      const pws = async.state(() => {
+        throw thrownPromise;
+      });
+
+      expect(pws.state.status).toBe("pending");
+
+      await expect(pws).rejects.toThrow("promise rejection");
+
+      expect(pws.state.status).toBe("rejected");
+      expect(pws.state.reason).toBe(error);
+    });
+
+    it("should handle function returning undefined", async () => {
+      const pws = async.state(() => undefined);
+
+      expect(pws.state.status).toBe("fulfilled");
+      expect(pws.state.value).toBeUndefined();
+
+      const result = await pws;
+      expect(result).toBeUndefined();
+    });
+
+    it("should handle function returning null", async () => {
+      const pws = async.state(() => null);
+
+      expect(pws.state.status).toBe("fulfilled");
+      expect(pws.state.value).toBeNull();
+
+      const result = await pws;
+      expect(result).toBeNull();
+    });
+
+    it("should handle function returning complex objects", async () => {
+      const obj = { name: "test", value: 42 };
+      const pws = async.state(() => obj);
+
+      expect(pws.state.status).toBe("fulfilled");
+      expect(pws.state.value).toBe(obj);
+
+      const result = await pws;
+      expect(result).toBe(obj);
+    });
+  });
+});

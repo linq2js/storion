@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated React peer dependency requirement from `^18.0.0 || ^19.0.0` and development dependencies to React 19. The library now fully supports React 19's improved Suspense behavior and concurrent rendering.
+
+- Fixed `isNetworkError()` to correctly detect `DOMException` errors in environments where `DOMException` doesn't extend `Error` (e.g., jsdom).
+
 - **BREAKING**: Store `meta` property now accepts either a single `MetaEntry` or `meta.of(...)` for multiple entries (instead of raw arrays).
   ```ts
   // Single meta - no change needed
@@ -19,6 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 ### Added
+
+- `async.state()` now accepts a function overload for capturing synchronous execution results and Suspense patterns:
+  ```ts
+  // With function - captures execution result
+  const pws = async.state(() => getValue());
+  console.log(pws.state.status); // "fulfilled" if returned, "rejected" if threw Error
+  
+  // Suspense pattern - captures thrown promises
+  const pws = async.state(() => {
+    const cache = getFromCache(key);
+    if (!cache) throw fetchAndCache(key); // throws promise for Suspense
+    return cache;
+  });
+  console.log(pws.state.status); // "pending" if promise thrown, "fulfilled" if cached
+  ```
 
 - `meta.of()` helper for type-safe arrays of metadata entries. Returns `{ metas: [...] }` for proper typing.
   ```ts

@@ -102,3 +102,4 @@ export { mixins } from "./core/mixins";
 
 // Emitter
 export { emitter } from "./emitter";
+export { withHooks } from "./core/tracking";

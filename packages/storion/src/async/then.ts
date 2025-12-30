@@ -96,11 +96,11 @@ export function chain<T, R>(
   const promiseState = state as PromiseState<T>;
 
   if (promiseState.status === "fulfilled") {
-    return promiseTry(() => fn(promiseState.resolved as T));
+    return promiseTry(() => fn(promiseState.value as T));
   }
 
   if (promiseState.status === "rejected") {
-    return Promise.reject(promiseState.rejected);
+    return Promise.reject(promiseState.reason);
   }
 
   // Pending - no source promise available for PromiseState

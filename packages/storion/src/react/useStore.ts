@@ -7,7 +7,7 @@
 import {
   useReducer,
   useEffect,
-  useMemo,
+  useRef,
   useState,
   useLayoutEffect,
   useId,
@@ -96,7 +96,8 @@ interface UseStoreRefs {
   prevValues: Map<string, { value: unknown }>;
   trackedDeps: Map<string, ReadEvent>;
   subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
-  id: string; // unique id for this component instance
+  /** Unique id for this component instance (for trigger scoping) */
+  id: string;
   onceRan: boolean; // whether once has been executed
   /** Whether effect has committed */
   committed: boolean;
@@ -116,19 +117,22 @@ export function useStoreWithContainer<T extends object>(
 ): StableResult<T> {
   const id = useId();
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
+  const instanceRef = useRef<UseStoreRefs>();
+  let refs: UseStoreRefs;
 
-  // Combined ref for all mutable values
-  const [refs] = useState<UseStoreRefs>(() => ({
-    prevValues: new Map(),
-    trackedDeps: new Map(),
-    subscriptions: new Map(),
-    id,
-    onceRan: false,
-    subscribed: false,
-    committed: false,
-    isStale: false,
-    flushScheduled: false,
-  }));
+  if (!instanceRef.current) {
+    instanceRef.current = {
+      prevValues: new Map(),
+      trackedDeps: new Map(),
+      subscriptions: new Map(),
+      id,
+      onceRan: false,
+      committed: false,
+      isStale: false,
+      flushScheduled: false,
+    };
+  }
+  refs = instanceRef.current;
 
   const scheduleFlushIfCommitted = () => {
     // Never call React setState (forceUpdate) synchronously from a subscription.
@@ -147,10 +151,17 @@ export function useStoreWithContainer<T extends object>(
     microtask(flush);
   };
 
-  // Scoped controller for component-local stores (lazy initialized)
-  const [scopeController] = useState<ScopeController>(
-    () => new ScopeController(container)
-  );
+  // Scoped controller for component-local stores
+  // Use useRef instead of useState to ensure persistence across React concurrent renders.
+  // In concurrent mode, useState initializer can run multiple times for different "attempts",
+  // but useRef.current persists across all attempts for the same fiber.
+  const scopeControllerRef = useRef<ScopeController | null>(null);
+  if (!scopeControllerRef.current) {
+    scopeControllerRef.current = new ScopeController(container, () => {
+      refs.prevValues.clear();
+    });
+  }
+  const scopeController = scopeControllerRef.current;
 
   // Track whether we're inside selector execution (use object for stable reference)
   const [selectorExecution] = useState(() => ({ active: false }));
@@ -177,7 +188,7 @@ export function useStoreWithContainer<T extends object>(
 
         // If a store updates while React is rendering another Storion selector, do NOT
         // synchronously call setState. Defer to a microtask to avoid React warnings.
-        if (useStoreSelectorDepth > 0) {
+        if (useStoreSelectorDepth > 0 || selectorExecution.active) {
           refs.isStale = true;
           scheduleFlushIfCommitted();
           return;
@@ -221,93 +232,89 @@ export function useStoreWithContainer<T extends object>(
   }
 
   // Create selector context (no tracking proxy needed - hooks handle it)
-  const selectorContext: SelectorContext = useMemo(() => {
-    const ctx: SelectorContext = {
-      [STORION_TYPE]: "selector.context",
+  const ctx: SelectorContext = {
+    [STORION_TYPE]: "selector.context",
 
-      id: refs.id,
+    id: refs.id,
 
-      container,
+    container,
 
-      // Implementation handles both StoreSpec and Factory overloads
-      get(specOrFactory: any): any {
-        // Handle plain factory functions
-        if (!isSpec(specOrFactory)) {
-          return container.get(specOrFactory);
-        }
-        // Get full store instance from container
-        const instance = container.get(specOrFactory);
-        // Return tuple with named properties
-        const tuple = [instance.state, instance.actions] as const;
-        return Object.assign(tuple, {
-          state: instance.state,
-          actions: instance.actions,
-        });
-      },
+    // Implementation handles both StoreSpec and Factory overloads
+    get(specOrFactory: any): any {
+      // Handle plain factory functions
+      if (!isSpec(specOrFactory)) {
+        return container.get(specOrFactory);
+      }
+      // Get full store instance from container
+      const instance = container.get(specOrFactory);
+      // Return tuple with named properties
+      const tuple = [instance.state, instance.actions] as const;
+      return Object.assign(tuple, {
+        state: instance.state,
+        actions: instance.actions,
+      });
+    },
 
-      mixin(mixinOrMixins: any, ...args: any[]): any {
-        // Overload 1: MergeMixin (array of mixins)
-        if (Array.isArray(mixinOrMixins)) {
-          const mixins = mixinOrMixins as MergeMixin;
-          const result: Record<string, unknown> = {};
-          for (const item of mixins) {
-            if (typeof item === "function") {
-              // Direct mixin - spread its result
-              Object.assign(result, item(ctx));
-            } else {
-              // Named mixin map - map keys to results
-              for (const key in item) {
-                result[key] = item[key](ctx);
-              }
+    mixin(mixinOrMixins: any, ...args: any[]): any {
+      // Overload 1: MergeMixin (array of mixins)
+      if (Array.isArray(mixinOrMixins)) {
+        const mixins = mixinOrMixins as MergeMixin;
+        const result: Record<string, unknown> = {};
+        for (const item of mixins) {
+          if (typeof item === "function") {
+            // Direct mixin - spread its result
+            Object.assign(result, item(ctx));
+          } else {
+            // Named mixin map - map keys to results
+            for (const key in item) {
+              result[key] = item[key](ctx);
             }
+          }
+        }
+        return result;
+      }
+
+      // Overload 2: MixinMap (object of mixins)
+      if (
+        typeof mixinOrMixins === "object" &&
+        mixinOrMixins !== null &&
+        !Array.isArray(mixinOrMixins)
+      ) {
+        // Check if it looks like a MixinMap (has function values)
+        const keys = Object.keys(mixinOrMixins);
+        if (
+          keys.length > 0 &&
+          keys.every((k) => typeof mixinOrMixins[k] === "function")
+        ) {
+          const mixinMap = mixinOrMixins as MixinMap;
+          const result: Record<string, unknown> = {};
+          for (const key in mixinMap) {
+            result[key] = mixinMap[key](ctx);
           }
           return result;
         }
+      }
 
-        // Overload 2: MixinMap (object of mixins)
-        if (
-          typeof mixinOrMixins === "object" &&
-          mixinOrMixins !== null &&
-          !Array.isArray(mixinOrMixins)
-        ) {
-          // Check if it looks like a MixinMap (has function values)
-          const keys = Object.keys(mixinOrMixins);
-          if (
-            keys.length > 0 &&
-            keys.every((k) => typeof mixinOrMixins[k] === "function")
-          ) {
-            const mixinMap = mixinOrMixins as MixinMap;
-            const result: Record<string, unknown> = {};
-            for (const key in mixinMap) {
-              result[key] = mixinMap[key](ctx);
-            }
-            return result;
-          }
-        }
+      // Overload 3: Single mixin function with args
+      return mixinOrMixins(ctx, ...args);
+    },
 
-        // Overload 3: Single mixin function with args
-        return mixinOrMixins(ctx, ...args);
-      },
+    once(callback: () => void): void {
+      // Run immediately on first mount only
+      if (shouldRunOnce) {
+        callback();
+      }
+    },
 
-      once(callback: () => void): void {
-        // Run immediately on first mount only
-        if (shouldRunOnce) {
-          callback();
-        }
-      },
-
-      scoped(spec: any): any {
-        // Verify we're inside selector execution
-        if (!selectorExecution.active) {
-          throw new ScopedOutsideSelectorError();
-        }
-        const instance = scopeController.get(spec);
-        return storeTuple(instance);
-      },
-    };
-    return ctx;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [container, shouldRunOnce, scopeController]);
+    scoped(spec: any): any {
+      // Verify we're inside selector execution
+      if (!selectorExecution.active) {
+        throw new ScopedOutsideSelectorError();
+      }
+      const instance = scopeController.get(spec);
+      return storeTuple(instance);
+    },
+  };
 
   // Run selector with hooks to track dependencies
   // Output wrapping is inside withHooks so property reads are tracked
@@ -328,7 +335,7 @@ export function useStoreWithContainer<T extends object>(
         },
       },
       () => {
-        const result = selector(selectorContext);
+        const result = selector(ctx);
 
         // Prevent async selectors - they cause tracking issues
         if (
@@ -369,6 +376,16 @@ export function useStoreWithContainer<T extends object>(
         return out;
       }
     );
+  } catch (error) {
+    refs.prevValues.clear();
+    refs.trackedDeps.clear();
+    refs.subscriptions.clear();
+    refs.committed = false;
+    refs.isStale = false;
+    refs.flushScheduled = false;
+    refs.onceRan = false;
+    instanceRef.current = undefined;
+    throw error;
   } finally {
     selectorExecution.active = false;
     useStoreSelectorDepth--;
@@ -706,7 +723,10 @@ class ScopeController {
 
   private _stores = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
 
-  constructor(public readonly container: StoreContainer) {}
+  constructor(
+    public readonly container: StoreContainer,
+    private readonly _onDispose?: VoidFunction
+  ) {}
 
   /**
    * Dispose the controller and its store.
@@ -719,6 +739,7 @@ class ScopeController {
       store.dispose();
     }
     this._stores.clear();
+    this._onDispose?.();
   };
 
   /**
@@ -753,12 +774,21 @@ class ScopeController {
 
   /**
    * Get or create the store instance.
+   *
+   * Always allows recovery from disposed state since scoped stores are ephemeral
+   * and this handles hot reload race conditions gracefully.
    */
   get = <TState extends StateBase, TActions extends ActionsBase>(
     spec: StoreSpec<TState, TActions>
   ): StoreInstance<TState, TActions> => {
     if (this._disposed) {
-      throw new Error("ScopeController has been disposed");
+      if (shouldScheduleDispose) {
+        this._committed = false;
+        this._disposed = false;
+        this._stores.clear();
+      } else {
+        throw new Error("ScopeController disposed");
+      }
     }
     let store = this._stores.get(spec);
     if (!store) {
@@ -766,12 +796,9 @@ class ScopeController {
       this._stores.set(spec, store);
     }
 
-    // Only schedule disposal check if not already committed
-    // This prevents race conditions when selector runs multiple times
-    if (shouldScheduleDispose && !this._committed) {
-      // Schedule cleanup if effect never commits (render-only)
-      this._disposeIfUnused();
-    }
+    // NOTE: Do NOT call _disposeIfUnused() here!
+    // During React concurrent rendering, setTimeout(0) fires BEFORE useLayoutEffect,
+    // causing premature disposal. Disposal should only happen via uncommit() (effect cleanup).
 
     return store;
   };
@@ -779,9 +806,17 @@ class ScopeController {
   /**
    * Mark as committed (effect is active).
    * Called at the start of useLayoutEffect.
+   *
+   * Also resets _disposed to allow recovery during hot reload:
+   * In development, setTimeout(0) may fire before useLayoutEffect,
+   * causing premature disposal. Resetting _disposed here allows
+   * the store to recover when the component re-renders.
    */
   commit = () => {
     this._committed = true;
+    // Allow recovery during hot reload - reset disposed flag
+    // This handles the race where setTimeout(0) fires before useLayoutEffect
+    this._disposed = false;
     // Clear pending check flag since we're now committed
     this._pendingDisposalCheck = false;
   };

@@ -4,6 +4,35 @@
  * @internal
  */
 
+// =============================================================================
+// CROSS-PLATFORM ABORT ERROR
+// =============================================================================
+
+/**
+ * Create an AbortError in a cross-platform way.
+ * DOMException doesn't exist in React Native, so we create a compatible error.
+ * @internal
+ */
+export function createAbortError(message = "Aborted"): Error {
+  // Use DOMException if available (browser)
+  if (typeof DOMException !== "undefined") {
+    return new DOMException(message, "AbortError");
+  }
+  // Fallback for React Native and other environments
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+/**
+ * Check if an error is an AbortError.
+ * Works with both DOMException and custom AbortError.
+ * @internal
+ */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 import type {
   AsyncState,
   AsyncMode,
@@ -132,26 +161,26 @@ export function toPromiseWithState<T>(
   promise: PromiseLike<T>
 ): PromiseWithState<T> {
   if (!isPromiseLike(promise)) {
-    throw new Error("Expected PromiseLike");
+    throw new Error("Promise is not a PromiseLike");
   }
 
   if ("state" in promise) {
     return promise as PromiseWithState<T>;
   }
 
-  const newState: PromiseState<T> = {
+  const newState = {
     status: "pending",
-    resolved: undefined,
-    rejected: undefined,
-  };
+    value: undefined,
+    reason: undefined,
+  } as PromiseState<T>;
   promise.then(
     (value) => {
       newState.status = "fulfilled";
-      newState.resolved = value;
+      newState.value = value;
     },
     (error) => {
       newState.status = "rejected";
-      newState.rejected = error;
+      newState.reason = error;
     }
   );
 
@@ -205,10 +234,10 @@ export function getData(
     const pws = toPromiseWithState(item);
     const s = pws.state;
     if (s.status === "fulfilled") {
-      return { ready: true, data: s.resolved };
+      return { ready: true, data: s.value };
     }
     if (s.status === "rejected") {
-      return { ready: false, error: s.rejected };
+      return { ready: false, error: s.reason };
     }
     // Promise is pending - return the promise for Suspense
     return { ready: false, promise: item };

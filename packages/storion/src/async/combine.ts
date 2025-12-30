@@ -131,47 +131,104 @@ export function all(
   if (Array.isArray(states)) {
     const arr = states as readonly AsyncOrPromise[];
     const results: any[] = [];
+    const pendingPromises: PromiseLike<unknown>[] = [];
+    let firstError: unknown = null;
+    let hasIdle = false;
+    let idleIndex = -1;
+
     for (let i = 0; i < arr.length; i++) {
       const result = getData(arr[i], i);
       if (result.ready) {
         results.push(result.data);
       } else if ("error" in result) {
-        throw result.error;
+        // Collect first error, but continue to gather all pending promises
+        if (firstError === null) {
+          firstError = result.error;
+        }
+        results.push(undefined); // placeholder
       } else if ("promise" in result) {
-        // Throw promise for Suspense
-        throw result.promise;
+        // Collect pending promise
+        pendingPromises.push(result.promise);
+        results.push(undefined); // placeholder
       } else {
         // idle state - not started yet
-        throw new AsyncNotReadyError(
-          `State at index ${i} is not ready`,
-          "idle"
-        );
+        if (!hasIdle) {
+          hasIdle = true;
+          idleIndex = i;
+        }
+        results.push(undefined); // placeholder
       }
     }
+
+    // Throw combined promise if any are pending (wait for all in parallel)
+    if (pendingPromises.length > 0) {
+      throw Promise.all(pendingPromises);
+    }
+
+    // Throw first error if any
+    if (firstError !== null) {
+      throw firstError;
+    }
+
+    // Throw idle error if any
+    if (hasIdle) {
+      throw new AsyncNotReadyError(
+        `State at index ${idleIndex} is not ready`,
+        "idle"
+      );
+    }
+
     return results;
   }
 
   const record = states as Record<string, AsyncOrPromise>;
   const results: Record<string, any> = {};
+  const pendingPromises: PromiseLike<unknown>[] = [];
+  let firstError: unknown = null;
+  let hasIdle = false;
+  let idleKey = "";
+
   for (const key in record) {
     if (Object.prototype.hasOwnProperty.call(record, key)) {
       const result = getData(record[key], key);
       if (result.ready) {
         results[key] = result.data;
       } else if ("error" in result) {
-        throw result.error;
+        // Collect first error, but continue to gather all pending promises
+        if (firstError === null) {
+          firstError = result.error;
+        }
       } else if ("promise" in result) {
-        // Throw promise for Suspense
-        throw result.promise;
+        // Collect pending promise
+        pendingPromises.push(result.promise);
       } else {
         // idle state - not started yet
-        throw new AsyncNotReadyError(
-          `State at key "${key}" is not ready`,
-          "idle"
-        );
+        if (!hasIdle) {
+          hasIdle = true;
+          idleKey = key;
+        }
       }
     }
   }
+
+  // Throw combined promise if any are pending (wait for all in parallel)
+  if (pendingPromises.length > 0) {
+    throw Promise.all(pendingPromises);
+  }
+
+  // Throw first error if any
+  if (firstError !== null) {
+    throw firstError;
+  }
+
+  // Throw idle error if any
+  if (hasIdle) {
+    throw new AsyncNotReadyError(
+      `State at key "${idleKey}" is not ready`,
+      "idle"
+    );
+  }
+
   return results;
 }
 
@@ -300,10 +357,10 @@ function getSettledResult(item: AsyncOrPromise): CombinedSettledResult<any> {
     const pws = toPromiseWithState(item);
     const s = pws.state;
     if (s.status === "fulfilled") {
-      return { status: "fulfilled", value: s.resolved };
+      return { status: "fulfilled", value: s.value };
     }
     if (s.status === "rejected") {
-      return { status: "rejected", reason: s.rejected };
+      return { status: "rejected", reason: s.reason };
     }
     return { status: "pending" };
   }
@@ -370,4 +427,3 @@ export function settled(
   }
   return results;
 }
-

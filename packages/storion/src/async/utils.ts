@@ -9,7 +9,11 @@ import type {
   PromiseWithState,
 } from "./types";
 import { isPromiseLike } from "../utils/isPromiseLike";
-import { createCancellablePromise, promiseTry } from "./helpers";
+import {
+  createCancellablePromise,
+  promiseTry,
+  toPromiseWithState,
+} from "./helpers";
 
 // =============================================================================
 // DELAY
@@ -61,42 +65,113 @@ export const invoke = promiseTry;
 // =============================================================================
 
 /**
- * Get the state of a promise.
+ * Get the state of a promise or synchronous function execution.
  * Returns a PromiseWithState that has a `.state` property tracking its status.
  *
+ * @overload
  * @param promise - The promise to get the state of.
  * @returns The promise with state tracking.
  *
+ * @overload
+ * @param fn - A function to execute synchronously.
+ * @returns A PromiseWithState based on execution result:
+ *   - If returns value → status: "fulfilled", Promise.resolve(value)
+ *   - If throws Error → status: "rejected", Promise.reject(error)
+ *   - If throws Promise (Suspense) → status: "pending", Promise resolved to thrown promise
+ *
  * @example
+ * // With promise
  * const pws = async.state(fetch('/api/data'));
  * console.log(pws.state.status); // "pending" | "fulfilled" | "rejected"
+ *
+ * @example
+ * // With function - useful for Suspense patterns
+ * const pws = async.state(() => {
+ *   const cache = getFromCache(key);
+ *   if (!cache) throw fetchAndCache(key); // throws promise for Suspense
+ *   return cache;
+ * });
+ * console.log(pws.state.status); // "pending" if promise thrown, "fulfilled" if cached
  */
-export function state<T>(promise: PromiseLike<T>): PromiseWithState<T> {
-  if (!isPromiseLike(promise)) {
-    throw new Error("Promise is not a PromiseLike");
+export function state<T>(promise: PromiseLike<T>): PromiseWithState<T>;
+export function state<T>(fn: () => T): PromiseWithState<Awaited<T>>;
+export function state<T>(
+  promiseOrFn: PromiseLike<T> | (() => T)
+): PromiseWithState<T> {
+  // If it's already a PromiseLike, use existing behavior
+  if (isPromiseLike(promiseOrFn)) {
+    return toPromiseWithState(promiseOrFn);
   }
 
-  if ("state" in promise) {
-    return promise as PromiseWithState<T>;
-  }
+  // Function overload - execute synchronously and capture result/thrown
+  try {
+    const result = promiseOrFn();
 
-  const newState: PromiseState<T> = {
-    status: "pending",
-    resolved: undefined,
-    rejected: undefined,
-  };
-  promise.then(
-    (value) => {
-      newState.status = "fulfilled";
-      newState.resolved = value;
-    },
-    (error) => {
-      newState.status = "rejected";
-      newState.rejected = error;
+    // Function returned a value → fulfilled
+    const newState: PromiseState<T> = {
+      status: "fulfilled",
+      value: result as T,
+      reason: undefined,
+    };
+
+    return Object.assign(Promise.resolve(result), {
+      state: newState,
+    }) as PromiseWithState<T>;
+  } catch (thrown) {
+    // Check if thrown value is a Promise (Suspense pattern)
+    if (isPromiseLike(thrown)) {
+      // Use a mutable wrapper object to allow state transitions
+      const stateWrapper = {
+        state: {
+          status: "pending",
+          value: undefined,
+          reason: undefined,
+        } as PromiseState<T>,
+      };
+
+      // Create a promise that follows the thrown promise
+      const trackedPromise = (thrown as PromiseLike<T>).then(
+        (value) => {
+          stateWrapper.state = {
+            status: "fulfilled",
+            value,
+            reason: undefined,
+          };
+          return value;
+        },
+        (error) => {
+          stateWrapper.state = {
+            status: "rejected",
+            value: undefined,
+            reason: error,
+          };
+          throw error;
+        }
+      );
+
+      // Use Object.defineProperty to create a true getter that returns current state
+      Object.defineProperty(trackedPromise, "state", {
+        get() {
+          return stateWrapper.state;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+
+      return trackedPromise as PromiseWithState<T>;
     }
-  );
 
-  return Object.assign(promise, { state: newState }) as PromiseWithState<T>;
+    // Thrown value is an Error → rejected
+    const newState: PromiseState<T> = {
+      status: "rejected",
+      value: undefined,
+      reason: thrown,
+    };
+
+    return Object.assign(Promise.reject(thrown), {
+      state: newState,
+    }) as PromiseWithState<T>;
+  }
 }
 
 // =============================================================================

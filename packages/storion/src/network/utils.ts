@@ -38,13 +38,18 @@ export function isNetworkError(error: unknown): boolean {
     }
   }
 
-  // 4. DOMException from network issues
-  if (error instanceof DOMException) {
-    return (
-      error.name === "NetworkError" ||
-      error.name === "TimeoutError" ||
-      error.name === "AbortError" // Optional: treat abort as network issue
-    );
+  // 4. DOMException or AbortError (cross-platform)
+  // DOMException may not extend Error in some environments (jsdom, older browsers),
+  // so check both instanceof DOMException (if available) and error.name directly
+  if (error && typeof error === "object" && "name" in error) {
+    const name = (error as { name: string }).name;
+    if (
+      name === "NetworkError" ||
+      name === "TimeoutError" ||
+      name === "AbortError"
+    ) {
+      return true;
+    }
   }
 
   // 5. React Native / Node.js specific

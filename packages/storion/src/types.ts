@@ -1183,9 +1183,9 @@ export interface ContainerOptions {
  *
  * StoreSpec is a specialized factory that returns StoreInstance.
  */
-export type Factory<T = any> = {
-  (resolver: Resolver): T;
-  meta?: MetaEntry | MetaEntry[];
+export type Factory<T = any, A extends any[] = any[]> = {
+  (resolver: Resolver, ...args: A): T;
+  meta?: MetaEntry[];
 };
 
 // =============================================================================

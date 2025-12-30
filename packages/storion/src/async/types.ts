@@ -1,6 +1,12 @@
 // ===== Async Mode =====
 
-import { ActionsBase, StateBase, StoreSpec, StoreTuple } from "../types";
+import {
+  ActionsBase,
+  Factory,
+  StateBase,
+  StoreSpec,
+  StoreTuple,
+} from "../types";
 
 /**
  * Async data mode:
@@ -229,7 +235,7 @@ export interface AsyncContext {
    * const db = get(() => new IndexedDBService());
    * await db.users.getAll();
    */
-  get<T>(factory: (...args: any[]) => T): T;
+  get<T, A extends any[]>(factory: Factory<T, A>, ...args: A): T;
 }
 
 // ===== Handler Type =====
@@ -540,8 +546,7 @@ export interface PromiseWithState<T> extends PromiseLike<T> {
   state: NoInfer<PromiseState<T>>;
 }
 
-export interface PromiseState<T = any> {
-  status: "pending" | "fulfilled" | "rejected";
-  resolved: T | undefined;
-  rejected: any;
-}
+export type PromiseState<T = any> =
+  | { status: "pending"; value: undefined; reason: any }
+  | { status: "fulfilled"; value: T; reason: any }
+  | { status: "rejected"; value: undefined; reason: any };

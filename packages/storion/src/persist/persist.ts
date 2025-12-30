@@ -400,6 +400,7 @@ export function persist(options: PersistOptions): StoreMiddleware {
     // Setup persistence with handler result
     const setupPersistence = (persistHandler: PersistHandler) => {
       const { load, save } = persistHandler;
+      let isHydrating = false;
 
       // Hydrate with loaded state
       const hydrateWithState = (
@@ -407,10 +408,13 @@ export function persist(options: PersistOptions): StoreMiddleware {
       ) => {
         if (state != null) {
           try {
+            isHydrating = true;
             // Filter out excluded fields before hydrating
             instance.hydrate(filterState(state), { force });
           } catch (error) {
             onError?.(error, "load");
+          } finally {
+            isHydrating = false;
           }
         }
       };
@@ -440,6 +444,8 @@ export function persist(options: PersistOptions): StoreMiddleware {
       // Setup save subscription
       if (save) {
         instance.subscribe(() => {
+          if (isHydrating) return;
+
           try {
             const state = instance.dehydrate();
             save(filterState(state));

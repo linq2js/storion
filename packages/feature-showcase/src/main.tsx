@@ -54,9 +54,7 @@ mountDevtoolsPanel({
 });
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <StoreProvider container={app}>
-      <App />
-    </StoreProvider>
-  </StrictMode>
+  <StoreProvider container={app}>
+    <App />
+  </StoreProvider>
 );

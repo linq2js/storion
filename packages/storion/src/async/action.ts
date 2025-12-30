@@ -25,6 +25,7 @@ import {
   promiseTry,
   createCancellablePromise,
   stateToJSON,
+  createAbortError,
 } from "./helpers";
 
 // =============================================================================
@@ -106,7 +107,7 @@ export function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
           // Clean up promise from cache
           pendingPromises.delete(asyncKey);
           // Reject the cancel promise to ensure dispatch() rejects immediately
-          rejectOnCancel?.(new DOMException("Aborted", "AbortError"));
+          rejectOnCancel?.(createAbortError());
         }
       };
 
@@ -161,7 +162,7 @@ export function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
 
           // Check if cancelled
           if (isCancelled) {
-            throw new DOMException("Aborted", "AbortError");
+            throw createAbortError();
           }
 
           // Check if state was externally modified (e.g., devtools rollback)
@@ -191,9 +192,7 @@ export function asyncWithFocus<T, M extends AsyncMode, TArgs extends any[]>(
         } catch (error) {
           // If aborted, rethrow immediately
           if (isCancelled || abortController.signal.aborted) {
-            throw error instanceof Error
-              ? error
-              : new DOMException("Aborted", "AbortError");
+            throw error instanceof Error ? error : createAbortError();
           }
 
           const errorObj =

@@ -14,7 +14,7 @@ import {
   type DisposalGroup,
   type FocusAutoDispose,
 } from "./disposalGroup";
-import { batch } from "./tracking";
+import { batch, untrack } from "./tracking";
 
 // =============================================================================
 // TYPES
