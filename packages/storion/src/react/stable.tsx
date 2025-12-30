@@ -189,7 +189,8 @@ export function stable<TProps extends object, TRef = unknown>(
     // Render based on component type
     if (isForwardRefComponent) {
       // It's a forwardRef component, pass ref as prop
-      return <Component {...stableProps} ref={ref as Ref<TRef>} />;
+      const Comp = Component as ComponentType<TProps & { ref?: Ref<TRef> }>;
+      return <Comp {...stableProps} ref={ref as Ref<TRef>} />;
     }
 
     if (expectsRef) {

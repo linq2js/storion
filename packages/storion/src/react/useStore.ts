@@ -4,14 +4,7 @@
  * Consumes stores with automatic optimization.
  */
 
-import {
-  useReducer,
-  useEffect,
-  useRef,
-  useState,
-  useLayoutEffect,
-  useId,
-} from "react";
+import { useReducer, useEffect, useRef, useLayoutEffect, useId } from "react";
 
 import {
   STORION_TYPE,
@@ -23,8 +16,6 @@ import {
   type Selector,
   type StableResult,
   type StoreInstance,
-  type MixinMap,
-  type MergeMixin,
 } from "../types";
 
 import { withHooks, type ReadEvent } from "../core/tracking";
@@ -82,34 +73,6 @@ export type UseFromSelectorHook<
 let useStoreSelectorDepth = 0;
 
 /**
- * React hook to consume stores with automatic optimization.
- *
- * Features:
- * - Multi-store access via get() in selector
- * - Conditional access (get() can be called conditionally)
- * - Auto-stable functions (never cause re-renders)
- * - Fine-grained updates (only re-renders when selected values change)
- * - Respects untrack() for skipping dependency tracking
- * - Works with pick() for value-level granularity
- */
-interface UseStoreRefs {
-  /** Previous values (containers for tryStabilize) */
-  prevValues: Map<string, { value: unknown }>;
-  trackedDeps: Map<string, ReadEvent>;
-  subscriptions: Map<string, VoidFunction>; // key -> unsubscribe
-  /** Unique id for this component instance (for trigger scoping) */
-  id: string;
-  onceRan: boolean; // whether once has been executed
-  /** Whether effect has committed */
-  committed: boolean;
-  /** Whether store changed since render (for stale detection) */
-  isStale: boolean;
-  /** Whether a committed update flush is already scheduled */
-  flushScheduled: boolean;
-  dispose: VoidFunction;
-}
-
-/**
  * Core hook implementation that accepts container as parameter.
  * Use this when you have direct access to a container.
  */
@@ -120,135 +83,43 @@ export function useStoreWithContainer<T extends object>(
   const id = useId();
   const isStrictMode = useStrictMode();
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
-  const instanceRef = useRef<UseStoreRefs>();
-  let refs: UseStoreRefs;
 
-  if (!instanceRef.current) {
-    instanceRef.current = {
-      prevValues: new Map(),
-      trackedDeps: new Map(),
-      subscriptions: new Map(),
-      id,
-      onceRan: false,
-      committed: false,
-      isStale: false,
-      flushScheduled: false,
-      dispose() {},
-    };
-  }
-  refs = instanceRef.current;
-
-  const scheduleFlushIfCommitted = () => {
-    // Never call React setState (forceUpdate) synchronously from a subscription.
-    // If a store changes while React is rendering another component, a sync setState
-    // triggers: "Cannot update a component while rendering a different component".
-    if (!refs.committed || refs.flushScheduled) return;
-    refs.flushScheduled = true;
-
-    const flush = () => {
-      refs.flushScheduled = false;
-      if (!refs.committed || !refs.isStale) return;
-      refs.isStale = false;
-      forceUpdate();
-    };
-
-    microtask(flush);
-  };
-
-  // Scoped controller for component-local stores
-  // Use useRef instead of useState to ensure persistence across React concurrent renders.
-  // In concurrent mode, useState initializer can run multiple times for different "attempts",
-  // but useRef.current persists across all attempts for the same fiber.
   // Enable deferred disposal if using StrictMode OR in development mode (for Suspense handling)
   const shouldDeferDisposal = isStrictMode || shouldDeferDisposalInDev;
-  const scopeControllerRef = useRef<ScopeController | null>(null);
-  if (!scopeControllerRef.current) {
-    scopeControllerRef.current = new ScopeController(
+
+  // Use useRef to ensure persistence across React concurrent renders.
+  // In concurrent mode, initializers can run multiple times for different "attempts",
+  // but useRef.current persists across all attempts for the same fiber.
+  const controllerRef = useRef<UseStoreController | null>(null);
+  if (!controllerRef.current) {
+    controllerRef.current = new UseStoreController(
+      isStrictMode,
+      id,
       container,
       shouldDeferDisposal,
+      forceUpdate,
       () => {
-        refs.prevValues.clear();
+        // we should cleanup the controller when the component is disposed
+        controllerRef.current = null;
       }
     );
   }
-  const scopeController = scopeControllerRef.current;
+  const controller = controllerRef.current;
   // Update deferDisposal flag each render (it's stable, but ensure consistency)
-  scopeController.deferDisposal = shouldDeferDisposal;
-
-  // Track whether we're inside selector execution (use object for stable reference)
-  const [selectorExecution] = useState(() => ({ active: false }));
-  const [scheduledEffects] = useState<(() => VoidFunction)[]>(() => []);
-
-  // Helper: cleanup all subscriptions
-  const cleanupSubscriptions = () => {
-    for (const unsub of refs.subscriptions.values()) {
-      unsub();
-    }
-    refs.subscriptions.clear();
-  };
-
-  // Helper: subscribe to all tracked deps
-  const subscribe = () => {
-    for (const [key, dep] of refs.trackedDeps) {
-      const unsub = dep.subscribe(() => {
-        // If not committed yet (between render and layoutEffect), mark stale.
-        // LayoutEffect will forceUpdate after commit.
-        if (!refs.committed) {
-          refs.isStale = true;
-          return;
-        }
-
-        // If a store updates while React is rendering another Storion selector, do NOT
-        // synchronously call setState. Defer to a microtask to avoid React warnings.
-        if (useStoreSelectorDepth > 0 || selectorExecution.active) {
-          refs.isStale = true;
-          scheduleFlushIfCommitted();
-          return;
-        }
-
-        // Normal post-commit update path: re-render immediately.
-        forceUpdate();
-      });
-      refs.subscriptions.set(key, unsub);
-    }
-  };
+  controller.deferDisposal = shouldDeferDisposal;
 
   // === RENDER PHASE START ===
-  // 1. Reset flags and cleanup for this render cycle
-  refs.isStale = false;
-  refs.committed = false;
-  cleanupSubscriptions();
-
-  // 2. Clear tracked deps for fresh collection
-  refs.trackedDeps.clear();
-
-  // 3. Clear scheduled effects for this render cycle
-  // Each render collects its own effects; previous effects are disposed in useEffect cleanup
-  scheduledEffects.length = 0;
+  // Prepare for this render cycle
+  controller.prepareRender();
 
   // Capture once flag before selector runs (so all once() calls see the same value)
-  const shouldRunOnce = !refs.onceRan;
-
-  // Schedule cleanup for abandoned renders (concurrent mode / error boundaries).
-  // IMPORTANT: We use setTimeout (macrotask) instead of Promise.resolve (microtask) because
-  // in React 19 concurrent mode, microtasks run BEFORE useLayoutEffect. Since we set
-  // refs.committed = true in useLayoutEffect, using microtask would cause subscriptions
-  // to be cleaned up prematurely (before commit). setTimeout runs AFTER useLayoutEffect,
-  // ensuring proper commit detection.
-  // Schedule when using StrictMode or in development mode (for Suspense handling).
-  if (shouldDeferDisposal) {
-    setTimeout(() => {
-      if (!refs.committed) {
-        cleanupSubscriptions();
-      }
-    }, 0);
-  }
+  const shouldRunOnce = !controller.onceRan;
 
   // Create selector context (no tracking proxy needed - hooks handle it)
   const ctx: SelectorContext = {
     [STORION_TYPE]: "selector.context",
 
-    id: refs.id,
+    id: controller.id,
 
     container,
 
@@ -268,48 +139,8 @@ export function useStoreWithContainer<T extends object>(
       });
     },
 
-    mixin(mixinOrMixins: any, ...args: any[]): any {
-      // Overload 1: MergeMixin (array of mixins)
-      if (Array.isArray(mixinOrMixins)) {
-        const mixins = mixinOrMixins as MergeMixin;
-        const result: Record<string, unknown> = {};
-        for (const item of mixins) {
-          if (typeof item === "function") {
-            // Direct mixin - spread its result
-            Object.assign(result, item(ctx));
-          } else {
-            // Named mixin map - map keys to results
-            for (const key in item) {
-              result[key] = item[key](ctx);
-            }
-          }
-        }
-        return result;
-      }
-
-      // Overload 2: MixinMap (object of mixins)
-      if (
-        typeof mixinOrMixins === "object" &&
-        mixinOrMixins !== null &&
-        !Array.isArray(mixinOrMixins)
-      ) {
-        // Check if it looks like a MixinMap (has function values)
-        const keys = Object.keys(mixinOrMixins);
-        if (
-          keys.length > 0 &&
-          keys.every((k) => typeof mixinOrMixins[k] === "function")
-        ) {
-          const mixinMap = mixinOrMixins as MixinMap;
-          const result: Record<string, unknown> = {};
-          for (const key in mixinMap) {
-            result[key] = mixinMap[key](ctx);
-          }
-          return result;
-        }
-      }
-
-      // Overload 3: Single mixin function with args
-      return mixinOrMixins(ctx, ...args);
+    mixin(mixin: any, ...args: any[]): any {
+      return mixin(ctx, ...args);
     },
 
     once(callback: () => void): void {
@@ -321,10 +152,10 @@ export function useStoreWithContainer<T extends object>(
 
     scoped(spec: any): any {
       // Verify we're inside selector execution
-      if (!selectorExecution.active) {
+      if (!controller.selectorExecution.active) {
         throw new ScopedOutsideSelectorError();
       }
-      const instance = scopeController.get(spec);
+      const instance = controller.getScoped(spec);
       return storeTuple(instance);
     },
   };
@@ -333,18 +164,18 @@ export function useStoreWithContainer<T extends object>(
   // Output wrapping is inside withHooks so property reads are tracked
   // (e.g., when user returns state proxy directly: `return state`)
   let output: StableResult<T>;
-  selectorExecution.active = true;
+  controller.selectorExecution.active = true;
   useStoreSelectorDepth++;
   try {
     output = withHooks(
       {
         onRead: (event) => {
-          refs.trackedDeps.set(event.key, event);
+          controller.trackDep(event);
         },
         // Collect effects to run in useEffect (not immediately)
         // This enables effect() calls in selector to access component scope
         scheduleEffect: (runEffect) => {
-          scheduledEffects.push(runEffect);
+          controller.scheduledEffects.push(runEffect);
         },
       },
       () => {
@@ -371,86 +202,46 @@ export function useStoreWithContainer<T extends object>(
         const out = (Array.isArray(result) ? [] : {}) as StableResult<T>;
 
         for (const [key, value] of Object.entries(result)) {
-          // Get previous value container (undefined if first time)
-          const prev = refs.prevValues.get(key);
-
           // Stabilize: handles both functions (stable wrapper) and values (equality)
-          const [stableValue] = tryStabilize(prev, value, strictEqual);
+          const stableValue = controller.stabilize(key, value);
           (out as any)[key] = stableValue;
-
-          // Store for next render
-          if (prev) {
-            prev.value = stableValue;
-          } else {
-            refs.prevValues.set(key, { value: stableValue });
-          }
         }
 
         return out;
       }
     );
   } catch (error) {
-    refs.prevValues.clear();
-    refs.trackedDeps.clear();
-    refs.subscriptions.clear();
-    refs.committed = false;
-    refs.isStale = false;
-    refs.flushScheduled = false;
-    refs.onceRan = false;
-    instanceRef.current = undefined;
+    // dispose controller immediately if there is an error
+    controller.dispose();
     throw error;
   } finally {
-    selectorExecution.active = false;
+    controller.selectorExecution.active = false;
     useStoreSelectorDepth--;
   }
 
   // Mark once as ran after first selector execution
   if (shouldRunOnce) {
-    refs.onceRan = true;
+    controller.onceRan = true;
   }
 
   // === RENDER PHASE: Subscribe and schedule macrotask cleanup ===
   // Subscribe during render to catch changes immediately (e.g., hydration)
-  subscribe();
+  controller.subscribe();
 
-  // Note: Cleanup is scheduled via setTimeout (macrotask) above (not microtask),
+  // Note: Cleanup is scheduled via setTimeout (macrotask) in prepareRender (not microtask),
   // because in React 19 concurrent mode microtasks can run BEFORE useLayoutEffect.
   //
   // The goal is to avoid prematurely cleaning up subscriptions before commit.
   // Even so, subscriptions can still end up temporarily cleared in some lifecycles
   // (e.g. StrictMode/unmount sequences), so layoutEffect below will resubscribe if needed.
 
-  // Scoped store lifecycle management
-  // Use layout effect for synchronous commit before paint
-  useIsomorphicLayoutEffect(() => {
-    scopeController.commit();
-    return () => {
-      scopeController.uncommit();
-    };
-  }, [scopeController]);
-
   // === EFFECT: Commit subscriptions and handle stale detection ===
   // Use layout effect for synchronous commit before paint
+  // NOTE: No dependency array - must run on EVERY render to handle subscription updates
   useIsomorphicLayoutEffect(() => {
-    // 1. Resubscribe if StrictMode cleanup cleared subscriptions
-    if (refs.subscriptions.size === 0 && refs.trackedDeps.size > 0) {
-      subscribe();
-    }
-
-    // 2. Mark as committed
-    refs.committed = true;
-
-    // 3. If store changed since render, re-render with fresh values
-    if (refs.isStale) {
-      refs.isStale = false;
-      forceUpdate();
-    }
-
-    // Cleanup: cleanup all for StrictMode/unmount
+    controller.commit();
     return () => {
-      cleanupSubscriptions();
-      refs.committed = false;
-      refs.flushScheduled = false;
+      controller.uncommit();
     };
   });
 
@@ -467,7 +258,7 @@ export function useStoreWithContainer<T extends object>(
     // Run each effect and collect dispose functions
     const disposers = emitter();
     try {
-      for (const runEffect of scheduledEffects) {
+      for (const runEffect of controller.scheduledEffects) {
         disposers.on(runEffect());
       }
     } catch (ex) {
@@ -724,64 +515,221 @@ const useIsomorphicLayoutEffect =
 const shouldDeferDisposalInDev =
   !isServer && dev() && typeof useLayoutEffect === "function";
 
-class ScopeController {
-  /** Whether the effect has committed (is active) */
-  private _committed = false;
+/**
+ * Controller for useStore hook - manages subscriptions, scoped stores, and lifecycle.
+ * Combines subscription tracking and scoped store management into a single class.
+ */
+class UseStoreController {
+  // === Subscription State ===
+  /** Previous values for stabilization */
+  readonly prevValues = new Map<string, { value: unknown }>();
+  /** Tracked dependencies from selector */
+  readonly trackedDeps = new Map<string, ReadEvent>();
+  /** Active subscriptions */
+  readonly subscriptions = new Map<string, VoidFunction>();
+  /** Whether once() has been executed */
+  onceRan = false;
 
+  // === Lifecycle State ===
+  /** Whether effect has committed */
+  private _committed = false;
+  /** Whether store changed since render (for stale detection) */
+  private _isStale = false;
+  /** Whether a committed update flush is already scheduled */
+  private _flushScheduled = false;
   /** Whether this controller has been disposed */
   private _disposed = false;
-
-  /** Whether a disposal check is pending (scheduled via setTimeout) */
+  /** Whether a disposal check is pending */
   private _pendingDisposalCheck = false;
 
-  private _stores = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
+  // === Scoped Stores ===
+  private _scopedStores = new Map<
+    StoreSpec<any, any>,
+    StoreInstance<any, any>
+  >();
 
-  /** Whether deferred disposal is enabled (StrictMode or dev mode) */
-  deferDisposal: boolean;
+  // === Selector Execution State ===
+  /** Whether selector is currently executing */
+  readonly selectorExecution = { active: false };
+  /** Effects scheduled during selector execution */
+  readonly scheduledEffects: (() => VoidFunction)[] = [];
 
   constructor(
+    public readonly isStrictMode: boolean,
+    public readonly id: string,
     public readonly container: StoreContainer,
-    deferDisposal: boolean,
-    private readonly _onDispose?: VoidFunction
-  ) {
-    this.deferDisposal = deferDisposal;
+    /** Whether deferred disposal is enabled (StrictMode or dev mode) */
+    public deferDisposal: boolean,
+    private readonly _forceUpdate: () => void,
+    private readonly _onDispose: VoidFunction = () => {}
+  ) {}
+
+  // === Render Phase Methods ===
+
+  /**
+   * Prepare for a new render cycle.
+   * Resets flags, clears subscriptions, and schedules cleanup for abandoned renders.
+   */
+  prepareRender(): void {
+    this._isStale = false;
+    this._committed = false;
+    this._cleanupSubscriptions();
+    this.trackedDeps.clear();
+    this.scheduledEffects.length = 0;
+
+    // Schedule cleanup for abandoned renders (concurrent mode / error boundaries).
+    // IMPORTANT: We use setTimeout (macrotask) instead of Promise.resolve (microtask) because
+    // in React 19 concurrent mode, microtasks run BEFORE useLayoutEffect. Since we set
+    // _committed = true in useLayoutEffect, using microtask would cause subscriptions
+    // to be cleaned up prematurely (before commit). setTimeout runs AFTER useLayoutEffect.
+    if (this.deferDisposal) {
+      setTimeout(() => {
+        if (!this._committed) {
+          this._cleanupSubscriptions();
+        }
+      }, 0);
+    }
   }
 
   /**
-   * Dispose the controller and its store.
-   * Safe to call multiple times.
+   * Track a dependency from selector execution.
    */
-  dispose = () => {
-    if (this._disposed) return;
-    this._disposed = true;
-    for (const store of this._stores.values()) {
-      store.dispose();
-    }
-    this._stores.clear();
-    this._onDispose?.();
-  };
+  trackDep(event: ReadEvent): void {
+    this.trackedDeps.set(event.key, event);
+  }
 
   /**
-   * Schedule disposal check via macrotask (setTimeout).
-   *
-   * This deferred check is crucial for StrictMode and React 19 concurrent mode:
-   * - StrictMode runs cleanup then effect again synchronously
-   * - The macrotask runs AFTER useLayoutEffect commits, so store survives
-   * - On real unmount, no re-commit happens, so disposal proceeds
+   * Stabilize a value across renders.
    */
-  private _disposeIfUnused = () => {
-    // Skip if already committed, disposed, or a check is already pending
+  stabilize(key: string, value: unknown): unknown {
+    const prev = this.prevValues.get(key);
+    const [stableValue] = tryStabilize(prev, value, strictEqual);
+
+    if (prev) {
+      prev.value = stableValue;
+    } else {
+      this.prevValues.set(key, { value: stableValue });
+    }
+
+    return stableValue;
+  }
+
+  /**
+   * Subscribe to all tracked deps.
+   */
+  subscribe(): void {
+    for (const [key, dep] of this.trackedDeps) {
+      const unsub = dep.subscribe(() => {
+        // If not committed yet (between render and layoutEffect), mark stale.
+        // LayoutEffect will forceUpdate after commit.
+        if (!this._committed) {
+          this._isStale = true;
+          return;
+        }
+
+        // If a store updates while React is rendering another Storion selector, do NOT
+        // synchronously call setState. Defer to a microtask to avoid React warnings.
+        if (useStoreSelectorDepth > 0 || this.selectorExecution.active) {
+          this._isStale = true;
+          this._scheduleFlushIfCommitted();
+          return;
+        }
+
+        // Normal post-commit update path: re-render immediately.
+        this._forceUpdate();
+      });
+      this.subscriptions.set(key, unsub);
+    }
+  }
+
+  // === Lifecycle Methods ===
+
+  /**
+   * Mark as committed (effect is active).
+   * Called at the start of useLayoutEffect.
+   */
+  commit(): void {
+    // Resubscribe if StrictMode cleanup cleared subscriptions
+    if (this.subscriptions.size === 0 && this.trackedDeps.size > 0) {
+      this.subscribe();
+    }
+
+    this._committed = true;
+    // Allow recovery during hot reload - reset disposed flag
+    this._disposed = false;
+    this._pendingDisposalCheck = false;
+
+    // If store changed since render, re-render with fresh values
+    if (this._isStale) {
+      this._isStale = false;
+      this._forceUpdate();
+    }
+  }
+
+  /**
+   * Mark as uncommitted (effect cleaned up).
+   * Schedules deferred disposal check.
+   */
+  uncommit(): void {
+    this._cleanupSubscriptions();
+    this._committed = false;
+    this._flushScheduled = false;
+    this._disposeIfUnused();
+  }
+
+  // === Scoped Store Methods ===
+
+  /**
+   * Get or create a scoped store instance.
+   */
+  getScoped<TState extends StateBase, TActions extends ActionsBase>(
+    spec: StoreSpec<TState, TActions>
+  ): StoreInstance<TState, TActions> {
+    if (this._disposed) {
+      if (this.deferDisposal) {
+        this._committed = false;
+        this._disposed = false;
+        this._scopedStores.clear();
+      } else {
+        throw new Error("UseStoreController disposed");
+      }
+    }
+    let store = this._scopedStores.get(spec);
+    if (!store) {
+      store = this.container.create(spec);
+      this._scopedStores.set(spec, store);
+    }
+    return store;
+  }
+
+  // === Private Methods ===
+
+  private _cleanupSubscriptions(): void {
+    for (const unsub of this.subscriptions.values()) {
+      unsub();
+    }
+    this.subscriptions.clear();
+  }
+
+  private _scheduleFlushIfCommitted(): void {
+    if (!this._committed || this._flushScheduled) return;
+    this._flushScheduled = true;
+
+    microtask(() => {
+      this._flushScheduled = false;
+      if (!this._committed || !this._isStale) return;
+      this._isStale = false;
+      this._forceUpdate();
+    });
+  }
+
+  private _disposeIfUnused(): void {
     if (this._committed || this._disposed || this._pendingDisposalCheck) return;
 
     if (this.deferDisposal) {
-      // Mark that a disposal check is pending to prevent duplicate checks
       this._pendingDisposalCheck = true;
-      // Defer check to next macrotask (setTimeout instead of Promise.resolve)
-      // In React 19 concurrent mode, microtasks run BEFORE useLayoutEffect,
-      // so we use setTimeout to ensure the check runs AFTER effects commit
       setTimeout(() => {
         this._pendingDisposalCheck = false;
-        // If still not committed after macrotask, it's a real unmount
         if (!this._committed) {
           this.dispose();
         }
@@ -789,63 +737,20 @@ class ScopeController {
     } else {
       this.dispose();
     }
-  };
+  }
 
-  /**
-   * Get or create the store instance.
-   *
-   * Always allows recovery from disposed state since scoped stores are ephemeral
-   * and this handles hot reload race conditions gracefully.
-   */
-  get = <TState extends StateBase, TActions extends ActionsBase>(
-    spec: StoreSpec<TState, TActions>
-  ): StoreInstance<TState, TActions> => {
-    if (this._disposed) {
-      if (this.deferDisposal) {
-        this._committed = false;
-        this._disposed = false;
-        this._stores.clear();
-      } else {
-        throw new Error("ScopeController disposed");
-      }
+  dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
+
+    // Dispose scoped stores
+    for (const store of this._scopedStores.values()) {
+      store.dispose();
     }
-    let store = this._stores.get(spec);
-    if (!store) {
-      store = this.container.create(spec);
-      this._stores.set(spec, store);
-    }
+    this._scopedStores.clear();
 
-    // NOTE: Do NOT call _disposeIfUnused() here!
-    // During React concurrent rendering, setTimeout(0) fires BEFORE useLayoutEffect,
-    // causing premature disposal. Disposal should only happen via uncommit() (effect cleanup).
-
-    return store;
-  };
-
-  /**
-   * Mark as committed (effect is active).
-   * Called at the start of useLayoutEffect.
-   *
-   * Also resets _disposed to allow recovery during hot reload:
-   * In development, setTimeout(0) may fire before useLayoutEffect,
-   * causing premature disposal. Resetting _disposed here allows
-   * the store to recover when the component re-renders.
-   */
-  commit = () => {
-    this._committed = true;
-    // Allow recovery during hot reload - reset disposed flag
-    // This handles the race where setTimeout(0) fires before useLayoutEffect
-    this._disposed = false;
-    // Clear pending check flag since we're now committed
-    this._pendingDisposalCheck = false;
-  };
-
-  /**
-   * Mark as uncommitted (effect cleaned up).
-   * Schedules deferred disposal check.
-   */
-  uncommit = () => {
-    this._committed = false;
-    this._disposeIfUnused();
-  };
+    // Clear prev values for fresh start if recovered
+    this.prevValues.clear();
+    this._onDispose?.();
+  }
 }

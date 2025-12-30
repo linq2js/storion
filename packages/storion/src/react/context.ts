@@ -14,7 +14,7 @@ import {
 } from "react";
 
 import type { StoreContainer } from "../types";
-import { container } from "../core/container";
+import { container as createContainer } from "../core/container";
 import { ProviderMissingError } from "../errors";
 
 // =============================================================================
@@ -33,14 +33,14 @@ export interface StoreProviderProps {
 
 export const StoreProvider: FC<StoreProviderProps> = memo(
   ({ container: value, children }) => {
-    const defaultContainerRef = useRef<StoreContainer>();
+    const defaultContainerRef = useRef<StoreContainer>(null!);
     const valueOrDefault = useMemo(() => {
       if (value) {
         return value;
       }
 
       if (!defaultContainerRef.current) {
-        defaultContainerRef.current = container();
+        defaultContainerRef.current = createContainer();
       }
 
       return defaultContainerRef.current;

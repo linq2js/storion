@@ -11,6 +11,7 @@ import { useStore } from "./useStore";
 import { store } from "../core/store";
 import { container } from "../core/container";
 import { untrack } from "../core/tracking";
+import { mixins } from "../core/mixins";
 import { SelectorContext, StoreSpec } from "../types";
 
 describe.each(wrappers)(
@@ -783,7 +784,7 @@ describe.each(wrappers)(
         expect(result.current.count).toBe(1);
       });
 
-      it("should support MergeMixin array syntax", () => {
+      it("should support mixins() array syntax", () => {
         const userStore = store({
           name: "user",
           state: { name: "John", email: "john@example.com" },
@@ -813,8 +814,8 @@ describe.each(wrappers)(
         const { result } = renderHook(
           () =>
             useStore((ctx) => {
-              // Use ctx.mixin with MergeMixin array
-              return ctx.mixin([selectUser, { count: selectCount }]);
+              // Use ctx.mixin with mixins() helper
+              return ctx.mixin(mixins([selectUser, { count: selectCount }]));
             }),
           { wrapper: createWrapper(stores) }
         );
@@ -824,7 +825,7 @@ describe.each(wrappers)(
         expect(result.current.count).toBe(5);
       });
 
-      it("should support MixinMap object syntax", () => {
+      it("should support mixins() object syntax", () => {
         const userStore = store({
           name: "user",
           state: { name: "Alice", age: 30 },
@@ -847,8 +848,8 @@ describe.each(wrappers)(
         const { result } = renderHook(
           () =>
             useStore((ctx) => {
-              // Use ctx.mixin with MixinMap object
-              return ctx.mixin({ userName: selectName, userAge: selectAge });
+              // Use ctx.mixin with mixins() helper
+              return ctx.mixin(mixins({ userName: selectName, userAge: selectAge }));
             }),
           { wrapper: createWrapper(stores) }
         );
@@ -857,7 +858,7 @@ describe.each(wrappers)(
         expect(result.current.userAge).toBe(30);
       });
 
-      it("should track dependencies through MergeMixin", () => {
+      it("should track dependencies through mixins() array", () => {
         const counterStore = store({
           name: "counter",
           state: { count: 0 },
@@ -879,7 +880,7 @@ describe.each(wrappers)(
         const { result, rerender } = renderHook(
           () =>
             useStore((ctx) => {
-              return ctx.mixin([selectCount]);
+              return ctx.mixin(mixins([selectCount]));
             }),
           { wrapper: createWrapper(stores) }
         );
@@ -894,7 +895,7 @@ describe.each(wrappers)(
         expect(result.current.count).toBe(1);
       });
 
-      it("should track dependencies through MixinMap", () => {
+      it("should track dependencies through mixins() object", () => {
         const counterStore = store({
           name: "counter",
           state: { count: 0 },
@@ -916,7 +917,7 @@ describe.each(wrappers)(
         const { result, rerender } = renderHook(
           () =>
             useStore((ctx) => {
-              return ctx.mixin({ count: selectCount });
+              return ctx.mixin(mixins({ count: selectCount }));
             }),
           { wrapper: createWrapper(stores) }
         );
