@@ -98,7 +98,7 @@ export { withMeta } from "./meta/withMeta";
 export { pool } from "./pool";
 
 // Mixin composition
-export { mixins } from "./core/mixins";
+export { mixins, type MixinProxy, type ServiceMixinProxy } from "./core/mixins";
 
 // Emitter
 export { emitter } from "./emitter";

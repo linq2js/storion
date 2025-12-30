@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `mixins()` now accepts a `StoreSpec` and returns a proxy for accessing state properties and actions as mixins:
+  ```ts
+  const userStore = store({
+    state: { name: "", age: 0 },
+    setup: ({ state }) => ({
+      setName: (name: string) => { state.name = name; },
+    }),
+  });
+
+  const proxy = mixins(userStore);
+  
+  // Use in useStore
+  const { name, setName } = useStore(mixins({
+    name: proxy.name,        // mixin for state.name
+    setName: proxy.setName,   // mixin for actions.setName
+  }));
+  
+  // Equivalent to:
+  // const nameMixin = (ctx) => ctx.get(userStore)[0].name;
+  // const setNameMixin = (ctx) => ctx.get(userStore)[1].setName;
+  ```
+
+- `MixinProxy` now has a `select()` method for selecting multiple properties/actions:
+  ```ts
+  const proxy = mixins(userStore);
+  
+  // Array syntax - use property names as keys
+  const userMixin = proxy.select(["name", "age", "setName"]);
+  // Returns: (ctx) => ({ name: string, age: number, setName: function })
+  
+  // Object syntax - map to custom keys
+  const userMixin = proxy.select({ userName: "name", userAge: "age", updateName: "setName" });
+  // Returns: (ctx) => ({ userName: string, userAge: number, updateName: function })
+  
+  // Use in useStore
+  const { name, age, setName } = useStore(userMixin);
+  ```
+  
+  Mixins are cached when accessed, so `select()` reuses cached mixins for better performance.
+
+- `mixins()` now accepts a `Factory` (service factory) and returns a proxy for accessing service properties as mixins:
+  ```ts
+  const dbService = (resolver: Resolver) => ({
+    users: { getAll: () => [] },
+    posts: { getAll: () => [] },
+  });
+
+  const proxy = mixins(dbService);
+  
+  // Use in useStore
+  const { users } = useStore(mixins({
+    users: proxy.users,  // mixin for service.users
+  }));
+  
+  // Equivalent to:
+  // const usersMixin = (ctx) => ctx.get(dbService).users;
+  ```
+
 ### Changed
 
 - Updated React peer dependency requirement from `^18.0.0 || ^19.0.0` and development dependencies to React 19. The library now fully supports React 19's improved Suspense behavior and concurrent rendering.
