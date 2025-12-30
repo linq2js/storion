@@ -24,6 +24,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Custom `StrictMode` component and `useStrictMode()` hook for detecting React StrictMode. Use `StrictMode` from `storion/react` instead of React's built-in one to enable proper handling of double rendering and effect calling:
+  ```tsx
+  import { StoreProvider, StrictMode } from "storion/react";
+  
+  // Use Storion's StrictMode for optimal strict mode handling
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <StoreProvider container={app}>
+        <App />
+      </StoreProvider>
+    </StrictMode>
+  );
+  
+  // Detect strict mode in components
+  import { useStrictMode } from "storion/react";
+  
+  function MyComponent() {
+    const isStrictMode = useStrictMode();
+    // ...
+  }
+  ```
+
 - `async.state()` now accepts a function overload for capturing synchronous execution results and Suspense patterns:
   ```ts
   // With function - captures execution result

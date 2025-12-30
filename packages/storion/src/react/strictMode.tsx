@@ -1,71 +1,35 @@
-import React from "react";
-import { PropsWithChildren, StrictMode } from "react";
-import { render, renderHook, RenderHookOptions } from "@testing-library/react";
+import {
+  createContext,
+  memo,
+  PropsWithChildren,
+  StrictMode as ReactStrictMode,
+  useContext,
+} from "react";
 
-const DefaultWrapper = ({ children }: PropsWithChildren) => <>{children}</>;
+const context = createContext<boolean>(false);
 
 /**
- * Composes two React wrapper components.
- * OuterWrapper wraps InnerWrapper which wraps children.
+ * Custom StrictMode component that enables detection via useStrictMode().
+ *
+ * Use this instead of React.StrictMode to allow Storion to properly handle
+ * double rendering and effect calling in strict mode.
  */
-function composeWrappers(
-  OuterWrapper: React.ComponentType<{ children: React.ReactNode }>,
-  InnerWrapper?: React.ComponentType<{ children: React.ReactNode }>
-): React.ComponentType<{ children: React.ReactNode }> {
-  if (!InnerWrapper) {
-    return OuterWrapper;
-  }
+export const StrictMode = memo(({ children }: PropsWithChildren) => {
+  return (
+    <context.Provider value={true}>
+      <ReactStrictMode>{children}</ReactStrictMode>
+    </context.Provider>
+  );
+});
 
-  return function ComposedWrapper({ children }: { children: React.ReactNode }) {
-    return (
-      <OuterWrapper>
-        <InnerWrapper>{children}</InnerWrapper>
-      </OuterWrapper>
-    );
-  };
+/**
+ * Hook to detect if component is rendered inside StrictMode.
+ *
+ * @returns true if inside Storion's StrictMode, false otherwise
+ */
+export function useStrictMode() {
+  return useContext(context);
 }
 
-const StrictModeWrapper = ({ children }: PropsWithChildren) => (
-  <StrictMode>{children}</StrictMode>
-);
-
-export const wrappers: {
-  mode: "normal" | "strict";
-  Wrapper: React.FC<{ children: React.ReactNode }>;
-  render: (ui: React.ReactElement) => ReturnType<typeof render>;
-  renderHook: <TResult, TProps>(
-    render: (props: TProps) => TResult,
-    options?: RenderHookOptions<TProps>
-  ) => ReturnType<typeof renderHook<TResult, TProps>>;
-}[] = [
-  {
-    mode: "normal" as const,
-    Wrapper: DefaultWrapper,
-    render: (ui: React.ReactElement) => {
-      return render(ui, { wrapper: DefaultWrapper });
-    },
-    renderHook: <TResult, TProps>(
-      callback: (props: TProps) => TResult,
-      options?: RenderHookOptions<TProps>
-    ) => {
-      return renderHook(callback, options);
-    },
-  },
-  {
-    mode: "strict" as const,
-    Wrapper: StrictModeWrapper,
-    render: (ui: React.ReactElement) => {
-      return render(ui, { wrapper: StrictModeWrapper });
-    },
-    renderHook: <TResult, TProps>(
-      callback: (props: TProps) => TResult,
-      options?: RenderHookOptions<TProps>
-    ) => {
-      const composedWrapper = composeWrappers(
-        StrictModeWrapper,
-        options?.wrapper
-      );
-      return renderHook(callback, { ...options, wrapper: composedWrapper });
-    },
-  },
-];
+// Re-export test utilities
+export { wrappers } from "./strictModeTest";

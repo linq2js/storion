@@ -34,8 +34,9 @@ import { tryStabilize, strictEqual } from "../core/equality";
 import { isSpec } from "../is";
 import { storeTuple } from "../utils/storeTuple";
 import { emitter } from "../emitter";
-import { dev } from "../dev";
 import { microtask } from "../utils/microtask";
+import { useStrictMode } from "./strictMode";
+import { dev } from "../dev";
 
 /**
  * Selector for useStore.from(spec) hook.
@@ -105,6 +106,7 @@ interface UseStoreRefs {
   isStale: boolean;
   /** Whether a committed update flush is already scheduled */
   flushScheduled: boolean;
+  dispose: VoidFunction;
 }
 
 /**
@@ -116,6 +118,7 @@ export function useStoreWithContainer<T extends object>(
   container: StoreContainer
 ): StableResult<T> {
   const id = useId();
+  const isStrictMode = useStrictMode();
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
   const instanceRef = useRef<UseStoreRefs>();
   let refs: UseStoreRefs;
@@ -130,6 +133,7 @@ export function useStoreWithContainer<T extends object>(
       committed: false,
       isStale: false,
       flushScheduled: false,
+      dispose() {},
     };
   }
   refs = instanceRef.current;
@@ -155,13 +159,21 @@ export function useStoreWithContainer<T extends object>(
   // Use useRef instead of useState to ensure persistence across React concurrent renders.
   // In concurrent mode, useState initializer can run multiple times for different "attempts",
   // but useRef.current persists across all attempts for the same fiber.
+  // Enable deferred disposal if using StrictMode OR in development mode (for Suspense handling)
+  const shouldDeferDisposal = isStrictMode || shouldDeferDisposalInDev;
   const scopeControllerRef = useRef<ScopeController | null>(null);
   if (!scopeControllerRef.current) {
-    scopeControllerRef.current = new ScopeController(container, () => {
-      refs.prevValues.clear();
-    });
+    scopeControllerRef.current = new ScopeController(
+      container,
+      shouldDeferDisposal,
+      () => {
+        refs.prevValues.clear();
+      }
+    );
   }
   const scopeController = scopeControllerRef.current;
+  // Update deferDisposal flag each render (it's stable, but ensure consistency)
+  scopeController.deferDisposal = shouldDeferDisposal;
 
   // Track whether we're inside selector execution (use object for stable reference)
   const [selectorExecution] = useState(() => ({ active: false }));
@@ -223,7 +235,8 @@ export function useStoreWithContainer<T extends object>(
   // refs.committed = true in useLayoutEffect, using microtask would cause subscriptions
   // to be cleaned up prematurely (before commit). setTimeout runs AFTER useLayoutEffect,
   // ensuring proper commit detection.
-  if (shouldScheduleDispose) {
+  // Schedule when using StrictMode or in development mode (for Suspense handling).
+  if (shouldDeferDisposal) {
     setTimeout(() => {
       if (!refs.committed) {
         cleanupSubscriptions();
@@ -704,11 +717,11 @@ const useIsomorphicLayoutEffect =
   isServer || typeof useLayoutEffect === "undefined"
     ? useEffect
     : useLayoutEffect;
-// Always use macrotask (setTimeout) for disposal in browser to handle StrictMode correctly.
-// IMPORTANT: We use setTimeout instead of Promise.resolve because in React 19 concurrent mode,
-// microtasks (Promise.resolve) run BEFORE useLayoutEffect, but we need the disposal check
-// to run AFTER useLayoutEffect sets _committed = true. setTimeout (macrotask) ensures this.
-const shouldScheduleDispose =
+
+// Whether to use deferred disposal for handling React re-mounting scenarios
+// (StrictMode double-rendering, Suspense re-mounts, error boundary recovery)
+// Only needed in development mode on client-side.
+const shouldDeferDisposalInDev =
   !isServer && dev() && typeof useLayoutEffect === "function";
 
 class ScopeController {
@@ -723,10 +736,16 @@ class ScopeController {
 
   private _stores = new Map<StoreSpec<any, any>, StoreInstance<any, any>>();
 
+  /** Whether deferred disposal is enabled (StrictMode or dev mode) */
+  deferDisposal: boolean;
+
   constructor(
     public readonly container: StoreContainer,
+    deferDisposal: boolean,
     private readonly _onDispose?: VoidFunction
-  ) {}
+  ) {
+    this.deferDisposal = deferDisposal;
+  }
 
   /**
    * Dispose the controller and its store.
@@ -754,7 +773,7 @@ class ScopeController {
     // Skip if already committed, disposed, or a check is already pending
     if (this._committed || this._disposed || this._pendingDisposalCheck) return;
 
-    if (shouldScheduleDispose) {
+    if (this.deferDisposal) {
       // Mark that a disposal check is pending to prevent duplicate checks
       this._pendingDisposalCheck = true;
       // Defer check to next macrotask (setTimeout instead of Promise.resolve)
@@ -782,7 +801,7 @@ class ScopeController {
     spec: StoreSpec<TState, TActions>
   ): StoreInstance<TState, TActions> => {
     if (this._disposed) {
-      if (shouldScheduleDispose) {
+      if (this.deferDisposal) {
         this._committed = false;
         this._disposed = false;
         this._stores.clear();

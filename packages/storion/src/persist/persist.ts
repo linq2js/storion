@@ -444,6 +444,8 @@ export function persist(options: PersistOptions): StoreMiddleware {
       // Setup save subscription
       if (save) {
         instance.subscribe(() => {
+          // Skip saving during hydration - hydrated values come from storage
+          // and don't need to be saved back
           if (isHydrating) return;
 
           try {

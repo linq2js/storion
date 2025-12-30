@@ -40,5 +40,8 @@ export {
 // Stabilization HOC
 export { stable, type PropEqualityConfig } from "./stable";
 
+// Strict Mode
+export { StrictMode, useStrictMode } from "./strictMode";
+
 // Re-export core functions for convenience
 export * from "../index";

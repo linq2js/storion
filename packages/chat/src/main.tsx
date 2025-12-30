@@ -1,7 +1,6 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { container } from "storion";
-import { StoreProvider } from "storion/react";
+import { StoreProvider, StrictMode } from "storion/react";
 import { devtoolsMiddleware } from "storion/devtools";
 import { mountDevtoolsPanel } from "storion/devtools-panel";
 import { App } from "./App";

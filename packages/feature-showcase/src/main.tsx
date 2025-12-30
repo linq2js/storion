@@ -1,7 +1,6 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { applyFor, container } from "storion";
-import { StoreProvider } from "storion/react";
+import { StoreProvider, StrictMode } from "storion/react";
 import { devtoolsMiddleware } from "storion/devtools";
 import { mountDevtoolsPanel } from "storion/devtools-panel";
 import { persist } from "storion/persist";
@@ -54,7 +53,9 @@ mountDevtoolsPanel({
 });
 
 createRoot(document.getElementById("root")!).render(
-  <StoreProvider container={app}>
-    <App />
-  </StoreProvider>
+  <StrictMode>
+    <StoreProvider container={app}>
+      <App />
+    </StoreProvider>
+  </StrictMode>
 );

@@ -131,14 +131,14 @@ describe("persist", () => {
       expect(instance.state.count).toBe(1); // Kept user's change
       expect(instance.state.name).toBe("loaded"); // Hydrated from storage
 
-      // Hydrating the name triggered another save
-      expect(save).toHaveBeenCalledTimes(2);
-      expect(save.mock.calls[1][0]).toEqual({ count: 1, name: "loaded" });
+      // Hydration does NOT trigger a save - hydrated values come from storage
+      // and don't need to be saved back (they're already persisted)
+      expect(save).toHaveBeenCalledTimes(1);
 
-      // State change after hydration should also be saved
+      // State change after hydration should be saved
       instance.actions.increment();
-      expect(save).toHaveBeenCalledTimes(3);
-      expect(save.mock.calls[2][0]).toEqual({ count: 2, name: "loaded" });
+      expect(save).toHaveBeenCalledTimes(2);
+      expect(save.mock.calls[1][0]).toEqual({ count: 2, name: "loaded" });
     });
 
     it("should not hydrate when load returns null", () => {
