@@ -849,7 +849,9 @@ describe.each(wrappers)(
           () =>
             useStore((ctx) => {
               // Use ctx.mixin with mixins() helper
-              return ctx.mixin(mixins({ userName: selectName, userAge: selectAge }));
+              return ctx.mixin(
+                mixins({ userName: selectName, userAge: selectAge })
+              );
             }),
           { wrapper: createWrapper(stores) }
         );
@@ -1195,8 +1197,8 @@ describe.each(wrappers)(
 
         unmount();
 
-        // Wait for microtask to complete (StrictMode deferred disposal)
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        // Wait for StrictMode deferred disposal (100ms delay for HMR safety)
+        await new Promise((resolve) => setTimeout(resolve, 150));
 
         // In strict mode, dispose may be called multiple times
         expect(disposeSpy).toHaveBeenCalled();

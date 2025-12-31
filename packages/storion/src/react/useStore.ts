@@ -28,6 +28,7 @@ import { emitter } from "../emitter";
 import { microtask } from "../utils/microtask";
 import { isPromiseLike } from "../utils/isPromiseLike";
 import { useStrictMode } from "./strictMode";
+import { dev } from "../dev";
 
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" && typeof useLayoutEffect === "function"
@@ -51,14 +52,24 @@ type DisposeStrategy = (
 ) => void | VoidFunction;
 
 /**
- * Normal mode strategy: dispose immediately on uncommit.
- * No deferred disposal needed - component is truly unmounting.
+ * Normal mode strategy: dispose with small delay on uncommit.
+ * The delay allows HMR (Hot Module Replacement) to complete before disposal.
+ * In production, this 50ms delay is negligible but prevents HMR issues in dev.
  */
-const normalStrategy: DisposeStrategy = (dispose, when) => {
-  if (when === "uncommit") {
-    dispose();
-  }
-};
+const HMR_SAFETY_DELAY = 50;
+
+const normalStrategy: DisposeStrategy = dev()
+  ? (dispose, when) => {
+      if (when === "uncommit") {
+        const id = setTimeout(dispose, HMR_SAFETY_DELAY);
+        return () => clearTimeout(id);
+      }
+    }
+  : (dispose, when) => {
+      if (when === "uncommit") {
+        dispose();
+      }
+    };
 
 /**
  * Strict mode strategy: defer disposal with setTimeout.
@@ -67,9 +78,16 @@ const normalStrategy: DisposeStrategy = (dispose, when) => {
  * Both "render" and "uncommit" schedule deferred disposal because:
  * - StrictMode unmounts/remounts, making the first controller "abandoned"
  * - The deferred disposal allows the 2nd mount to cancel if same fiber
+ *
+ * Uses 100ms delay instead of 0 to handle HMR (Hot Module Replacement):
+ * - HMR involves async module loading which can take longer than setTimeout(0)
+ * - Without delay, disposal can fire DURING HMR, causing "store disposed" errors
+ * - 100ms is short enough for responsive UX but long enough for HMR to complete
  */
+const STRICT_MODE_DISPOSE_DELAY = 100;
+
 const strictStrategy: DisposeStrategy = (dispose, _when) => {
-  const id = setTimeout(dispose, 0);
+  const id = setTimeout(dispose, STRICT_MODE_DISPOSE_DELAY);
   return () => clearTimeout(id);
 };
 
