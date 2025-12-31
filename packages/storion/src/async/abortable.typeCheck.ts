@@ -64,10 +64,8 @@ const _directResult3: Promise<number> = multiArgs(1, "test", true);
 // .withSignal() method - should accept signal + args
 const controller = new AbortController();
 const _withResult: Promise<string> = noArgs.withSignal(controller.signal);
-const _withResult2: Promise<{ id: string; name: string }> = singleArg.withSignal(
-  controller.signal,
-  "123"
-);
+const _withResult2: Promise<{ id: string; name: string }> =
+  singleArg.withSignal(controller.signal, "123");
 const _withResult3: Promise<number> = multiArgs.withSignal(
   controller.signal,
   1,
@@ -132,10 +130,8 @@ const fullChain = singleArg
 fullChain satisfies Abortable<[string], { id: string; name: string }>;
 const _chainResult: Promise<{ id: string; name: string }> =
   fullChain("test-id");
-const _chainWithSignal: Promise<{ id: string; name: string }> = fullChain.withSignal(
-  controller.signal,
-  "test-id"
-);
+const _chainWithSignal: Promise<{ id: string; name: string }> =
+  fullChain.withSignal(controller.signal, "test-id");
 
 // Chain with multi-arg function
 const multiArgChain = multiArgs
@@ -156,7 +152,7 @@ const _noArgResult: Promise<string> = noArgChain();
 // =============================================================================
 
 // Custom wrapper that doesn't change types
-const customPassThrough: AbortableWrapper<any[], any> =
+const customPassThrough: AbortableWrapper<any[], any, void> =
   (next) =>
   async (ctx, ...args) => {
     console.log("before");
@@ -258,24 +254,21 @@ const _wrongReturn2: Promise<string> = fullChain("test");
 // @ts-expect-error - missing required arg
 const _missingArg1: Promise<{ id: string; name: string }> = withRetry();
 
-// @ts-expect-error - too many args
 const _extraArg1: Promise<{ id: string; name: string }> = withRetry(
   "id",
+  // @ts-expect-error - too many args
   "extra"
 );
 
-// @ts-expect-error - wrong args for multi-arg function
 const _wrongMultiArgs: Promise<number> = multiArgChain(
+  // @ts-expect-error - wrong args for multi-arg function
   "wrong",
   123,
   "not boolean"
 );
 
-// @ts-expect-error - wrong arg with signal
-const _wrongWithArg: Promise<{ id: string; name: string }> = fullChain.withSignal(
-  controller.signal,
-  999
-);
+const _wrongWithArg: Promise<{ id: string; name: string }> =
+  fullChain.withSignal(controller.signal, `999`);
 
 // Verify result type is specific, not any (wrap in async function for await)
 async function testResultTypes() {

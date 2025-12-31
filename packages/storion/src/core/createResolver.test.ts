@@ -434,10 +434,6 @@ describe("createResolver", () => {
         apiUrl: "https://api.example.com",
       });
 
-      const loggerFactory: Factory<{ log: (msg: string) => void }> = () => ({
-        log: (msg) => console.log(msg),
-      });
-
       const apiClientFactory: Factory<{ baseUrl: string }> = (resolver) => {
         const config = resolver.get(configFactory);
         return { baseUrl: config.apiUrl };
