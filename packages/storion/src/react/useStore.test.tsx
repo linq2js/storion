@@ -5,7 +5,7 @@
 import React, { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { act, waitFor } from "@testing-library/react";
-import { wrappers } from "./strictMode";
+import { wrappers } from "./strictModeTest";
 import { StoreProvider } from "./context";
 import { useStore } from "./useStore";
 import { store } from "../core/store";

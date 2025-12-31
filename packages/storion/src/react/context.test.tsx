@@ -4,7 +4,7 @@
 
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { wrappers } from "./strictMode";
+import { wrappers } from "./strictModeTest";
 import { StoreProvider, useContainer } from "./context";
 import { container } from "../core/container";
 

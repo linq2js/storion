@@ -30,6 +30,3 @@ export const StrictMode = memo(({ children }: PropsWithChildren) => {
 export function useStrictMode() {
   return useContext(context);
 }
-
-// Re-export test utilities
-export { wrappers } from "./strictModeTest";
