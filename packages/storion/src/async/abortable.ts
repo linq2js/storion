@@ -11,12 +11,10 @@
  */
 
 import { createSafe, type SafeFnWithUtils } from "./safe";
+import { abortableSymbol, isAbortable } from "./abortable-guard";
 
-// =============================================================================
-// SYMBOLS & CONSTANTS
-// =============================================================================
-
-const abortableSymbol = Symbol.for("storion.abortable");
+// Re-export for public API
+export { isAbortable };
 
 // =============================================================================
 // STATUS TYPE
@@ -381,24 +379,6 @@ export interface Abortable<
   readonly [abortableSymbol]: true;
 }
 
-// =============================================================================
-// TYPE GUARDS
-// =============================================================================
-
-/**
- * Check if a value is an Abortable.
- */
-export function isAbortable<
-  TArgs extends any[],
-  TResult,
-  TYield extends void | object = void
->(fn: unknown): fn is Abortable<TArgs, TResult, TYield> {
-  return (
-    typeof fn === "function" &&
-    abortableSymbol in fn &&
-    (fn as any)[abortableSymbol] === true
-  );
-}
 
 // =============================================================================
 // ERROR TYPES

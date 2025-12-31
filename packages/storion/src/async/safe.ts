@@ -5,8 +5,9 @@
  * Reused by both effect context and async context.
  */
 
-import { isAbortable, type Abortable } from "./abortable";
-import { toPromise } from "./async";
+import { isAbortable } from "./abortable-guard";
+import type { Abortable } from "./abortable";
+import { toPromise } from "./utils";
 
 // =============================================================================
 // UTILITY: isPromiseLike & toPromise
