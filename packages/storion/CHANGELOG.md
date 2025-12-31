@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2025-12-31
+
+### Fixed
+
+- Fixed circular dependency warnings in async module (Metro/Expo). Extracted `isAbortable` and `abortableSymbol` to separate `abortable-guard.ts` file, and changed `toPromise` import to source from `utils.ts` directly instead of `async.ts`.
+
+- Fixed Hot Module Replacement (HMR) causing "store disposed" errors with `scoped()` stores. Both `normalStrategy` and `strictStrategy` now use deferred disposal (50ms and 100ms respectively) to allow HMR bundle loading to complete before disposal fires. Previously, `normalStrategy` disposed immediately on cleanup, which raced with Metro's async module reloading.
+
+## [0.20.0] - 2025-12-30
+
 ## [0.19.0] - 2025-12-30
 
 ### Added
