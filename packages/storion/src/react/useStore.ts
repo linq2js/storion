@@ -57,20 +57,6 @@ type DisposeStrategy = (
  * In production, this 50ms delay is negligible but prevents HMR issues in dev.
  */
 const HMR_SAFETY_DELAY = 50;
-
-const normalStrategy: DisposeStrategy = dev()
-  ? (dispose, when) => {
-      if (when === "uncommit") {
-        const id = setTimeout(dispose, HMR_SAFETY_DELAY);
-        return () => clearTimeout(id);
-      }
-    }
-  : (dispose, when) => {
-      if (when === "uncommit") {
-        dispose();
-      }
-    };
-
 /**
  * Strict mode strategy: defer disposal with setTimeout.
  * Handles React's double-mount by allowing cancellation if component remounts.
@@ -86,9 +72,31 @@ const normalStrategy: DisposeStrategy = dev()
  */
 const STRICT_MODE_DISPOSE_DELAY = 100;
 
-const strictStrategy: DisposeStrategy = (dispose, _when) => {
-  const id = setTimeout(dispose, STRICT_MODE_DISPOSE_DELAY);
-  return () => clearTimeout(id);
+/**
+ *
+ * @param strictModeEnabled - Whether strict mode is enabled
+ * @returns
+ */
+const getStrategy = (strictModeEnabled: boolean): DisposeStrategy => {
+  if (dev()) {
+    if (strictModeEnabled) {
+      return (dispose) => {
+        const id = setTimeout(dispose, STRICT_MODE_DISPOSE_DELAY);
+        return () => clearTimeout(id);
+      };
+    }
+    return (dispose, when) => {
+      if (when === "uncommit") {
+        const id = setTimeout(dispose, HMR_SAFETY_DELAY);
+        return () => clearTimeout(id);
+      }
+    };
+  }
+  return (dispose, when) => {
+    if (when === "uncommit") {
+      dispose();
+    }
+  };
 };
 
 /**
@@ -144,9 +152,8 @@ export function useStoreWithContainer<T extends object>(
 ): StableResult<T> {
   const isStrictMode = useStrictMode();
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
-
   // Select strategy based on mode
-  const strategy = isStrictMode ? strictStrategy : normalStrategy;
+  const strategy = getStrategy(isStrictMode);
 
   // Use useRef to ensure persistence across React concurrent renders.
   // In concurrent mode, initializers can run multiple times for different "attempts",
