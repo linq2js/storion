@@ -166,12 +166,10 @@ const usersStore = store({
 
 ## When to Use What
 
-| Scenario              | Use                         |
-| --------------------- | --------------------------- |
-| Single feature/widget | `create()`                  |
-| Multiple stores       | `store()` + `container()`   |
-| Testing with mocks    | `container()` + `app.set()` |
-| Persistence           | `app.use(persist())`        |
+| Scenario              | Use                       |
+| --------------------- | ------------------------- |
+| Single feature/widget | `create()`                |
+| Multiple stores       | `store()` + `container()` |
 
 ---
 
